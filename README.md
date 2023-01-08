@@ -29,7 +29,7 @@
 
 <h3>Run from sources</h3>
 
-```
+```bash
 python -m venv env 
 source env/bin/activate
 pip install -r requirements.txt
