@@ -16,7 +16,7 @@
 
 1. Download the latest version of the program <a href="https://github.com/PalmaLuv/SteamGiftBot/releases">click</a>
 2. Sing in on <a href="https://www.steamgifts.com/">SteamGifts</a> by Steam
-3. Find `PHPSESSID` cookie in your brouser
+3. Find `PHPSESSID` cookie in your browser
 
 <p align="center"> 
   <img src="https://user-images.githubusercontent.com/84909252/211176701-6f0cedb7-7706-4ba0-b36e-3e57719b6f0a.png"/>
