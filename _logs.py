@@ -1,5 +1,13 @@
-import six 
+#    ______                   ______ _____    ___                      
+#   / __/ /____ ___ ___ _    / ___(_) _/ /_  / _ \___ ________ ___ ____
+#  _\ \/ __/ -_) _ `/  ' \  / (_ / / _/ __/ / ___/ _ `/ __(_-</ -_) __/
+# /___/\__/\__/\_,_/_/_/_/  \___/_/_/ \__/ /_/   \_,_/_/ /___/\__/_/   
+#                                                                    
+# Created by: github.com/PalmaLuv
+# Stay tuned for further app updates
+# License GPL-3.0 license
 
+import six 
 from PyInquirer import ValidationError, Validator, prompt
 from prompt_toolkit import document as doc
 from main import config
