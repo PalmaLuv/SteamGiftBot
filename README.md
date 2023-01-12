@@ -14,7 +14,7 @@
 <p>
   <li>Process Automation</li>
   <li>Stealth/undetectable:shipit:</li>
-  <li>Сonfigurable. P.s:Even I don't tune in:cry:</li>
+  <li>Сonfigurable.</li>
   <li>Likes to sleep when there are few glasses</li>
   <li>Working 24/7</li>
 </p>
