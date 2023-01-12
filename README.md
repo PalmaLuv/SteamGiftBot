@@ -2,7 +2,13 @@
   <img src="https://user-images.githubusercontent.com/84909252/211176037-3fb44ef4-ef21-49c7-abe5-8100b49ddbd3.png" />
 </p>
 
-<h3>About</h3>
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.0.1-blueviolet" alt="Latest Stable Version">
+  <img src="https://img.shields.io/github/license/PalmaLuv/SteamGiftBot?color=%231E90FF" alt="License">
+  <img src="https://img.shields.io/badge/Python Version-3.9--3.9.6-yellow" alt="Version Python">
+</p>
+
+<h1>About</h1>
 <p>The bot was created for the site <a href="https://www.steamgifts.com/">SteamGifts</a>
 <h3>What can she be proud of?</h3>
 <p>
