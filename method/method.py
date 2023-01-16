@@ -49,6 +49,7 @@ class SteamGift :
             backoff_factor=backoffFactor, 
             status_forcelist=(500, 502, 504)
         )
+        session.headers.update({'User-Agent': info['userAgent']})
         adapter = HTTPAdapter(max_retries=retry)
         session.mount(info['http'], adapter)
         session.mount(info['https'], adapter)
