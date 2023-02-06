@@ -41,3 +41,5 @@ source env/bin/activate
 pip install -r requirements.txt
 python main.py
 ```
+If there is a suggestion to improve the application, I propose to go here [link](https://github.com/PalmaLuv/SteamGiftBot/discussions/6).
+
