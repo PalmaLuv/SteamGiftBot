@@ -11,6 +11,8 @@ import six
 from PyInquirer import ValidationError, Validator, prompt
 from prompt_toolkit import document as doc
 from main import config
+import keyboard
+import clipboard
 
 try:
     import colorama
@@ -58,14 +60,15 @@ def ask(type, name, msg, validate=None, choices=[]):
     ]
     if choices:
         questions[0].update({'choices':choices})
+    if type == 'input':
+        keyboard.add_hotkey('ctrl+v', lambda: keyboard.write(clipboard.paste()))
     answers = prompt(questions)
     return answers
 
 def askCookie():
-        cookie = ask('input', 'cookie',
-                    'Enter PHPSESSID cookie'
-        )
-        config['DEFAULT']['cookie'] = cookie['cookie']
-        with open('config.ini', 'w') as cofFILE :
-            config.write(cofFILE)
-        return cookie['cookie']
+    cookie = ask('input', 'cookie',
+                'Enter PHPSESSID cookie')
+    config['DEFAULT']['cookie'] = cookie['cookie']
+    with open('config.ini', 'w') as cofFILE :
+        config.write(cofFILE)
+    return cookie['cookie']
