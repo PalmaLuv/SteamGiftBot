@@ -62,7 +62,10 @@ def ask(type, name, msg, validate=None, choices=[]):
         questions[0].update({'choices':choices})
     if type == 'input':
         keyboard.add_hotkey('ctrl+v', lambda: keyboard.write(clipboard.paste()))
-    answers = prompt(questions)
+        answers = prompt(questions)
+        keyboard.remove_hotkey('ctrl+v')
+    else :
+        answers = prompt(questions)
     return answers
 
 def askCookie():
