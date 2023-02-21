@@ -10,3 +10,5 @@ soupsieve==2.3.1
 termcolor==2.2.0
 urllib3==1.26.6
 wcwidth==0.2.5
+keyboard==0.13.5
+clipboard=0.0.4
