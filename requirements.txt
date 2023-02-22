@@ -1,6 +1,6 @@
 beautifulsoup4==4.10.0
 certifi==2021.5.30
-idna=3.2
+idna==3.2
 prompt-toolkit==1.0.14
 PyInquirer==1.0.3
 regex==2022.10.31
@@ -11,4 +11,4 @@ termcolor==2.2.0
 urllib3==1.26.6
 wcwidth==0.2.5
 keyboard==0.13.5
-clipboard=0.0.4
+clipboard==0.0.4
