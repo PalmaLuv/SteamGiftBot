@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.1-blueviolet" alt="Latest Stable Version">
+  <img src="https://img.shields.io/badge/version-1.0.3-blueviolet" alt="Latest Stable Version">
   <img src="https://img.shields.io/github/license/PalmaLuv/SteamGiftBot?color=%231E90FF" alt="License">
   <img src="https://img.shields.io/badge/Python Version-3.9--3.9.6-yellow" alt="Version Python">
 </p>
