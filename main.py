@@ -37,7 +37,7 @@ def run():
     giftTYPE = _l.ask('list', 'gift_type', 'Select type:',
     choices=[
         'All',
-        'Wishlist',
+        'WishList',
         'Recommended',
         'Copies',
         'DLC',
