@@ -3,9 +3,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.3-blueviolet" alt="Latest Stable Version">
+  <img src="https://img.shields.io/github/v/release/PalmaLuv/SteamGiftBot?include_prereleases&label=Version&color=blueviolet" alt="Latest Stable Version">
   <img src="https://img.shields.io/github/license/PalmaLuv/SteamGiftBot?color=%231E90FF" alt="License">
   <img src="https://img.shields.io/badge/Python Version-3.9--3.9.6-yellow" alt="Version Python">
+  <img src="https://img.shields.io/github/downloads/PalmaLuv/SteamGiftBot/total.svg?label=Downloads&logo=github&cacheSeconds=600&color=blueviolet" alt="Downloads">
 </p>
 
 <h1>About</h1>
