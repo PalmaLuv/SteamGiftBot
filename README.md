@@ -2,8 +2,6 @@
   <img src="https://user-images.githubusercontent.com/84909252/221827123-c7fd5d1e-7f6b-4d78-a225-4491305b6a87.png" height="250"/>
 </div>
 
----
-
 <div align="center">
   
   [![](https://img.shields.io/github/v/release/PalmaLuv/SteamGiftBot?include_prereleases&label=Version&color=blueviolet)](https://github.com/PalmaLuv/SteamGiftBot/releases/latest)
