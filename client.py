@@ -10,7 +10,7 @@
 import six 
 from PyInquirer import ValidationError, Validator, prompt
 from prompt_toolkit import document as doc
-from main import config
+from main import config, logs
 import keyboard
 import clipboard
 
@@ -25,17 +25,22 @@ try:
 except ImportError:
     colored = None    
 
+
+
 array_logo = ["    ______                   ______ _____    ___                      ",
               "   / __/ /____ ___ ___ _    / ___(_) _/ /_  / _ \___ ________ ___ ____",
               "  _\ \/ __/ -_) _ `/  ' \  / (_ / / _/ __/ / ___/ _ `/ __(_-</ -_) __/",
               " /___/\__/\__/\_,_/_/_/_/  \___/_/_/ \__/ /_/   \_,_/_/ /___/\__/_/   " ]
 
-# text output
+flag = False
+
 def log(str,color="white"):
     if colored: 
         six.print_(colored(str, color))
     else: 
         six.print_(str)
+    if flag : 
+        logs.editFileLog(str)
 
 class PointValidator(Validator):
     def validate(self, document: doc.Document):
@@ -69,9 +74,15 @@ def ask(type, name, msg, validate=None, choices=[]):
     return answers
 
 def askCookie():
-    cookie = ask('input', 'cookie',
-                'Enter PHPSESSID cookie')
+    cookie = ask('input', 'cookie', 'Enter PHPSESSID cookie')
     config['DEFAULT']['cookie'] = cookie['cookie']
     with open('config.ini', 'w') as cofFILE :
         config.write(cofFILE)
     return cookie['cookie']
+
+def askFlagLogs(): 
+    flagLogs = ask('confirm', 'reenter', 
+                          'Do you want to get logs every time you run the application?')['reenter']
+    config['DEFAULT']['flag_logs'] = str(flagLogs)
+    with open('config.ini', 'w') as cofFILE : 
+        config.write(cofFILE)

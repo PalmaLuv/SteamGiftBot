@@ -14,7 +14,6 @@ import json
 import threading 
 
 from random import randint as rand 
-emoji = ['🎮', '🎯', '🙂', '🥸', '🧐', '🤓', '🤤', '👾', '🤖', '🎃', '👽', '💀']
 
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
@@ -22,7 +21,7 @@ from time import sleep
 from requests import RequestException
 from bs4 import BeautifulSoup
 
-from _logs import log
+from client import log
 
 info    =    json.load(open('method//info.json', 'r', encoding='utf-8'))
 URL     =    info['URL']
@@ -65,7 +64,7 @@ class SteamGift :
             self.xsrfToken = soup.find('input', {'name': 'xsrf_token'})['value']
             self.points    = int(soup.find('span', {'class': 'nav__points'}).text)
         except TypeError:
-            log("🔥 cookie is not valid 🔥","red")
+            log("Cookie is not valid ","red")
             exit()
     
     def entryGIFT(self, id):
@@ -95,7 +94,7 @@ class SteamGift :
             game_list = soup.find_all('div', {'class': 'giveaway__row-inner-wrap'})
             game_list_faded = soup.find_all('div', {'class': 'giveaway__row-inner-wrap is-faded'})
             if not len(game_list):
-                log("🔥 Page is empty. Please, choose another type. 🔥", "red")
+                log("Page is empty. Please, choose another type. ", "red")
                 exit()
             for item in game_list:
                 flagGame = True
@@ -121,7 +120,7 @@ class SteamGift :
                         continue
                     game_name = item.find('a', {'class': 'giveaway__heading__name'}).text
                     if self.points - int(game_cost) < 0:
-                        log(f"⛔ Not enough points to enter: {game_name}", "red")
+                        log(f"Not enough points to enter: {game_name}", "red")
                         continue
 
                     elif self.points - int(game_cost) >= 0:
@@ -129,7 +128,7 @@ class SteamGift :
                         res = self.entryGIFT(game_id)
                         if res:
                             self.points -= int(game_cost)
-                            log(f"{emoji[rand(0,len(emoji)-1)]}One more game {game_name}", "green")
+                            log(f"One more game {game_name}", "green")
                             sleep(rand(3, 7))
             _page  += 1
 
