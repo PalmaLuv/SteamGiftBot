@@ -9,10 +9,10 @@
 
 # from method.method import SteamGift
 import configparser
-import _logs as _l
+import client as _l
 
 # from PyInstaller import (Token, Error, JsonPrint, prompt)
-config = configparser.ConfigParser()
+config      = configparser.ConfigParser()
 
 def run(): 
     from method.method import SteamGift as steamGif
@@ -28,12 +28,12 @@ def run():
         InputCookie = _l.ask('confirm', 'reenter',
         'Do you want to enter new cookie?')['reenter']
         if InputCookie:
-            cookie = _l.askCookie()
+            cookie = _l.askCookie() 
         else:
             cookie = config['DEFAULT'].get('cookie')
-    pinnedGames = _l.ask('confirm', 'pinned', 
-    'Should the bot enter pinned games?')['pinned']
     
+    pinnedGames = _l.ask('confirm', 'pinned', 
+    'Should the bot enter pinned games?')['pinned'] 
     giftTYPE = _l.ask('list', 'gift_type', 'Select type:',
     choices=[
         'All',
