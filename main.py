@@ -10,7 +10,6 @@
 # from method.method import SteamGift
 import configparser
 import client as _l
-import logs
 
 # from PyInstaller import (Token, Error, JsonPrint, prompt)
 config      = configparser.ConfigParser()
@@ -25,7 +24,6 @@ def run():
     config.read('config.ini')
     if not config['DEFAULT'].get('cookie'):
         cookie = _l.askCookie()
-         
     else: 
         InputCookie = _l.ask('confirm', 'reenter',
         'Do you want to enter new cookie?')['reenter']
@@ -33,11 +31,6 @@ def run():
             cookie = _l.askCookie() 
         else:
             cookie = config['DEFAULT'].get('cookie')
-
-    if not config['DEFAULT'].get('flag_logs'):
-        _l.askFlagLogs()
-    flag_logs = bool(config['DEFAULT'].get('flag_logs'))
-    _l.flag = flag_logs
     
     pinnedGames = _l.ask('confirm', 'pinned', 
     'Should the bot enter pinned games?')['pinned'] 
@@ -52,8 +45,6 @@ def run():
     ])['gift_type']
     minPoin = _l.ask('input', 'min_points',
     'What is the minimum number of points to remain?', _l.PointValidator)['min_points']
-    if flag_logs:
-        logs.editFileLog('Start script')
     sg = steamGif(cookie, giftTYPE, pinnedGames, minPoin)
     sg.start()
 

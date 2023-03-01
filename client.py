@@ -10,9 +10,10 @@
 import six 
 from PyInquirer import ValidationError, Validator, prompt
 from prompt_toolkit import document as doc
-from main import config, logs
+from main import config
 import keyboard
 import clipboard
+from logs import editFileLog
 
 try:
     import colorama
@@ -25,22 +26,19 @@ try:
 except ImportError:
     colored = None    
 
-
-
 array_logo = ["    ______                   ______ _____    ___                      ",
               "   / __/ /____ ___ ___ _    / ___(_) _/ /_  / _ \___ ________ ___ ____",
               "  _\ \/ __/ -_) _ `/  ' \  / (_ / / _/ __/ / ___/ _ `/ __(_-</ -_) __/",
               " /___/\__/\__/\_,_/_/_/_/  \___/_/_/ \__/ /_/   \_,_/_/ /___/\__/_/   " ]
 
-flag = False
+
 
 def log(str,color="white"):
     if colored: 
         six.print_(colored(str, color))
     else: 
         six.print_(str)
-    if flag : 
-        logs.editFileLog(str)
+    editFileLog(str.replace('\n', ' '))
 
 class PointValidator(Validator):
     def validate(self, document: doc.Document):
@@ -80,9 +78,3 @@ def askCookie():
         config.write(cofFILE)
     return cookie['cookie']
 
-def askFlagLogs(): 
-    flagLogs = ask('confirm', 'reenter', 
-                          'Do you want to get logs every time you run the application?')['reenter']
-    config['DEFAULT']['flag_logs'] = str(flagLogs)
-    with open('config.ini', 'w') as cofFILE : 
-        config.write(cofFILE)
