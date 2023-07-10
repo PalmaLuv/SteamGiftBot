@@ -71,10 +71,28 @@ def ask(type, name, msg, validate=None, choices=[]):
         answers = prompt(questions)
     return answers
 
+class valInfo:
+    cookie_value = ""
+    log_info_value = False
+
+def askReadConfig():
+    if 'cookie' in config['DEFAULT']: 
+        valInfo.cookie_value = config['DEFAULT'].get('cookie')
+    if 'log_info' in config['DEFAULT']:
+        valInfo.log_info_value = config['DEFAULT'].get('log_info')
+    config.set('DEFAULT', 'cookie', valInfo.cookie_value)
+    config.set('DEFAULT', 'log_info', str(valInfo.log_info_value))
+    with open('config.ini', 'w') as configFile:
+        config.write(configFile)
+
 def askCookie():
     cookie = ask('input', 'cookie', 'Enter PHPSESSID cookie')
-    config['DEFAULT']['cookie'] = cookie['cookie']
-    with open('config.ini', 'w') as cofFILE :
-        config.write(cofFILE)
+    valInfo.cookie_value = cookie['cookie']
     return cookie['cookie']
+
+def askLog(): 
+    log = ask('confirm', 'logs', 
+    'Do you want to leave a log file after each run of the script?')['logs']
+    valInfo.log_info_value = log
+    return log
 
