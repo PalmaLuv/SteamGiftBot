@@ -13,7 +13,8 @@ from prompt_toolkit import document as doc
 from main import config
 import keyboard
 import clipboard
-from logs import editFileLog
+
+from logs import editFileLog, createFileLog
 
 try:
     import colorama
@@ -32,13 +33,31 @@ array_logo = ["    ______                   ______ _____    ___                 
               " /___/\__/\__/\_,_/_/_/_/  \___/_/_/ \__/ /_/   \_,_/_/ /___/\__/_/   " ]
 
 
+class statusLogs:
+    def __init__(self):
+        self._valLogs = False
+
+    @property
+    def valLogs(self):
+        return self._valLogs
+
+    @valLogs.setter
+    def valLogs(self, value):
+        self._valLogs = value
+boolLogs = statusLogs()
+
+def createdLogs(status):
+    if True == status:
+        createFileLog(status)
+        boolLogs.valLogs = status
 
 def log(str,color="white"):
     if colored: 
         six.print_(colored(str, color))
     else: 
         six.print_(str)
-    editFileLog(str.replace('\n', ' '))
+    if boolLogs.valLogs: 
+        editFileLog(str.replace('\n', ' '))
 
 class PointValidator(Validator):
     def validate(self, document: doc.Document):
@@ -71,28 +90,18 @@ def ask(type, name, msg, validate=None, choices=[]):
         answers = prompt(questions)
     return answers
 
-class valInfo:
-    cookie_value = ""
-    log_info_value = False
-
-def askReadConfig():
-    if 'cookie' in config['DEFAULT']: 
-        valInfo.cookie_value = config['DEFAULT'].get('cookie')
-    if 'log_info' in config['DEFAULT']:
-        valInfo.log_info_value = config['DEFAULT'].get('log_info')
-    config.set('DEFAULT', 'cookie', valInfo.cookie_value)
-    config.set('DEFAULT', 'log_info', str(valInfo.log_info_value))
+def askReadConfig(cookie_value, log_info_value):
+    config.set('DEFAULT', 'cookie', cookie_value)
+    config.set('DEFAULT', 'log_info', str(log_info_value))
     with open('config.ini', 'w') as configFile:
         config.write(configFile)
 
 def askCookie():
     cookie = ask('input', 'cookie', 'Enter PHPSESSID cookie')
-    valInfo.cookie_value = cookie['cookie']
     return cookie['cookie']
 
 def askLog(): 
     log = ask('confirm', 'logs', 
     'Do you want to leave a log file after each run of the script?')['logs']
-    valInfo.log_info_value = log
     return log
 

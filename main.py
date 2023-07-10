@@ -16,25 +16,55 @@ config      = configparser.ConfigParser()
 
 # Storing parameters 
 class valProject:
-    valLogs = False
-    cookie = ""
+    def __init__(self):
+        self._valLogs = False
+        self._cookie = ""
+
+    @property
+    def valLogs(self):
+        return self._valLogs
+
+    @valLogs.setter
+    def valLogs(self, value):
+        self._valLogs = value
+
+    @property
+    def cookie(self):
+        return self._cookie
+
+    @cookie.setter
+    def cookie(self, value):
+        self._cookie = value
+thisConfig = valProject()
 
 # Creation and processing of previously created parameters or, if not created, their creation 
 def workingWithConfig(): 
     config.read('config.ini')
     if not config['DEFAULT'].get('cookie'): 
-        valProject.cookie = clientLog.askCookie()
+        thisConfig.cookie = clientLog.askCookie()
     else:
-        valProject.cookie = config['DEFAULT'].get('cookie')
+        thisConfig.cookie = config['DEFAULT'].get('cookie')
     if not config['DEFAULT'].get('log_info'): 
-        valProject.valLogs = clientLog.askLog()
+        thisConfig.valLogs = clientLog.askLog()
     else:
-        valProject.valLogs = bool(config['DEFAULT'].get('log_info'))
+        thisConfig.valLogs = config['DEFAULT'].get('log_info')
     if not config['DEFAULT'].get('cookie') or not config['DEFAULT'].get('log_info'):
-        clientLog.askReadConfig()
+        clientLog.askReadConfig(thisConfig.cookie, thisConfig.valLogs)
 
-#def editConfig():
-    
+# Editing the script settings *.ini file
+def editConfig():
+    while(True):
+        editCfg = startCfg = clientLog.ask('list', 'config_edit', 'Choice of Action :', choices= [
+            'Cookie', 'log info', 'exit' 
+        ])['config_edit']
+        if editCfg == 'Cookie' :
+            thisConfig.cookie = clientLog.askCookie()
+            clientLog.askReadConfig(thisConfig.cookie, thisConfig.valLogs)
+        elif editCfg == 'log info' : 
+            thisConfig.valLogs = clientLog.askLog()
+            clientLog.askReadConfig(thisConfig.cookie, thisConfig.valLogs)
+        elif editCfg == 'exit' :
+            break
 
 # Program launch function
 def run(): 
@@ -56,7 +86,8 @@ def run():
     ])['gift_type']
     minPoin = clientLog.ask('input', 'min_points', 'What is the minimum number of points to remain?',
     clientLog.PointValidator)['min_points']
-    steamGif(valProject.cookie, giftTYPE, pinnedGames, minPoin).start()
+    clientLog.createdLogs(thisConfig.valLogs)
+    steamGif(thisConfig.cookie, giftTYPE, pinnedGames, minPoin).start()
 
 if __name__ == '__main__':
     run()

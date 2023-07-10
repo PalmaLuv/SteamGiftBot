@@ -41,13 +41,15 @@ LOGGING_CONFIG = {
     }
 }
 
-try:
-    import logging
-    import logging.config    
-    logging.config.dictConfig(LOGGING_CONFIG)
-    logger = logging.getLogger('__logger__')
-except ImportError:
-    logger = None
+def createFileLog(status):
+    if status == True:
+        try:
+            import logging
+            import logging.config    
+            logging.config.dictConfig(LOGGING_CONFIG)
+            logger = logging.getLogger('__logger__')
+        except ImportError:
+            logger = None
 
 def editFileLog(info):
     if logger: 
