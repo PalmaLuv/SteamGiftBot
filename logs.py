@@ -41,16 +41,39 @@ LOGGING_CONFIG = {
     }
 }
 
-def createFileLog(status):
-    if status == True:
-        try:
-            import logging
-            import logging.config    
-            logging.config.dictConfig(LOGGING_CONFIG)
-            logger = logging.getLogger('__logger__')
-        except ImportError:
-            logger = None
+# Storing the right variables. 
+class LoggerCfg:
+    def __init__(self):
+        self._logger = False
 
+    @property
+    def logger(self):
+        return self._logger
+
+    @logger.setter
+    def logger(self, value):
+        self._logger = value
+thisLog = LoggerCfg()
+
+# Creating files and customizing logs.
+def createFileLog():
+    try:
+        import logging
+        import logging.config
+        import datetime
+        import os
+        filename_format = 'log/log-%d.%m.%Y-%H.%M.%S.log'
+        formatted_datetime = datetime.datetime.now().strftime(filename_format)
+        LOGGING_CONFIG['handlers']['rotating_file_handler']['filename'] = formatted_datetime
+        LOGGING_CONFIG['handlers']['file_handler']['filename'] = formatted_datetime
+        if not os.path.exists('log'):
+            os.makedirs('log')
+        logging.config.dictConfig(LOGGING_CONFIG)
+        thisLog.logger = logging.getLogger('__logger__')
+    except ImportError:
+        thisLog.logger = None
+
+# Adding log information.
 def editFileLog(info):
-    if logger: 
-        logger.debug(info)
+    if thisLog.logger: 
+        thisLog.logger.debug(info)

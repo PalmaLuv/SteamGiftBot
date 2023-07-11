@@ -32,7 +32,7 @@ array_logo = ["    ______                   ______ _____    ___                 
               "  _\ \/ __/ -_) _ `/  ' \  / (_ / / _/ __/ / ___/ _ `/ __(_-</ -_) __/",
               " /___/\__/\__/\_,_/_/_/_/  \___/_/_/ \__/ /_/   \_,_/_/ /___/\__/_/   " ]
 
-
+# Storing the right variables. 
 class statusLogs:
     def __init__(self):
         self._valLogs = False
@@ -48,7 +48,7 @@ boolLogs = statusLogs()
 
 def createdLogs(status):
     if True == status:
-        createFileLog(status)
+        createFileLog()
         boolLogs.valLogs = status
 
 def log(str,color="white"):

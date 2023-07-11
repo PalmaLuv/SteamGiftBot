@@ -14,7 +14,7 @@ import client as clientLog
 # from PyInstaller import (Token, Error, JsonPrint, prompt)
 config      = configparser.ConfigParser()
 
-# Storing parameters 
+# Storing parameters.  
 class valProject:
     def __init__(self):
         self._valLogs = False
@@ -47,7 +47,7 @@ def workingWithConfig():
     if not config['DEFAULT'].get('log_info'): 
         thisConfig.valLogs = clientLog.askLog()
     else:
-        thisConfig.valLogs = config['DEFAULT'].get('log_info')
+        thisConfig.valLogs = bool(config['DEFAULT'].get('log_info'))
     if not config['DEFAULT'].get('cookie') or not config['DEFAULT'].get('log_info'):
         clientLog.askReadConfig(thisConfig.cookie, thisConfig.valLogs)
 
