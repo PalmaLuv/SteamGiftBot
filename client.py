@@ -13,7 +13,8 @@ from prompt_toolkit import document as doc
 from main import config
 import keyboard
 import clipboard
-from logs import editFileLog
+
+from logs import editFileLog, createFileLog
 
 try:
     import colorama
@@ -31,14 +32,32 @@ array_logo = ["    ______                   ______ _____    ___                 
               "  _\ \/ __/ -_) _ `/  ' \  / (_ / / _/ __/ / ___/ _ `/ __(_-</ -_) __/",
               " /___/\__/\__/\_,_/_/_/_/  \___/_/_/ \__/ /_/   \_,_/_/ /___/\__/_/   " ]
 
+# Storing the right variables. 
+class statusLogs:
+    def __init__(self):
+        self._valLogs = False
 
+    @property
+    def valLogs(self):
+        return self._valLogs
+
+    @valLogs.setter
+    def valLogs(self, value):
+        self._valLogs = value
+boolLogs = statusLogs()
+
+def createdLogs(status):
+    if True == status:
+        createFileLog()
+        boolLogs.valLogs = status
 
 def log(str,color="white"):
     if colored: 
         six.print_(colored(str, color))
     else: 
         six.print_(str)
-    editFileLog(str.replace('\n', ' '))
+    if boolLogs.valLogs: 
+        editFileLog(str.replace('\n', ' '))
 
 class PointValidator(Validator):
     def validate(self, document: doc.Document):
@@ -71,10 +90,18 @@ def ask(type, name, msg, validate=None, choices=[]):
         answers = prompt(questions)
     return answers
 
+def askReadConfig(cookie_value, log_info_value):
+    config.set('DEFAULT', 'cookie', cookie_value)
+    config.set('DEFAULT', 'log_info', str(log_info_value))
+    with open('config.ini', 'w') as configFile:
+        config.write(configFile)
+
 def askCookie():
     cookie = ask('input', 'cookie', 'Enter PHPSESSID cookie')
-    config['DEFAULT']['cookie'] = cookie['cookie']
-    with open('config.ini', 'w') as cofFILE :
-        config.write(cofFILE)
     return cookie['cookie']
+
+def askLog(): 
+    log = ask('confirm', 'logs', 
+    'Do you want to leave a log file after each run of the script?')['logs']
+    return log
 
