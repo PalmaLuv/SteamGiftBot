@@ -19,7 +19,7 @@ This bot was created to automate the operation of the site [SteamGifts](https://
 
 Nothing else is required from you except running the program, because it will do everything for YOU.
 <p align="center">
-  <img width="800" src="https://github.com/PalmaLuv/SteamGiftBot/assets/84909252/56ce42fe-c418-48e1-b277-0eb9120339c1"/>
+  <img src="https://github.com/PalmaLuv/SteamGiftBot/assets/84909252/56ce42fe-c418-48e1-b277-0eb9120339c1"/>
 </p>
 
 ### What does this program do? 
