@@ -5,19 +5,19 @@
 
 1. Rights of use
 
-You may use, modify and redistribute this Python script ("Software")
+  You may use, modify and redistribute this Python script ("Software")
 under the terms of this license.
 
 2. Limitations
 
-2.1 You may not sell the Software or use it for any commercial 
+    2.1 You may not sell the Software or use it for any commercial 
 purpose without the prior written consent of the Author.
     
-2.2 When distributing the Software you are required 
+    2.2 When distributing the Software you are required 
 to attribute authorship as follows: 
 
-- Mention the author's github (https://github.com/PalmaLuv).
-- Include a link to the source repository or other source where 
+      - Mention the author's github (https://github.com/PalmaLuv).
+      - Include a link to the source repository or other source where 
 the original code of the Software is available.
 
 3. Guarantees and liability
