@@ -14,18 +14,13 @@ from main import config
 import keyboard
 import clipboard
 
-from logs import editFileLog, createFileLog
-
 try:
-    import colorama
-    colorama.init()
+    from colorama import init, Fore
+    init()
 except ImportError:
-    colorama = None
+    Fore = None
 
-try:
-    from termcolor import colored
-except ImportError:
-    colored = None    
+from logs import editFileLog, createFileLog  
 
 array_logo = ["    ______                   ______ _____    ___                      ",
               "   / __/ /____ ___ ___ _    / ___(_) _/ /_  / _ \___ ________ ___ ____",
@@ -51,13 +46,14 @@ def createdLogs(status):
         createFileLog()
         boolLogs.valLogs = status
 
-def log(str,color="white"):
-    if colored: 
-        six.print_(colored(str, color))
-    else: 
-        six.print_(str)
+def log(str, color="white"):
     if boolLogs.valLogs: 
         editFileLog(str.replace('\n', ' '))
+    if Fore:
+        fore_str = getattr(Fore, color.upper()) + str + Fore.RESET
+        six.print_(fore_str)
+    else:
+        six.print_(str)
 
 class PointValidator(Validator):
     def validate(self, document: doc.Document):
