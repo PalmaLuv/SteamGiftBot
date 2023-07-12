@@ -49,7 +49,7 @@ Nothing else is required from you except running the program, because it will do
 
 ```bash
 python -m venv env 
-source env/bin/activate
+source env/Scripts/activate
 pip install -r requirements.txt
 python main.py
 ```
