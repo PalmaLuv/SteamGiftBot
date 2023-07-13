@@ -132,5 +132,6 @@ class SteamGift :
         if self.points > 0:
             log(f"You currently have balance {self.points} points","white")
             log(f"Script running","green")
+        self.session = self.requestsRetrySession()
         self.getGameContent()
 
