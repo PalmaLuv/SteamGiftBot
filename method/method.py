@@ -5,7 +5,7 @@
 #                                                                    
 # Created by: github.com/PalmaLuv
 # Stay tuned for further app updates
-# License GPL-3.0 license
+# License : MPL-2.0
 import requests
 import json
 
