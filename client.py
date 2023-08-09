@@ -13,6 +13,7 @@ from prompt_toolkit import document as doc
 from main import config
 import keyboard
 import clipboard
+import os
 
 try:
     from colorama import init, Fore
@@ -31,14 +32,24 @@ array_logo = ["    ______                   ______ _____    ___                 
 class statusLogs:
     def __init__(self):
         self._valLogs = False
+        self._valTextConsole = 0
+
+    @property 
+    def valTextConsole(self): 
+        return self._valTextConsole
 
     @property
     def valLogs(self):
         return self._valLogs
 
+    @valTextConsole.setter
+    def valTextConsole(self, value):
+        self._valTextConsole = value
+
     @valLogs.setter
     def valLogs(self, value):
         self._valLogs = value
+
 boolLogs = statusLogs()
 
 def createdLogs(status):
@@ -47,6 +58,11 @@ def createdLogs(status):
         boolLogs.valLogs = status
 
 def log(str, color="white"):
+    if boolLogs.valTextConsole < 60: 
+        boolLogs.valTextConsole += 1
+    elif 60 <= boolLogs.valTextConsole: 
+        boolLogs.valTextConsole = 0
+        os.system('cls')
     if boolLogs.valLogs: 
         editFileLog(str.replace('\n', ' '))
     if Fore:
