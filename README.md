@@ -7,7 +7,10 @@
   [![](https://img.shields.io/github/v/release/PalmaLuv/SteamGiftBot?include_prereleases&label=Version&color=blueviolet)](https://github.com/PalmaLuv/SteamGiftBot/releases/latest)
   [![](https://img.shields.io/github/license/PalmaLuv/SteamGiftBot?color=%231E90FF&label=License&logo=apache)](LICENSE)
   ![Python](https://img.shields.io/badge/Python_Version-3.9--3.9.6-yellow?logo=python)
-  [![](https://img.shields.io/github/downloads/PalmaLuv/SteamGiftBot/total.svg?label=Downloads&logo=github&cacheSeconds=600&color=blueviolet)](https://github.com/PalmaLuv/SteamGiftBot/releases)
+  [![](https://img.shields.io/github/downloads/PalmaLuv/SteamGiftBot/total.svg?label=Downloads&logo=github&cacheSeconds=600&color=blueviolet)]
+  (https://github.com/PalmaLuv/SteamGiftBot/releases)
+  [![Git Cloners](https://img.shields.io/endpoint?url=https://git-cloners-counter.vercel.app/api/count&style=for-the-badge)](https://github.com/PalmaLuv/SteamGiftBot)
+
 </div>
 
 # Screenshot
