@@ -57,4 +57,12 @@ python main.py
 If there is a suggestion to improve the application, I propose to go here [link](https://github.com/PalmaLuv/SteamGiftBot/discussions/6).
 Much has been changed, and much will be added.
 
+### How to Sharede
 
+<div align="center" markdown="1">
+
+<a href="http://twitter.com/intent/tweet?text=https://github.com/PalmaLuv/SteamGiftBot%0ASteamGiftBot">Share on Twitter</a><br>
+<a href="http://www.linkedin.com/shareArticle?mini=true&url=https://github.com/PalmaLuv/SteamGiftBot&title=SteamGiftBot&summary=&source=">Share on LinkedIn</a><br>
+<a href="https://t.me/share/url?url=https://github.com/PalmaLuv/SteamGiftBot">Share on Telegram</a><br>
+
+</div>
