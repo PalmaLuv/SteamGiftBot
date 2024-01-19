@@ -8,8 +8,11 @@
 # License : MPL-2.0
 
 import six 
-from PyInquirer import ValidationError, Validator, prompt
+
+from InquirerPy import prompt
 from prompt_toolkit import document as doc
+from prompt_toolkit.validation import ValidationError, Validator
+
 from main import config
 import keyboard
 import clipboard
@@ -77,19 +80,18 @@ class PointValidator(Validator):
         try:
             value = int(value)
         except Exception:
-            raise ValidationError(message = 'Value should be greater than 0', cursor_position = len(document.text))
+            raise Exception('Value should be greater than 0')
 
         if value <= 0:
-            raise ValidationError(message = 'Value should be greater than 0', cursor_position = len(document.text))
+            raise Exception('Value should be greater than 0')
         return True
 
-def ask(type, name, msg, validate=None, choices=[]):
+def ask(type, name, msg, choices=[]):
     questions = [
         {
             'type'      : type, 
             'name'      : name,
-            'message'   : msg,
-            'validate'  : validate
+            'message'   : msg
         }
     ]
     if choices:

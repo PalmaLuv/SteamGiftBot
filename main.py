@@ -84,8 +84,7 @@ def run():
     giftTYPE = clientLog.ask('list', 'gift_type', 'Select type:', choices= [
         'All', 'WishList', 'Recommended', 'Copies', 'DLC', 'New'
     ])['gift_type']
-    minPoin = clientLog.ask('input', 'min_points', 'What is the minimum number of points to remain?',
-    clientLog.PointValidator)['min_points']
+    minPoin = clientLog.ask('input', 'min_points', 'What is the minimum number of points to remain?')['min_points']
     clientLog.createdLogs(thisConfig.valLogs)
     steamGif(thisConfig.cookie, giftTYPE, pinnedGames, minPoin).start()
 
