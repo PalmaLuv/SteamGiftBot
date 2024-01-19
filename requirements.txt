@@ -7,7 +7,6 @@ idna==3.2
 keyboard==0.13.5
 prompt-toolkit==1.0.14
 Pygments==2.15.1
-PyInquirer==1.0.3
 pyperclip==1.8.2
 regex==2022.10.31
 requests==2.27.1
@@ -15,3 +14,4 @@ six==1.16.0
 soupsieve==2.3.1
 urllib3==1.26.6
 wcwidth==0.2.5
+inquirerpy==0.3.4
