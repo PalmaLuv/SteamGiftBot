@@ -5,7 +5,7 @@ clipboard==0.0.4
 colorama==0.4.6
 idna==3.2
 keyboard==0.13.5
-prompt-toolkit==1.0.14
+prompt-toolkit==3.0.43
 Pygments==2.15.1
 pyperclip==1.8.2
 regex==2022.10.31
