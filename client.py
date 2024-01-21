@@ -13,7 +13,6 @@ from InquirerPy import prompt
 from prompt_toolkit import document as doc
 from prompt_toolkit.validation import ValidationError, Validator
 
-from main import config
 import keyboard
 import clipboard
 import os
@@ -105,6 +104,7 @@ def ask(type, name, msg, choices=[]):
     return answers
 
 def askReadConfig(cookie_value, log_info_value):
+    config = configparser.ConfigParser()
     config.set('DEFAULT', 'cookie', cookie_value)
     config.set('DEFAULT', 'log_info', str(log_info_value))
     with open('config.ini', 'w') as configFile:
