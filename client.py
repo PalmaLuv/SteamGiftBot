@@ -104,6 +104,7 @@ def ask(type, name, msg, choices=[]):
     return answers
 
 def askReadConfig(cookie_value, log_info_value):
+    import configparser
     config = configparser.ConfigParser()
     config.set('DEFAULT', 'cookie', cookie_value)
     config.set('DEFAULT', 'log_info', str(log_info_value))
