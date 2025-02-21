@@ -5,49 +5,103 @@
 #                                                                    
 # Created by: github.com/PalmaLuv
 # Stay tuned for further app updates
-# License GPL-3.0 license
+# License : MPL-2.0
 
 # from method.method import SteamGift
 import configparser
-import client as _l
+import client as clientLog
 
 # from PyInstaller import (Token, Error, JsonPrint, prompt)
 config      = configparser.ConfigParser()
 
-def run(): 
-    from method.method import SteamGift as steamGif
-    for i in range(4): 
-        _l.log(_l.array_logo[i], "green")
-    _l.log("\nEnjoy using our product!","white")
-    _l.log("Created by: github.com/PalmaLuv\nStay tuned for further app updates","red")
+# Storing parameters.  
+class valProject:
+    def __init__(self):
+        self._valLogs = False
+        self._cookie = ""
+        self._only_card = False
 
-    config.read('config.ini')
-    if not config['DEFAULT'].get('cookie'):
-        cookie = _l.askCookie()
-    else: 
-        InputCookie = _l.ask('confirm', 'reenter',
-        'Do you want to enter new cookie?')['reenter']
-        if InputCookie:
-            cookie = _l.askCookie() 
-        else:
-            cookie = config['DEFAULT'].get('cookie')
+    @property
+    def valLogs(self):
+        return self._valLogs
+
+    @valLogs.setter
+    def valLogs(self, value):
+        self._valLogs = value
+
+    @property
+    def cookie(self):
+        return self._cookie
+
+    @cookie.setter
+    def cookie(self, value):
+        self._cookie = value
+
+    @property
+    def only_card(self): 
+        return self._only_card
     
-    pinnedGames = _l.ask('confirm', 'pinned', 
-    'Should the bot enter pinned games?')['pinned'] 
-    giftTYPE = _l.ask('list', 'gift_type', 'Select type:',
-    choices=[
-        'All',
-        'WishList',
-        'Recommended',
-        'Copies',
-        'DLC',
-        'New'
-    ])['gift_type']
-    minPoin = _l.ask('input', 'min_points',
-    'What is the minimum number of points to remain?', _l.PointValidator)['min_points']
-    sg = steamGif(cookie, giftTYPE, pinnedGames, minPoin)
-    sg.start()
+    @only_card.setter
+    def only_card(self, value): 
+        self._only_card = value
 
+thisConfig = valProject()
+
+# Creation and processing of previously created parameters or, if not created, their creation 
+def workingWithConfig(): 
+    config.read('config.ini')
+    if not config['DEFAULT'].get('cookie'): 
+        thisConfig.cookie = clientLog.askCookie()
+    else:
+        thisConfig.cookie = config['DEFAULT'].get('cookie')
+    if not config['DEFAULT'].get('log_info'): 
+        thisConfig.valLogs = clientLog.askLog()
+    else:
+        thisConfig.valLogs = bool(config['DEFAULT'].get('log_info'))
+    if not config['DEFAULT'].get('cookie') or not config['DEFAULT'].get('log_info'):
+        clientLog.askReadConfig(thisConfig.cookie, thisConfig.valLogs)
+    #if not config['SETING'].get('only_card'):
+    #    thisConfig.only_card = False # fix
+    #else: 
+    #   thisConfig.only_card = False # fix
+
+# Editing the script settings *.ini file
+def editConfig():
+    while(True):
+        editCfg = startCfg = clientLog.ask('list', 'config_edit', 'Choice of Action :', choices= [
+            'Cookie', 'log info', 'exit' 
+        ])['config_edit']
+        if editCfg == 'Cookie' :
+            thisConfig.cookie = clientLog.askCookie()
+            clientLog.askReadConfig(thisConfig.cookie, thisConfig.valLogs)
+        elif editCfg == 'log info' : 
+            thisConfig.valLogs = clientLog.askLog()
+            clientLog.askReadConfig(thisConfig.cookie, thisConfig.valLogs)
+        elif editCfg == 'exit' :
+            break
+
+# Program launch function
+def run(): 
+    from method.method import SteamGift as steamGif 
+    for index in range(4): 
+        clientLog.log(clientLog.array_logo[index], "green")
+    clientLog.log("\nEnjoy using our product!", "white")
+    clientLog.log("Created by: github.com/PalmaLuv | palmaluv.live\nStay tuner for further app updates","red")
+    workingWithConfig()
+    while(True):
+        startCfg = clientLog.ask('list', 'config_start', 'Choice of Action :', choices= [
+            'Start', 'Edit' 
+        ])['config_start']
+        if startCfg == 'Start': break 
+        elif startCfg == 'Edit' : editConfig()
+    pinnedGames = clientLog.ask('confirm', 'pinned', 'Should the bot enter pinned games?')['pinned']
+    onlyCard = clientLog.ask('confirm', 'card', 'Only want to get games with Steam cards?')['card']
+    giftTYPE = clientLog.ask('list', 'gift_type', 'Select type:', choices= [
+        'All', 'WishList', 'Recommended', 'Copies', 'DLC', 'New'
+    ])['gift_type']
+    minPoin = clientLog.ask('input', 'min_points', 'What is the minimum number of points to remain?')['min_points']
+    clientLog.createdLogs(thisConfig.valLogs)
+    steamGif(thisConfig.cookie, giftTYPE, pinnedGames, minPoin, onlyCard).start()
 
 if __name__ == '__main__':
     run()

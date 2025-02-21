@@ -5,7 +5,7 @@
 #                                                                    
 # Created by: github.com/PalmaLuv
 # Stay tuned for further app updates
-# License GPL-3.0 license
+# License : MPL-2.0
 import requests
 import json
 
@@ -15,6 +15,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 from time import sleep
 from bs4 import BeautifulSoup
+from method.steam_api.api import SteamAPI
 
 from client import log
 
@@ -23,11 +24,12 @@ URL     =    info['URL']
 flagExit = True
 
 class SteamGift : 
-    def __init__(self, cookie, type, pinned, min_points):
+    def __init__(self, cookie, type, pinned, min_points, only_card):
         self.cookie     = { 'PHPSESSID' : cookie }
         self.type       = type
         self.pinned     = pinned
         self.min_points = int(min_points)
+        self.only_card  = only_card
 
         self.baseURL = URL
         self.session = requests.Session()
@@ -92,6 +94,24 @@ class SteamGift :
                 log("Page is empty. Please, choose another type. ", "red")
                 exit()
             for item in game_list:
+                if self.only_card: 
+                    stema_link = item.find('a', class_='giveaway__icon')
+                    if stema_link:
+                        tooltip_data = stema_link.get('data-ui-tooltip')
+                        try:
+                            tooltip_json = json.loads(tooltip_data)
+
+                            store_info = next((row for row in tooltip_json.get('rows', []) if row.get('columns', [{}])[0].get('name') == "Steam Store"), None)
+
+                            if store_info:
+                                steam_url = stema_link.get('href')
+                                steam_id = SteamAPI.get_game_id(steam_url)
+                                steam_api = SteamAPI()
+                                if not steam_api.get_game_info(steam_id):
+                                    continue
+                        except json.JSONDecodeError:
+                            print(f"Error parsing JSON file [{tooltip_data}]")
+
                 if any(item == _item for _item in game_list_faded):
                     continue
 
@@ -132,5 +152,6 @@ class SteamGift :
         if self.points > 0:
             log(f"You currently have balance {self.points} points","white")
             log(f"Script running","green")
+        self.session = self.requestsRetrySession()
         self.getGameContent()
 

@@ -5,40 +5,74 @@
 #                                                                    
 # Created by: github.com/PalmaLuv
 # Stay tuned for further app updates
-# License GPL-3.0 license
+# License : MPL-2.0
 
 import six 
-from PyInquirer import ValidationError, Validator, prompt
+
+from InquirerPy import prompt
 from prompt_toolkit import document as doc
+from prompt_toolkit.validation import ValidationError, Validator
+
 from main import config
 import keyboard
 import clipboard
-from logs import editFileLog
+import os
 
 try:
-    import colorama
-    colorama.init()
+    from colorama import init, Fore
+    init()
 except ImportError:
-    colorama = None
+    Fore = None
 
-try:
-    from termcolor import colored
-except ImportError:
-    colored = None    
+from logs import editFileLog, createFileLog  
 
 array_logo = ["    ______                   ______ _____    ___                      ",
               "   / __/ /____ ___ ___ _    / ___(_) _/ /_  / _ \___ ________ ___ ____",
               "  _\ \/ __/ -_) _ `/  ' \  / (_ / / _/ __/ / ___/ _ `/ __(_-</ -_) __/",
               " /___/\__/\__/\_,_/_/_/_/  \___/_/_/ \__/ /_/   \_,_/_/ /___/\__/_/   " ]
 
+# Storing the right variables. 
+class statusLogs:
+    def __init__(self):
+        self._valLogs = False
+        self._valTextConsole = 0
 
+    @property 
+    def valTextConsole(self): 
+        return self._valTextConsole
 
-def log(str,color="white"):
-    if colored: 
-        six.print_(colored(str, color))
-    else: 
+    @property
+    def valLogs(self):
+        return self._valLogs
+
+    @valTextConsole.setter
+    def valTextConsole(self, value):
+        self._valTextConsole = value
+
+    @valLogs.setter
+    def valLogs(self, value):
+        self._valLogs = value
+
+boolLogs = statusLogs()
+
+def createdLogs(status):
+    if True == status:
+        createFileLog()
+        boolLogs.valLogs = status
+
+def log(str, color="white"):
+    if boolLogs.valTextConsole < 60: 
+        boolLogs.valTextConsole += 1
+    elif 60 <= boolLogs.valTextConsole: 
+        boolLogs.valTextConsole = 0
+        os.system('cls')
+    if boolLogs.valLogs: 
+        editFileLog(str.replace('\n', ' '))
+    if Fore:
+        fore_str = getattr(Fore, color.upper()) + str + Fore.RESET
+        six.print_(fore_str)
+    else:
         six.print_(str)
-    editFileLog(str.replace('\n', ' '))
 
 class PointValidator(Validator):
     def validate(self, document: doc.Document):
@@ -46,19 +80,18 @@ class PointValidator(Validator):
         try:
             value = int(value)
         except Exception:
-            raise ValidationError(message = 'Value should be greater than 0', cursor_position = len(document.text))
+            raise Exception('Value should be greater than 0')
 
         if value <= 0:
-            raise ValidationError(message = 'Value should be greater than 0', cursor_position = len(document.text))
+            raise Exception('Value should be greater than 0')
         return True
 
-def ask(type, name, msg, validate=None, choices=[]):
+def ask(type, name, msg, choices=[]):
     questions = [
         {
             'type'      : type, 
             'name'      : name,
-            'message'   : msg,
-            'validate'  : validate
+            'message'   : msg
         }
     ]
     if choices:
@@ -71,10 +104,18 @@ def ask(type, name, msg, validate=None, choices=[]):
         answers = prompt(questions)
     return answers
 
+def askReadConfig(cookie_value, log_info_value):
+    config.set('DEFAULT', 'cookie', cookie_value)
+    config.set('DEFAULT', 'log_info', str(log_info_value))
+    with open('config.ini', 'w') as configFile:
+        config.write(configFile)
+
 def askCookie():
     cookie = ask('input', 'cookie', 'Enter PHPSESSID cookie')
-    config['DEFAULT']['cookie'] = cookie['cookie']
-    with open('config.ini', 'w') as cofFILE :
-        config.write(cofFILE)
     return cookie['cookie']
+
+def askLog(): 
+    log = ask('confirm', 'logs', 
+    'Do you want to leave a log file after each run of the script?')['logs']
+    return log
 

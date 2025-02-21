@@ -1,0 +1,10 @@
+log/
+
+config.ini
+
+testing.py
+test.py
+
+*.log
+
+**/__pycache__
