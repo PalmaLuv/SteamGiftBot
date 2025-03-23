@@ -8,6 +8,8 @@
   [![](https://img.shields.io/github/license/PalmaLuv/SteamGiftBot?color=%231E90FF&label=License&logo=apache)](LICENSE)
   ![Python](https://img.shields.io/badge/Python_Version-3.7--3.11-yellow?logo=python)
   [![](https://img.shields.io/github/downloads/PalmaLuv/SteamGiftBot/total.svg?label=Downloads&logo=github&cacheSeconds=600&color=blueviolet)](https://github.com/PalmaLuv/SteamGiftBot/releases)
+  [![SteamGiftBot Docker Build](https://github.com/PalmaLuv/SteamGiftBot/actions/workflows/docker-publish.yml/badge.svg)](ghcr.io/palmaluv/steamgiftbot:latest)
+
 
 </div>
 
