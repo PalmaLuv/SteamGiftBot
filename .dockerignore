@@ -1,0 +1,11 @@
+**/__pycache__
+
+*.pyc
+*.pyo
+*.pud
+*.ini
+.env
+
+log/
+*.log
+
