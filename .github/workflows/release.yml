@@ -1,0 +1,92 @@
+# Builds the Windows executable that the README sends people to download, and
+# attaches it to the GitHub Release for the tag.
+#
+#   git tag v2.1.0 && git push origin v2.1.0
+
+name: Release
+
+on:
+  push:
+    tags: [ 'v*.*.*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller==6.22.1
+
+      - name: Build the executable
+        run: pyinstaller SteamGiftBot.spec --noconfirm
+
+      # A packed build breaks in ways the test suite cannot see: a data file
+      # left out of the bundle, or a settings path pointing inside the folder
+      # PyInstaller deletes on exit.
+      - name: Check the executable
+        shell: bash
+        run: |
+          set -u
+          failures=0
+
+          check() {
+            if [ "$1" = "0" ]; then printf '  PASS  %s\n' "$2"
+            else printf '  FAIL  %s\n' "$2"; failures=$((failures + 1)); fi
+          }
+
+          ./dist/SteamGiftBot.exe --version
+          check $? "--version answers"
+
+          ./dist/SteamGiftBot.exe --no-input --config nowhere.ini > out.txt 2>&1
+          [ "$?" = "2" ]
+          check $? "an empty setup exits 2 instead of asking"
+
+          # info.json has to survive the packing, and config.ini has to be
+          # looked for beside the .exe rather than in the unpacked temp folder.
+          cd dist
+          printf '[DEFAULT]\ncookie=fake\nlog_info=no\ngift_type=All\npinned=no\nmin_points=0\ncheck_wins=no\n' > config.ini
+          ./SteamGiftBot.exe --no-input --once --dry-run > run.txt 2>&1
+          code=$?
+          cd ..
+          [ "$code" = "1" ]
+          check $? "it reads a config.ini placed next to it (exit $code)"
+
+          rm -f dist/config.ini dist/run.txt out.txt
+          [ "$failures" = "0" ] || { echo "$failures check(s) failed"; exit 1; }
+          echo "The executable works."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SteamGiftBot-windows
+          path: dist/SteamGiftBot.exe
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: SteamGiftBot-windows
+
+      - name: Attach the executable to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: SteamGiftBot.exe
+          generate_release_notes: true

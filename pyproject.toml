@@ -1,0 +1,18 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+exclude = ["env", ".venv", "build", "dist"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, B bugbear, C4 comprehensions, UP pyupgrade.
+select = ["E", "W", "F", "B", "C4", "UP"]
+# The project spells things in camelCase and shadows a couple of builtins in
+# long standing public signatures; renaming those would break callers.
+ignore = ["E741"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]

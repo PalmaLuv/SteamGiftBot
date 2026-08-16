@@ -1,0 +1,35 @@
+<!-- The 'giveaways won' page is only served to a signed in account, so this is
+     built from the structure SteamGifts uses for tables rather than copied from
+     a live page. The parser deliberately keys on the /giveaway/<code>/<slug>
+     link instead of these class names. The sidebar link is here on purpose: it
+     points at a giveaway too, and must not be counted as a win. -->
+<html>
+  <body>
+    <nav class="nav">
+      <a class="nav__button" href="/giveaway/nav999/not-a-win">Some giveaway</a>
+    </nav>
+
+    <div class="table">
+      <div class="table__row-outer-wrap">
+        <div class="table__row-inner-wrap">
+          <a class="table__column__heading" href="/giveaway/win001/hollow-knight">Hollow Knight</a>
+          <span class="table__column--width-small">Received</span>
+        </div>
+      </div>
+
+      <div class="table__row-outer-wrap">
+        <div class="table__row-inner-wrap">
+          <a class="table__column__heading" href="/giveaway/win002/celeste">Celeste</a>
+          <span class="table__column--width-small">Not Received</span>
+        </div>
+      </div>
+
+      <div class="table__row-outer-wrap">
+        <div class="table__row-inner-wrap">
+          <a class="table__column__heading" href="/giveaway/win003/stardew-valley"></a>
+          <span class="table__column--width-small">Received</span>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

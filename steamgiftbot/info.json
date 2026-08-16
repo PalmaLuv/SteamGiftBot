@@ -1,8 +1,15 @@
 {
-    "URL"   : "https://steamgifts.com",
-    "http"  : "http://",
-    "https" : "https://",
-    
+    "URL"       : "https://www.steamgifts.com",
+    "ajaxURL"   : "https://www.steamgifts.com/ajax.php",
+    "http"      : "http://",
+    "https"     : "https://",
+
+    "timeout"               : 30,
+    "pointsWaitSeconds"     : 900,
+
+    "entryDelaySeconds"     : [3, 7],
+    "rateLimitWaitSeconds"  : 60,
+
     "userAgent" : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36",
 
     "filterURL" : {

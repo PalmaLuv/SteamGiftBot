@@ -1,17 +1,18 @@
-beautifulsoup4==4.10.0
-certifi==2021.5.30
-charset-normalizer==2.0.12
-clipboard==0.0.4
+beautifulsoup4==4.15.0
+certifi==2026.7.22
+charset-normalizer==3.5.1
 colorama==0.4.6
-idna==3.2
-keyboard==0.13.5
-prompt-toolkit==3.0.43
-Pygments==2.15.1
-pyperclip==1.8.2
-regex==2022.10.31
-requests==2.27.1
-six==1.16.0
-soupsieve==2.3.1
-urllib3==1.26.6
-wcwidth==0.2.5
-inquirerpy==0.3.4
+idna==3.18
+InquirerPy==0.3.4
+prompt-toolkit==3.0.53
+Pygments==2.20.0
+requests==2.34.2
+soupsieve==2.9.2
+urllib3==2.7.0
+wcwidth==0.8.2
+
+# Ctrl+V support in the prompts. Windows only: on Linux 'keyboard' needs root
+# and access to /dev/input, which containers and CI do not have.
+clipboard==0.0.4; sys_platform == "win32"
+keyboard==0.13.5; sys_platform == "win32"
+pyperclip==1.11.0; sys_platform == "win32"

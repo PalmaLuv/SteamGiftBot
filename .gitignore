@@ -1,6 +1,17 @@
 log/
 
 config.ini
+steamgiftbot-state.json
+
+testing.py
+test.py
+
 *.log
 
 **/__pycache__
+
+# PyInstaller output
+build/
+dist/
+.pytest_cache/
+.ruff_cache/

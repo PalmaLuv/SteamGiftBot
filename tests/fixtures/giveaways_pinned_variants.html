@@ -1,0 +1,41 @@
+<!-- Three ways SteamGifts has spelled a pinned giveaway, plus a plain row.
+     The parser must recognise all three without being told which is current. -->
+<html>
+  <body>
+    <!-- 1. the row says so itself -->
+    <div class="giveaway__row-outer-wrap">
+      <div class="giveaway__row-inner-wrap is-pinned">
+        <a class="giveaway__heading__name" href="/giveaway/pin01/marked-row">Marked Row</a>
+        <span class="giveaway__heading__thin">(10P)</span>
+      </div>
+    </div>
+
+    <!-- 2. only the wrapper says so -->
+    <div class="pinned-giveaways__outer-wrap">
+      <div class="pinned-giveaways__inner-wrap">
+        <div class="giveaway__row-inner-wrap">
+          <a class="giveaway__heading__name" href="/giveaway/pin02/wrapped">Wrapped Row</a>
+          <span class="giveaway__heading__thin">(10P)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. an extra class that means nothing of the sort. A live listing has
+            this on most rows; the old heuristic read it as 'pinned' and threw
+            three out of four giveaways away. -->
+    <div class="giveaway__row-outer-wrap">
+      <div class="giveaway__row-inner-wrap has-description">
+        <a class="giveaway__heading__name" href="/giveaway/desc01/described">Described Row</a>
+        <span class="giveaway__heading__thin">(10P)</span>
+      </div>
+    </div>
+
+    <!-- 4. an ordinary giveaway, which must stay ordinary -->
+    <div class="giveaway__row-outer-wrap">
+      <div class="giveaway__row-inner-wrap">
+        <a class="giveaway__heading__name" href="/giveaway/plain1/ordinary">Ordinary</a>
+        <span class="giveaway__heading__thin">(10P)</span>
+      </div>
+    </div>
+  </body>
+</html>

@@ -5,7 +5,24 @@
 *.pud
 *.ini
 .env
+steamgiftbot-state.json
 
 log/
 *.log
 
+# Nothing below is needed to run the bot.
+.git/
+.github/
+tests/
+env/
+.venv/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+scripts/
+SteamGiftBot.spec
+requirements-dev.txt
+pyproject.toml
+README.md
+LICENSE

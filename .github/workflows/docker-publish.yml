@@ -2,7 +2,8 @@ name: SteamGiftBot Docker Build
 
 on:
   schedule:
-    - cron: '42 13 * * *'
+    # A weekly rebuild picks up security fixes in the python base image.
+    - cron: '42 13 * * 1'
   push:
     branches: [ "main" ]
     tags: [ 'v*.*.*' ]
@@ -27,16 +28,27 @@ jobs:
 
       - name: Install cosign
         if: github.event_name != 'pull_request'
-        uses: sigstore/cosign-installer@v3.5.0
+        uses: sigstore/cosign-installer@v3.7.0
         with:
-          cosign-release: 'v2.2.4'
+          cosign-release: 'v2.4.1'
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3.0.0
+        uses: docker/setup-buildx-action@v3
+
+      # Nothing gets published until the image has been built and exercised.
+      # The old workflow pushed and signed whatever came out of the build, so a
+      # container that died on startup would still reach the registry.
+      - name: Check the image before publishing
+        run: bash scripts/check-docker.sh
+        env:
+          IMAGE: steamgiftbot:candidate
 
       - name: Log into registry ${{ env.REGISTRY }}
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3.0.0
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -44,15 +56,17 @@ jobs:
 
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@v5.0.0
+        uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
       - name: Build and push Docker image
         id: build-and-push
-        uses: docker/build-push-action@v5.0.0
+        uses: docker/build-push-action@v6
         with:
           context: .
+          # A bot that runs day and night often lives on a cheap ARM server.
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
