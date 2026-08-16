@@ -36,7 +36,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # Nothing gets published until the image has been built and exercised.
       # The old workflow pushed and signed whatever came out of the build, so a
