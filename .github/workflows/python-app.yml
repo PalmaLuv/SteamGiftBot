@@ -29,7 +29,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        # 3.9 is out: requests, urllib3, prompt-toolkit and soupsieve all
+        # require 3.10 now, and 3.9 went end of life in October 2025.
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
         os: [ubuntu-latest]
         # The Ctrl+V hotkey is Windows only, so cover that platform too.
         include:

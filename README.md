@@ -6,7 +6,7 @@
 
   [![](https://img.shields.io/github/v/release/PalmaLuv/SteamGiftBot?include_prereleases&label=Version&color=blueviolet)](https://github.com/PalmaLuv/SteamGiftBot/releases/latest)
   [![](https://img.shields.io/github/license/PalmaLuv/SteamGiftBot?color=%231E90FF&label=License)](LICENSE)
-  ![Python](https://img.shields.io/badge/Python_Version-3.9--3.13-yellow?logo=python)
+  ![Python](https://img.shields.io/badge/Python_Version-3.10--3.13-yellow?logo=python)
   [![](https://img.shields.io/github/downloads/PalmaLuv/SteamGiftBot/total.svg?label=Downloads&logo=github&cacheSeconds=600&color=blueviolet)](https://github.com/PalmaLuv/SteamGiftBot/releases)
   [![SteamGiftBot Docker Build](https://github.com/PalmaLuv/SteamGiftBot/actions/workflows/docker-publish.yml/badge.svg)](https://ghcr.io/palmaluv/steamgiftbot:latest)
 
@@ -52,7 +52,7 @@ The simplest option, nothing to install.
 
 ### From source
 
-Needs Python 3.9 or newer.
+Needs Python 3.10 or newer.
 
 ```bash
 git clone https://github.com/PalmaLuv/SteamGiftBot.git

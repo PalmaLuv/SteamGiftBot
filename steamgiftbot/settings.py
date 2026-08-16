@@ -19,7 +19,6 @@ import sys
 
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Optional
 
 
 # Where a user will look for config.ini, which is not where the code lives once
@@ -57,35 +56,35 @@ class SettingsError(Exception):
 
 @dataclass
 class Settings:
-    cookie      : str            = ''
-    log_info    : Optional[bool] = None
-    gift_type   : str            = ''
-    pinned      : Optional[bool] = None
-    min_points  : Optional[int]  = None
-    once        : bool           = False
-    dry_run     : bool           = False
-    points_wait : Optional[int]  = None
+    cookie      : str         = ''
+    log_info    : bool | None = None
+    gift_type   : str         = ''
+    pinned      : bool | None = None
+    min_points  : int | None  = None
+    once        : bool        = False
+    dry_run     : bool        = False
+    points_wait : int | None  = None
 
     # Filters. Unset means 'do not filter on this'.
-    max_cost    : Optional[int]  = None
-    max_entries : Optional[int]  = None
-    cards_only  : bool           = False
-    blacklist   : tuple          = ()
-    whitelist   : tuple          = ()
+    max_cost    : int | None  = None
+    max_entries : int | None  = None
+    cards_only  : bool        = False
+    blacklist   : tuple       = ()
+    whitelist   : tuple       = ()
     # Your contributor level, from your SteamGifts profile. Unset means the bot
     # does not look at the level a giveaway asks for.
-    contributor_level : Optional[int] = None
-    skip_region_locked: bool          = False
+    contributor_level  : int | None = None
+    skip_region_locked : bool       = False
 
     # Where to report the result of an unattended run.
     discord_webhook : str = ''
     telegram_token  : str = ''
     telegram_chat   : str = ''
     # Explicit off switch. Unset means 'on as soon as a token and a chat exist'.
-    telegram_enabled: Optional[bool] = None
+    telegram_enabled : bool | None = None
 
     # Watch /giveaways/won and announce anything new.
-    check_wins      : Optional[bool] = None
+    check_wins       : bool | None = None
 
     # Names of the required settings that are still empty.
     def missing(self):

@@ -10,7 +10,6 @@
 import re
 
 from dataclasses import dataclass
-from typing import Optional
 
 # Matched against every link in the row rather than one particular CSS class,
 # so a redesign of the listing does not silently lose the app id.
@@ -65,9 +64,9 @@ class Giveaway:
     cost    : int
     entered : bool = False
     pinned  : bool = False
-    appid   : Optional[int] = None
+    appid   : int | None = None
     # How many people are already in. None when the listing did not say.
-    entries : Optional[int] = None
+    entries : int | None = None
     # Contributor level the giveaway asks for; 0 when it asks for none.
     level   : int  = 0
     # Open only to certain countries.
