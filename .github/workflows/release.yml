@@ -68,7 +68,7 @@ jobs:
           [ "$failures" = "0" ] || { echo "$failures check(s) failed"; exit 1; }
           echo "The executable works."
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: SteamGiftBot-windows
           path: dist/SteamGiftBot.exe
