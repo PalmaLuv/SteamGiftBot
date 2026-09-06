@@ -2,14 +2,14 @@ beautifulsoup4==4.15.0
 certifi==2026.7.22
 charset-normalizer==3.5.1
 colorama==0.4.6
-idna==3.18
+idna==3.19
 InquirerPy==0.3.4
 prompt-toolkit==3.0.53
-Pygments==2.20.0
+Pygments==2.21.0
 requests==2.34.2
 soupsieve==2.9.2
 urllib3==2.7.0
-wcwidth==0.8.2
+wcwidth==0.8.3
 
 # Ctrl+V support in the prompts. Windows only: on Linux 'keyboard' needs root
 # and access to /dev/input, which containers and CI do not have.
