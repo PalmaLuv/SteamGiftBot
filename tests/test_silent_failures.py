@@ -50,7 +50,7 @@ class TestWinsAndADeadSession:
         def expired(url):
             raise SessionExpired("gone")
 
-        monkeypatch.setattr(bot, 'GetSoupFromPage', expired)
+        monkeypatch.setattr(bot.provider, 'getSoup', expired)
         with pytest.raises(SessionExpired):
             bot.announceWins()
 
@@ -59,14 +59,14 @@ class TestWinsAndADeadSession:
         monkeypatch.setattr('steamgiftbot.bot.notify.send',
                             lambda config, text, session=None: sent.append(text) or [])
         bot = makeBot(once=True, discord_webhook='https://hook')
-        original = bot.GetSoupFromPage
+        original = bot.provider.getSoup
 
         def expiresOnWins(url):
             if url.endswith('/giveaways/won'):
                 raise SessionExpired("gone")
             return original(url)
 
-        monkeypatch.setattr(bot, 'GetSoupFromPage', expiresOnWins)
+        monkeypatch.setattr(bot.provider, 'getSoup', expiresOnWins)
         assert bot.start() == 1
         assert 'PHPSESSID' in sent[0]
 
