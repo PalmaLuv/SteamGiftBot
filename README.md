@@ -481,8 +481,13 @@ higher than your real level, most giveaways are being skipped for you.
 main.py             entry point, kept where everybody expects it
 steamgiftbot/
   cli.py            flags, settings resolution, startup
-  settings.py       config.ini + environment + command line
-  bot.py            the giveaway walker itself
+  settings.py       config.ini + environment + command line; one line per setting
+  bot.py            the run: walk, filter, spend, wait, report (any site)
+  providers/
+    base.py         what a giveaway site must offer (GiveawayProvider)
+    steamgifts.py   steamgifts.com: session, listing, entries, won page
+  winwatch.py       noticing wins and announcing each one once
+  errors.py         the failures that end a run
   giveaway.py       one listing row, parsed
   filters.py        whether a giveaway is worth points
   wins.py           reading the won giveaways page
@@ -503,6 +508,14 @@ ruff check .                    # the same lint the CI runs
 bash scripts/check-docker.sh    # build the image and exercise it
 pyinstaller SteamGiftBot.spec   # the Windows executable, into dist/
 ```
+
+**Adding a giveaway site** means one class in `steamgiftbot/providers/` with the
+methods listed in `providers/base.py`, registered in `providers/__init__.py`. The
+runner brings the filters, dry runs, pacing, waiting and the summary with it;
+`tests/test_providers.py` shows a whole site written in memory.
+
+**Adding a setting** is one line in the `Settings` dataclass: how to read it and
+how to save it. A test fails until it also has a command line flag.
 
 The tests replay trimmed SteamGifts pages from `tests/fixtures`, several of them
 copied verbatim from the live site, so they never touch the real site and never

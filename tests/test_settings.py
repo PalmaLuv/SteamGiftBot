@@ -124,6 +124,44 @@ class TestBadValues:
             steamSettings.load(configPath)
 
 
+class TestOneDescriptionPerSetting:
+    def test_every_setting_says_how_to_read_and_save_it(self):
+        from dataclasses import fields
+
+        for item in fields(steamSettings.Settings):
+            assert callable(item.metadata['convert']), item.name
+            assert 'store' in item.metadata, item.name
+
+    def test_every_setting_has_a_command_line_flag(self):
+        from dataclasses import fields
+
+        dests = {action.dest for action in buildParser()._actions}
+        missing = {item.name for item in fields(steamSettings.Settings)} - dests
+        assert missing == set()
+
+    def test_the_runtime_only_settings_are_the_ones_not_stored(self):
+        assert steamSettings.RUNTIME_ONLY == ('once', 'dry_run')
+
+    def test_everything_saved_reads_back_the_same(self, configPath):
+        original = steamSettings.Settings(
+            cookie='c', log_info=True, gift_type='DLC', pinned=False, min_points=5,
+            points_wait=60, max_cost=40, max_entries=300, cards_only=True,
+            blacklist=('a', 'b c'), whitelist=('d',), contributor_level=2,
+            skip_region_locked=True,
+            discord_webhook='https://discord.com/api/webhooks/1/abc',
+            telegram_token='123456789:' + 'A' * 30, telegram_chat='-100123',
+            telegram_enabled=False, check_wins=False)
+        steamSettings.save(original, configPath)
+        assert steamSettings.load(configPath) == original
+
+    def test_an_unset_limit_is_left_out_rather_than_written_as_zero(self, configPath):
+        steamSettings.save(steamSettings.Settings(cookie='c'), configPath)
+        text = configPath.read_text(encoding='utf-8')
+        for name in ('max_cost', 'max_entries', 'contributor_level', 'points_wait',
+                     'min_points', 'once', 'dry_run'):
+            assert f"{name} =" not in text
+
+
 class TestSaving:
     def test_settings_survive_a_round_trip(self, configPath):
         saved = steamSettings.Settings(cookie='c1', log_info=True, gift_type='New',

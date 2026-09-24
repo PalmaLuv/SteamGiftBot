@@ -19,7 +19,7 @@ import re
 import subprocess
 import sys
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 
@@ -67,58 +67,12 @@ GIFT_TYPES = ['All', 'WishList', 'Recommended', 'Copies', 'DLC', 'New']
 # Settings the bot cannot start without. log_info and once have safe defaults.
 REQUIRED = ('cookie', 'gift_type', 'pinned', 'min_points')
 
-# Belong to a single run, so the settings menu never writes them to the file.
-# A value put there by hand is still read, and still kept when the file is saved.
-RUNTIME_ONLY = ('once', 'dry_run')
-
 TRUE_WORDS  = ('1', 'yes', 'true', 'on', 'y')
 FALSE_WORDS = ('0', 'no', 'false', 'off', 'n')
 
 
 class SettingsError(Exception):
     pass
-
-
-@dataclass
-class Settings:
-    cookie      : str         = ''
-    log_info    : bool | None = None
-    gift_type   : str         = ''
-    pinned      : bool | None = None
-    min_points  : int | None  = None
-    once        : bool        = False
-    dry_run     : bool        = False
-    points_wait : int | None  = None
-
-    # Filters. Unset means 'do not filter on this'.
-    max_cost    : int | None  = None
-    max_entries : int | None  = None
-    cards_only  : bool        = False
-    blacklist   : tuple       = ()
-    whitelist   : tuple       = ()
-    # Your contributor level, from your SteamGifts profile. Unset means the bot
-    # does not look at the level a giveaway asks for.
-    contributor_level  : int | None = None
-    skip_region_locked : bool       = False
-
-    # Where to report the result of an unattended run.
-    discord_webhook : str = ''
-    telegram_token  : str = ''
-    telegram_chat   : str = ''
-    # Explicit off switch. Unset means 'on as soon as a token and a chat exist'.
-    telegram_enabled : bool | None = None
-
-    # Watch /giveaways/won and announce anything new.
-    check_wins       : bool | None = None
-
-    # Names of the required settings that are still empty.
-    def missing(self):
-        empty = []
-        for name in REQUIRED:
-            value = getattr(self, name)
-            if value is None or value == '':
-                empty.append(name)
-        return empty
 
 
 def toBool(value):
@@ -233,30 +187,83 @@ def toDiscordWebhook(value):
     return text
 
 
-CONVERTERS = {
-    'cookie'    : toText,
-    'log_info'  : toBool,
-    'gift_type' : toGiftType,
-    'pinned'    : toBool,
-    'min_points': toInt,
-    'once'      : toBool,
-    'dry_run'   : toBool,
-    'points_wait': toInt,
+# How each kind of value is written back to config.ini. None means 'leave the
+# key out', which for a number reads back as 'no limit' rather than zero.
+def storeText(value):
+    return value or ''
 
-    'max_cost'  : toInt,
-    'max_entries': toInt,
-    'cards_only': toBool,
-    'blacklist' : toNames,
-    'whitelist' : toNames,
-    'contributor_level' : toInt,
-    'skip_region_locked': toBool,
 
-    'discord_webhook': toDiscordWebhook,
-    'telegram_token' : toTelegramToken,
-    'telegram_chat'  : toTelegramChat,
-    'telegram_enabled': toBool,
-    'check_wins'     : toBool,
-}
+def storeYesNo(value):
+    return 'yes' if value else 'no'
+
+
+# For switches whose unset state means on.
+def storeOnUnlessOff(value):
+    return 'no' if value is False else 'yes'
+
+
+def storeNumber(value):
+    return None if value is None else str(value)
+
+
+def storeNames(value):
+    return ', '.join(value)
+
+
+# One line per setting says how to read it and how to save it, so a new
+# setting cannot be read from the file and then forgotten when it is saved.
+# store=None: belongs to a single run, so the settings menu never writes it.
+def setting(default, convert, store):
+    return field(default=default, metadata={'convert': convert, 'store': store})
+
+
+@dataclass
+class Settings:
+    cookie      : str         = setting('', toText, storeText)
+    log_info    : bool | None = setting(None, toBool, storeYesNo)
+    gift_type   : str         = setting('', toGiftType, storeText)
+    pinned      : bool | None = setting(None, toBool, storeYesNo)
+    min_points  : int | None  = setting(None, toInt, storeNumber)
+    once        : bool        = setting(False, toBool, None)
+    dry_run     : bool        = setting(False, toBool, None)
+    points_wait : int | None  = setting(None, toInt, storeNumber)
+
+    # Filters. Unset means 'do not filter on this'.
+    max_cost    : int | None  = setting(None, toInt, storeNumber)
+    max_entries : int | None  = setting(None, toInt, storeNumber)
+    cards_only  : bool        = setting(False, toBool, storeYesNo)
+    blacklist   : tuple       = setting((), toNames, storeNames)
+    whitelist   : tuple       = setting((), toNames, storeNames)
+    # Your contributor level, from your SteamGifts profile. Unset means the bot
+    # does not look at the level a giveaway asks for.
+    contributor_level  : int | None = setting(None, toInt, storeNumber)
+    skip_region_locked : bool       = setting(False, toBool, storeYesNo)
+
+    # Where to report the result of an unattended run.
+    discord_webhook : str = setting('', toDiscordWebhook, storeText)
+    telegram_token  : str = setting('', toTelegramToken, storeText)
+    telegram_chat   : str = setting('', toTelegramChat, storeText)
+    # Explicit off switch. Unset means 'on as soon as a token and a chat exist'.
+    telegram_enabled : bool | None = setting(None, toBool, storeOnUnlessOff)
+
+    # Watch /giveaways/won and announce anything new.
+    check_wins       : bool | None = setting(None, toBool, storeOnUnlessOff)
+
+    # Names of the required settings that are still empty.
+    def missing(self):
+        empty = []
+        for name in REQUIRED:
+            value = getattr(self, name)
+            if value is None or value == '':
+                empty.append(name)
+        return empty
+
+
+CONVERTERS = {item.name: item.metadata['convert'] for item in fields(Settings)}
+
+# Belong to a single run, so the settings menu never writes them to the file.
+# A value put there by hand is still read, and still kept when the file is saved.
+RUNTIME_ONLY = tuple(item.name for item in fields(Settings) if item.metadata['store'] is None)
 
 
 # Applies one layer of values on top of the settings, ignoring anything unset,
@@ -282,7 +289,7 @@ def readConfigFile(config_path):
     except configparser.Error as error:
         raise SettingsError(f"{config_path}: {error}") from error
     section = parser['DEFAULT']
-    return {field.name: section.get(field.name) for field in fields(Settings)}
+    return {item.name: section.get(item.name) for item in fields(Settings)}
 
 
 # STEAMGIFTBOT_COOKIE_FILE=/run/secrets/cookie reads the value from that file,
@@ -298,19 +305,19 @@ def readSecretFile(variable, path):
 
 def readEnvironment():
     values = {}
-    for field in fields(Settings):
-        name = ENV_PREFIX + field.name.upper()
+    for item in fields(Settings):
+        name = ENV_PREFIX + item.name.upper()
         value = os.environ.get(name)
         if value is None and os.environ.get(name + '_FILE'):
             value = readSecretFile(name + '_FILE', os.environ[name + '_FILE'])
-        values[field.name] = value
+        values[item.name] = value
     return values
 
 
 def readArguments(args):
     if args is None:
         return {}
-    return {field.name: getattr(args, field.name, None) for field in fields(Settings)}
+    return {item.name: getattr(args, item.name, None) for item in fields(Settings)}
 
 
 def load(config_path=DEFAULT_CONFIG_PATH, args=None):
@@ -350,31 +357,14 @@ def save(settings, config_path=DEFAULT_CONFIG_PATH):
     parser.read(config_path, encoding='utf-8')
     previous = {name: parser['DEFAULT'].get(name) for name in RUNTIME_ONLY}
 
-    written = {
-        'cookie'    : settings.cookie,
-        'log_info'  : 'yes' if settings.log_info else 'no',
-        'gift_type' : settings.gift_type,
-        'pinned'    : 'yes' if settings.pinned else 'no',
-        'min_points': str(settings.min_points),
-        'cards_only': 'yes' if settings.cards_only else 'no',
-        'skip_region_locked': 'yes' if settings.skip_region_locked else 'no',
-        'blacklist' : ', '.join(settings.blacklist),
-        'whitelist' : ', '.join(settings.whitelist),
-        'discord_webhook': settings.discord_webhook,
-        'telegram_token' : settings.telegram_token,
-        'telegram_chat'  : settings.telegram_chat,
-        'telegram_enabled': 'no' if settings.telegram_enabled is False else 'yes',
-        'check_wins'     : 'no' if settings.check_wins is False else 'yes',
-    }
-    # An absent max_cost means 'no limit', which is not the same as zero.
-    if settings.max_cost is not None:
-        written['max_cost'] = str(settings.max_cost)
-    if settings.max_entries is not None:
-        written['max_entries'] = str(settings.max_entries)
-    if settings.contributor_level is not None:
-        written['contributor_level'] = str(settings.contributor_level)
-    if settings.points_wait is not None:
-        written['points_wait'] = str(settings.points_wait)
+    written = {}
+    for item in fields(Settings):
+        store = item.metadata['store']
+        if store is None:
+            continue
+        text = store(getattr(settings, item.name))
+        if text is not None:
+            written[item.name] = text
 
     parser['DEFAULT'] = written
     for name, value in previous.items():
