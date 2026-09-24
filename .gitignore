@@ -9,6 +9,7 @@ test.py
 *.log
 
 **/__pycache__
+.venv/
 
 # PyInstaller output
 build/

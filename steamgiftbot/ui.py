@@ -62,8 +62,11 @@ def ask(type, name, msg, choices=None, validate=None, default=None):
 
     if type == 'input' and PASTE_HOTKEY:
         keyboard.add_hotkey('ctrl+v', lambda: keyboard.write(clipboard.paste()))
-        answers = prompt([question])
-        keyboard.remove_hotkey('ctrl+v')
+        # The hook is system wide: Ctrl+C in the prompt must not leave it behind.
+        try:
+            answers = prompt([question])
+        finally:
+            keyboard.remove_hotkey('ctrl+v')
     else:
         answers = prompt([question])
     return answers

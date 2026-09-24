@@ -21,6 +21,10 @@ NOT_WHITELISTED = "not on the whitelist"
 NOT_ENOUGH      = "not enough points"
 NO_CARDS        = "no trading cards"
 UNKNOWN_APP     = "no Steam app id to check for cards"
+CARDS_UNKNOWN   = "could not ask the Steam store about cards"
+# Counted by the bot rather than returned from here: the row never became a
+# giveaway to ask about.
+UNREADABLE      = "could not read the listing row"
 
 
 def nameMatches(name, patterns):
@@ -71,7 +75,13 @@ def reasonToSkip(giveaway, config, points, hasCards=None):
             # Bundles and packages have no app id, so 'only cards' cannot be
             # honoured for them. Skipping is the reading that matches the name.
             return UNKNOWN_APP
-        if hasCards is not None and not hasCards(giveaway.appid):
-            return NO_CARDS
+        if hasCards is not None:
+            # None means the store could not be asked. Skipped all the same, so
+            # points are never spent on a guess, but counted apart from a real 'no'.
+            cards = hasCards(giveaway.appid)
+            if cards is None:
+                return CARDS_UNKNOWN
+            if not cards:
+                return NO_CARDS
 
     return None

@@ -15,6 +15,8 @@ import json
 
 from pathlib import Path
 
+from steamgiftbot.console import log
+
 STATE_NAME = 'steamgiftbot-state.json'
 
 
@@ -28,16 +30,24 @@ class State:
         self.announcedWins = set()
 
     # A missing or damaged file is not worth failing a run over: the worst that
-    # happens is one repeated notification.
+    # happens is one repeated notification. Damage is still said out loud, or a
+    # file that breaks every time would repeat the same win for ever, unexplained.
     def load(self):
         try:
             raw = self.path.read_text(encoding='utf-8')
-        except OSError:
+        except FileNotFoundError:
+            # The first run: nothing announced yet.
+            return self
+        except OSError as error:
+            log(f"Could not read {self.path}: {error}. Old wins may be announced again.",
+                "yellow")
             return self
 
         try:
             stored = json.loads(raw)
         except ValueError:
+            log(f"{self.path} is damaged and was ignored. Old wins may be announced again.",
+                "yellow")
             return self
 
         if isinstance(stored, dict):
@@ -51,7 +61,9 @@ class State:
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self.path.write_text(json.dumps(payload, indent=2), encoding='utf-8')
-        except OSError:
+        except OSError as error:
+            log(f"Could not save {self.path}: {error}. "
+                "These wins may be announced again next run.", "yellow")
             return False
         return True
 

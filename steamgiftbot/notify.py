@@ -34,7 +34,7 @@ class NotifyError(Exception):
 def describe(response):
     try:
         body = response.json()
-    except Exception:
+    except ValueError:
         text = (getattr(response, 'text', '') or '').strip()
         return text[:200]
     if isinstance(body, dict):
@@ -52,7 +52,7 @@ def checkAnswer(response, service):
     # Telegram can also answer 200 with ok=false.
     try:
         body = response.json()
-    except Exception:
+    except ValueError:
         return
     if isinstance(body, dict) and body.get('ok') is False:
         raise NotifyError(f"{service} refused the request: {describe(response)}")

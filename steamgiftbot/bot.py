@@ -86,6 +86,7 @@ class SteamGift :
         self.xsrfToken  = None
         self.running    = True
         self.stats      = RunStats()
+        self.warnedUnreadable = False
 
         # Watching the won page is on unless it was turned off.
         self.checkWins = config.check_wins is not False
@@ -244,13 +245,14 @@ class SteamGift :
 
                 giveaway = parseRow(item)
                 if giveaway is None:
+                    self.noteUnreadable(item)
                     continue
 
                 reason = filters.reasonToSkip(giveaway, self.config, self.points,
                                               hasCards=get_game_info)
                 if reason is not None:
                     self.stats.skip(reason)
-                    if reason in (filters.NOT_ENOUGH, filters.NO_CARDS):
+                    if reason in (filters.NOT_ENOUGH, filters.NO_CARDS, filters.CARDS_UNKNOWN):
                         log(f"Skipping {giveaway.name}: {reason}", "red")
                     continue
 
@@ -267,15 +269,28 @@ class SteamGift :
                     sleep(rand(*ENTRY_DELAY))
             _page  += 1
 
+    # A row the parser could not read is counted every time, and shown once per
+    # run: a redesign of the listing would otherwise look like a quiet day.
+    def noteUnreadable(self, item):
+        self.stats.skip(filters.UNREADABLE)
+        if self.warnedUnreadable:
+            return
+        self.warnedUnreadable = True
+        sample = ' '.join(item.get_text(' ', strip=True).split())[:120]
+        log(f"Could not read a giveaway row, the SteamGifts layout may have changed: "
+            f"{sample!r}", "yellow")
+
     # Looks at the won page and announces anything that was not announced
-    # before. Never raises: missing a win is bad, failing the run over it is
-    # worse.
+    # before. Only a dead session gets out of here: missing a win is bad,
+    # failing the run over it is worse, but the user has to hear about the cookie.
     def announceWins(self):
         if not self.checkWins:
             return []
 
         try:
             soup = self.GetSoupFromPage(self.baseURL + wins.WON_PATH)
+        except SessionExpired:
+            raise
         except SteamGiftError as error:
             log(f"Could not check for wins: {error}", "yellow")
             return []
