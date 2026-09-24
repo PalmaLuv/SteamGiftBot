@@ -17,6 +17,8 @@ from time import sleep
 from steamgiftbot import filters, notify
 from steamgiftbot.console import countdown, log
 from steamgiftbot.errors import SessionExpired, SteamGiftError
+from steamgiftbot.feeds import FreeGameWatcher
+from steamgiftbot.feeds.gamerpower import GamerPowerFeed
 from steamgiftbot.providers import steamgifts
 from steamgiftbot.providers.base import Outcome, Unreadable
 from steamgiftbot.settings import DEFAULT_CONFIG_PATH, hint
@@ -64,6 +66,10 @@ class SteamGift :
         self.checkWins  = config.check_wins is not False
         self.state      = State(statePath or defaultPath(DEFAULT_CONFIG_PATH)).load()
         self.watcher    = WinWatcher(self.provider, config, self.state, self.stats)
+
+        # Free games elsewhere: announced only, never claimed. Off unless asked for.
+        self.freeGames  = (FreeGameWatcher(GamerPowerFeed(config.free_games), config, self.state)
+                           if config.free_games else None)
 
     # The provider holds the session and the balance; these keep the old
     # spelling working for callers and tests written before the split.
@@ -192,6 +198,16 @@ class SteamGift :
             return []
         return self.watcher.announce()
 
+    def announceFreeGames(self):
+        if self.freeGames is None:
+            return []
+        return self.freeGames.announce()
+
+    # Everything worth telling the user that is not an entry of ours.
+    def announce(self):
+        self.announceWins()
+        self.announceFreeGames()
+
     def report(self, extra=None):
         summary = self.stats.summary()
         if self.dryRun:
@@ -211,7 +227,7 @@ class SteamGift :
             log("Script running", "green")
             # Outer loop replaces the old recursive restart, which grew the call
             # stack every time the bot waited for points.
-            self.announceWins()
+            self.announce()
             while self.running:
                 self.getGameContent()
                 if self.once:
@@ -220,7 +236,7 @@ class SteamGift :
                 if self.running:
                     # A cycle ends after a wait for points, so this is roughly a
                     # quarter hour apart: often enough not to miss a win.
-                    self.announceWins()
+                    self.announce()
                     self.updateInfo()
         except SessionExpired as error:
             # Checked before SteamGiftError: it is a subclass of it.

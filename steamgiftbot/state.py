@@ -28,6 +28,8 @@ class State:
     def __init__(self, path):
         self.path = Path(path)
         self.announcedWins = set()
+        # Free game offers already announced, by their id at the source.
+        self.announcedFreeGames = set()
 
     # A missing or damaged file is not worth failing a run over: the worst that
     # happens is one repeated notification. Damage is still said out loud, or a
@@ -54,10 +56,16 @@ class State:
             wins = stored.get('announced_wins')
             if isinstance(wins, list):
                 self.announcedWins = {str(code) for code in wins}
+            freeGames = stored.get('announced_free_games')
+            if isinstance(freeGames, list):
+                self.announcedFreeGames = {str(code) for code in freeGames}
         return self
 
     def save(self):
         payload = {'announced_wins': sorted(self.announcedWins)}
+        # Left out until used, so a file written by an older version reads the same.
+        if self.announcedFreeGames:
+            payload['announced_free_games'] = sorted(self.announcedFreeGames)
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self.path.write_text(json.dumps(payload, indent=2), encoding='utf-8')
@@ -72,3 +80,13 @@ class State:
 
     def remember(self, code):
         self.announcedWins.add(code)
+
+    def isNewFreeGame(self, code):
+        return code not in self.announcedFreeGames
+
+    def rememberFreeGame(self, code):
+        self.announcedFreeGames.add(code)
+
+    # An offer that is no longer listed has ended and will not come back.
+    def keepFreeGames(self, activeCodes):
+        self.announcedFreeGames &= set(activeCodes)

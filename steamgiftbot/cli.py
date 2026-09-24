@@ -94,6 +94,9 @@ def buildParser():
                          default=None, help="switch Telegram off without removing the token")
     telling.add_argument('--no-check-wins', dest='check_wins', action='store_false',
                          default=None, help="do not watch the won giveaways page")
+    telling.add_argument('--free-games', dest='free_games', metavar='PLATFORMS',
+                         help="also announce games that are free to keep on these "
+                              "platforms, e.g. 'steam, epic, gog' (data by GamerPower)")
     telling.add_argument('--notify-test', dest='notify_test', action='store_true',
                          help="send a test message and exit, to check the setup")
     telling.add_argument('--telegram-chat-id', dest='telegram_chat_id', action='store_true',

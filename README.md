@@ -24,6 +24,8 @@ you on Telegram when you win one.
 - Paces itself between entries and backs off when the site asks it to
 - Runs unattended: as a service, from cron, or in Docker
 - Messages you on Telegram the moment you win, and when your session expires
+- Optionally tells you about games that are free to keep on Steam, Epic, GOG
+  and more
 - Keeps a log of every run
 
 ---
@@ -316,9 +318,28 @@ rest of the bot is set up, and need no cookie.
 | `telegram_chat` | chat id | where the message goes |
 | `check_wins` | `yes` / `no` | watch the won giveaways page (on by default) |
 | `discord_webhook` | webhook URL | the same messages, to Discord instead or as well |
+| `free_games` | platforms, e.g. `steam, epic, gog` | also announce games that are free to keep (off when empty) |
 
 A notification that cannot be delivered is reported and dropped: a dead webhook
 never turns a good run into a failed one.
+
+### Free games elsewhere
+
+With `free_games` set, the bot also tells you about games that are free to keep
+right now on the platforms you name, like this week's Epic Games Store freebie
+or a Steam key giveaway:
+
+```ini
+free_games = steam, epic, gog
+```
+
+The list comes from [GamerPower](https://www.gamerpower.com/), which offers it
+openly and asks to be credited, so every message says where it came from. Each
+offer is announced once, in a single message per check. The bot only tells you:
+claiming the game is up to you, one click on the link. Known platforms are `pc`,
+`steam`, `epic-games-store` (or `epic`), `gog`, `ubisoft`, `itchio`, `origin`,
+`battlenet`, `drm-free`, `ps4`, `ps5`, `xbox-one`, `xbox-series-xs`, `xbox-360`,
+`switch`, `android`, `ios` and `vr`.
 
 ## Running unattended
 
@@ -487,6 +508,7 @@ steamgiftbot/
     base.py         what a giveaway site must offer (GiveawayProvider)
     steamgifts.py   steamgifts.com: session, listing, entries, won page
   winwatch.py       noticing wins and announcing each one once
+  feeds/            free games to announce, never to enter (GamerPower)
   errors.py         the failures that end a run
   giveaway.py       one listing row, parsed
   filters.py        whether a giveaway is worth points

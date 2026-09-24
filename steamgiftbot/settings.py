@@ -187,6 +187,30 @@ def toDiscordWebhook(value):
     return text
 
 
+# Platform names as GamerPower spells them (https://www.gamerpower.com/api-read).
+FREE_GAME_PLATFORMS = ('pc', 'steam', 'epic-games-store', 'ubisoft', 'gog', 'itchio',
+                       'ps4', 'ps5', 'xbox-one', 'xbox-series-xs', 'switch', 'android',
+                       'ios', 'vr', 'battlenet', 'origin', 'drm-free', 'xbox-360')
+
+# Short names people actually type.
+PLATFORM_ALIASES = {'epic': 'epic-games-store', 'itch': 'itchio', 'itch.io': 'itchio'}
+
+
+def toPlatforms(value):
+    names = toNames(value)
+    if names is None:
+        return None
+    platforms = []
+    for name in names:
+        platform = PLATFORM_ALIASES.get(name.lower(), name.lower())
+        if platform not in FREE_GAME_PLATFORMS:
+            raise ValueError(f"unknown platform {name!r}, expected some of: "
+                             f"{', '.join(FREE_GAME_PLATFORMS)}")
+        if platform not in platforms:
+            platforms.append(platform)
+    return tuple(platforms)
+
+
 # How each kind of value is written back to config.ini. None means 'leave the
 # key out', which for a number reads back as 'no limit' rather than zero.
 def storeText(value):
@@ -248,6 +272,10 @@ class Settings:
 
     # Watch /giveaways/won and announce anything new.
     check_wins       : bool | None = setting(None, toBool, storeOnUnlessOff)
+
+    # Announce games that are free to keep on these platforms, from GamerPower.
+    # Empty means off.
+    free_games       : tuple       = setting((), toPlatforms, storeNames)
 
     # Names of the required settings that are still empty.
     def missing(self):
