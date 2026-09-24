@@ -17,6 +17,10 @@ class TestDiscordWebhook:
         HOOK + '/',
         'https://ptb.discord.com/api/webhooks/1/x',
         'https://discordapp.com/api/webhooks/1/x',
+        HOOK + '/slack',
+        HOOK + '/github',
+        HOOK + '?wait=true',
+        HOOK + '?thread_id=123&wait=true',
         f'"{HOOK}"',
     ])
     def test_a_real_webhook_is_accepted(self, value):
@@ -28,6 +32,9 @@ class TestDiscordWebhook:
         'https://evil.example/?https://discord.com/api/webhooks/1/x',
         'https://169.254.169.254/latest/meta-data',
         'https://discord.com/api/webhooks/1/x # mine',
+        'https://discord.com/api/webhooks/1/x/../../../evil',
+        'https://discord.com/api/webhooks/1/x?next=https://evil.example/',
+        'https://discord.com/api/webhooks/1/x@evil.example',
     ])
     def test_anything_else_is_refused(self, value):
         with pytest.raises(ValueError):
@@ -107,6 +114,35 @@ class TestKeepingTheFilePrivate:
         monkeypatch.setattr(settings, 'restrictToOwner', lambda path: False)
         cli.saveConfig(makeSettings(log_info=False), configPath)
         assert 'private' in capsys.readouterr().out
+
+
+def test_the_file_is_locked_down_before_the_cookie_is_written(monkeypatch, configPath):
+    sizes = []
+
+    def recordingRestrict(path):
+        sizes.append(path.stat().st_size)
+        return True
+
+    monkeypatch.setattr(settings, 'restrictToOwner', recordingRestrict)
+    assert settings.save(makeSettings(log_info=False), configPath) is True
+    assert sizes == [0]
+    assert 'cookievalue' in configPath.read_text(encoding='utf-8')
+
+
+def test_discord_never_pings_from_text_we_did_not_write():
+    from conftest import FakeResponse
+
+    from steamgiftbot import notify
+
+    posted = []
+
+    class Poster:
+        def post(self, url, json=None, **kwargs):
+            posted.append(json)
+            return FakeResponse('', status_code=204)
+
+    notify.sendDiscord(HOOK, '@everyone free game', session=Poster())
+    assert posted[0]['allowed_mentions'] == {'parse': []}
 
 
 def test_sigterm_stops_the_bot_like_ctrl_c():

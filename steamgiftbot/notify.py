@@ -108,9 +108,12 @@ def findChats(token, session=None):
     return list(found.values())
 
 
+# allowed_mentions off: messages carry text from other sites (game titles), and
+# an '@everyone' in one must not ping the whole server.
 def sendDiscord(webhook, text, session=None):
     poster = session.post if session else requests.post
-    checkAnswer(poster(webhook, json={'content': text}, timeout=TIMEOUT), 'Discord')
+    checkAnswer(poster(webhook, json={'content': text, 'allowed_mentions': {'parse': []}},
+                       timeout=TIMEOUT), 'Discord')
 
 
 def sendTelegram(token, chat, text, session=None):

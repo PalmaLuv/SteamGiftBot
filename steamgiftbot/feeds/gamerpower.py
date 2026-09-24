@@ -62,8 +62,9 @@ class GamerPowerFeed:
 def toFreeGame(entry):
     if not isinstance(entry, dict) or entry.get('status', 'Active') != 'Active':
         return None
-    url = entry.get('open_giveaway_url') or entry.get('gamerpower_url')
-    if entry.get('id') is None or not url:
+    url = str(entry.get('open_giveaway_url') or entry.get('gamerpower_url') or '')
+    # The link ends up in a chat message; only plain https ones are passed on.
+    if entry.get('id') is None or not url.startswith('https://'):
         return None
 
     title = str(entry.get('title') or 'A free game').strip()

@@ -68,6 +68,12 @@ class TestReadingGamerPower:
         api = FakeApi(listing(ended, noLink, 'junk', OFFER))
         assert [game.id for game in GamerPowerFeed(('pc',), session=api).fetch()] == ['3782']
 
+    @pytest.mark.parametrize('url', ['javascript:alert(1)', 'http://plain.example/x',
+                                     'ftp://x/y'])
+    def test_only_https_links_are_passed_on(self, url):
+        api = FakeApi(listing(dict(OFFER, open_giveaway_url=url, gamerpower_url='')))
+        assert GamerPowerFeed(('pc',), session=api).fetch() == []
+
     def test_n_a_is_not_shown(self):
         api = FakeApi(listing(dict(OFFER, worth='N/A', end_date='N/A')))
         game = GamerPowerFeed(('pc',), session=api).fetch()[0]

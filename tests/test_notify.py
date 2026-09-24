@@ -89,7 +89,8 @@ class TestSending:
         problems = notify.send(makeSettings(discord_webhook='https://hook'),
                                'done', session=recorder)
         assert problems == []
-        assert recorder.calls == [('https://hook', {'content': 'done'})]
+        assert recorder.calls == [('https://hook', {'content': 'done',
+                                                    'allowed_mentions': {'parse': []}})]
 
     def test_telegram_gets_the_text(self):
         recorder = Recorder()

@@ -173,8 +173,11 @@ def toTelegramChat(value):
 
 # Only Discord's own webhook address. The value is posted to as it is, so a
 # typo or a pasted link to somewhere else must not become a request to it.
+# Discord's own variants stay valid: the /slack and /github flavours, and a
+# query such as ?wait=true or ?thread_id=123.
 WEBHOOK_SHAPE = re.compile(
-    r'^https://(?:(?:ptb|canary)\.)?discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]+/?$')
+    r'^https://(?:(?:ptb|canary)\.)?discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]+'
+    r'(?:/(?:slack|github))?/?(?:\?[A-Za-z0-9_=&-]*)?$')
 
 
 def toDiscordWebhook(value):
@@ -399,8 +402,11 @@ def save(settings, config_path=DEFAULT_CONFIG_PATH):
         if value is not None:
             parser['DEFAULT'][name] = value
 
+    # Locked down while still empty, so the cookie is never on disk with the
+    # folder's wider permissions. Rewriting the file keeps its ACL and mode.
     config_path = Path(config_path)
+    config_path.touch(exist_ok=True)
+    private = restrictToOwner(config_path)
     with config_path.open('w', encoding='utf-8') as configFile:
         parser.write(configFile)
-
-    return restrictToOwner(config_path)
+    return private
