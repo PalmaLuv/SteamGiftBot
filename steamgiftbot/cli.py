@@ -8,6 +8,7 @@
 # License : MPL-2.0
 """Command line entry point: parse flags, settle the settings, start the bot."""
 import argparse
+import signal
 import sys
 
 from pathlib import Path
@@ -172,6 +173,12 @@ def sendTestNotification(config):
     return EXIT_OK
 
 
+def saveConfig(config, configPath):
+    if not steamSettings.save(config, configPath):
+        log(f"Could not make {configPath} private to your account. It holds your "
+            "session cookie, so keep it out of shared folders.", "yellow")
+
+
 # Asks only for what is still missing, then remembers the answers.
 def askMissing(config, configPath):
     if not config.cookie:
@@ -184,7 +191,7 @@ def askMissing(config, configPath):
         config.pinned = ui.askPinned()
     if config.min_points is None:
         config.min_points = ui.askMinPoints()
-    steamSettings.save(config, configPath)
+    saveConfig(config, configPath)
     return config
 
 
@@ -209,8 +216,14 @@ def editConfig(config, configPath):
         elif choice == 'exit':
             break
         if config.log_info is not None and not config.missing():
-            steamSettings.save(config, configPath)
+            saveConfig(config, configPath)
     return config
+
+
+# 'docker stop' and systemd send SIGTERM. Treated like Ctrl+C, so the bot stops
+# where it is and still sends the summary instead of dying mid-sentence.
+def handleTermination(signum, frame):
+    raise KeyboardInterrupt
 
 
 def run(argv=None):
@@ -258,6 +271,7 @@ def run(argv=None):
     # somewhere else does not scatter them across the disk.
     beside = Path(args.config).resolve().parent
     startLogFile(config.log_info, beside / 'log')
+    signal.signal(signal.SIGTERM, handleTermination)
     return SteamGift(config, statePath=defaultPath(args.config)).start()
 
 

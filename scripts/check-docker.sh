@@ -75,6 +75,11 @@ leaked=$(docker run --rm --entrypoint sh "$IMAGE" -c \
     "ls -A /app | grep -E '^(config\.ini|steamgiftbot-state\.json|\.env)$' | wc -l" 2>/dev/null)
 report "$([ "${leaked:-1}" = "0" ] && echo 0 || echo 1)" "no cookie or state baked into the image"
 
+# The container holds a session cookie; root inside it is one bug away from
+# root over whatever the user mounted in.
+uid=$(docker run --rm --entrypoint id "$IMAGE" -u 2>/dev/null)
+report "$([ -n "$uid" ] && [ "$uid" != "0" ] && echo 0 || echo 1)" "does not run as root (uid ${uid:-?})"
+
 # Tests and CI files have no business being shipped.
 extra=$(docker run --rm --entrypoint sh "$IMAGE" -c \
     "ls -A /app | grep -E '^(tests|\.git|\.github)$' | wc -l" 2>/dev/null)

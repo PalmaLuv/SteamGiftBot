@@ -31,7 +31,7 @@ you on Telegram when you win one.
 **Contents** · [Install](#install) · [First run](#first-run) ·
 [Settings](#settings) · [Choosing giveaways](#choosing-giveaways) ·
 [Telegram](#telegram) · [Running unattended](#running-unattended) ·
-[Updating](#updating) · [When something goes wrong](#when-something-goes-wrong) ·
+[Security and risks](#security-and-risks) · [Updating](#updating) · [When something goes wrong](#when-something-goes-wrong) ·
 [Contributing](#contributing)
 
 ---
@@ -345,6 +345,52 @@ docker run -d --name steamgiftbot --restart unless-stopped -v /srv/steamgiftbot:
 Put your `config.ini` in `/srv/steamgiftbot` first. `--no-input` is already built
 into the image, so an incomplete setup fails with exit code 2 instead of waiting
 for an answer nobody will type.
+
+The container runs as an ordinary user with UID 1000, not as root. It has to be
+able to read `config.ini` and write the state file beside it, so give the
+directory to that user once:
+
+```bash
+sudo chown -R 1000:1000 /srv/steamgiftbot
+```
+
+**Docker with secrets.** A value passed with `-e` can be read by anyone who can
+run `docker inspect`. Every setting also accepts a `_FILE` variant that reads the
+value from a file, which is how Docker and Kubernetes secrets arrive:
+
+```bash
+docker run --rm -v /srv/steamgiftbot/cookie:/run/secrets/cookie:ro -e STEAMGIFTBOT_COOKIE_FILE=/run/secrets/cookie -e STEAMGIFTBOT_GIFT_TYPE=All -e STEAMGIFTBOT_MIN_POINTS=0 -e STEAMGIFTBOT_PINNED=no ghcr.io/palmaluv/steamgiftbot:latest --once
+```
+
+`docker stop` lets the bot finish cleanly: it stops where it is and still sends
+the summary.
+
+## Security and risks
+
+**Your account.** SteamGifts' rules have long said that scripts which enter
+giveaways for you are not allowed, and accounts have been suspended for it in
+the past. The bot paces itself and never tries to get past Cloudflare, but using
+it is still your decision and your risk.
+
+**Your cookie.** `PHPSESSID` is a signed in session: whoever has it is you on
+SteamGifts until you sign out. The bot only ever sends it to steamgifts.com and
+never writes it to the log. When it saves `config.ini` it makes the file
+readable by your account alone (`chmod 600`, or an owner-only ACL on Windows)
+and warns you if that did not work. Keep the file out of shared and synced
+folders anyway, and sign out on steamgifts.com to kill a cookie you think leaked.
+
+**Your notification tokens.** A Telegram token lets anyone post as your bot.
+`discord_webhook` only accepts a real `https://discord.com/api/webhooks/...`
+address, so a typo cannot send your messages somewhere else.
+
+**The executable.** `SteamGiftBot.exe` is not code signed, so Windows may warn
+about it. Every release carries `SteamGiftBot.exe.sha256`; compare it with
+
+```bash
+certutil -hashfile SteamGiftBot.exe SHA256
+```
+
+The Docker image is signed with cosign and runs as a non-root user.
 
 ## Updating
 

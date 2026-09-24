@@ -13,8 +13,10 @@ Anything still unset is asked interactively, or reported as an error when the
 bot runs unattended.
 """
 import configparser
+import getpass
 import os
 import re
+import subprocess
 import sys
 
 from dataclasses import dataclass, fields
@@ -192,6 +194,22 @@ def toTelegramChat(value):
     return text
 
 
+# Only Discord's own webhook address. The value is posted to as it is, so a
+# typo or a pasted link to somewhere else must not become a request to it.
+WEBHOOK_SHAPE = re.compile(
+    r'^https://(?:(?:ptb|canary)\.)?discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]+/?$')
+
+
+def toDiscordWebhook(value):
+    text = toText(value)
+    if not text:
+        return text
+    if not WEBHOOK_SHAPE.match(text):
+        raise ValueError(explainBadValue(
+            text, "a Discord webhook (https://discord.com/api/webhooks/<id>/<token>)"))
+    return text
+
+
 CONVERTERS = {
     'cookie'    : toText,
     'log_info'  : toBool,
@@ -210,7 +228,7 @@ CONVERTERS = {
     'contributor_level' : toInt,
     'skip_region_locked': toBool,
 
-    'discord_webhook': toText,
+    'discord_webhook': toDiscordWebhook,
     'telegram_token' : toTelegramToken,
     'telegram_chat'  : toTelegramChat,
     'telegram_enabled': toBool,
@@ -244,9 +262,26 @@ def readConfigFile(config_path):
     return {field.name: section.get(field.name) for field in fields(Settings)}
 
 
+# STEAMGIFTBOT_COOKIE_FILE=/run/secrets/cookie reads the value from that file,
+# the way Docker and Kubernetes hand out secrets. A plain -e value shows up in
+# 'docker inspect'; a mounted secret does not.
+def readSecretFile(variable, path):
+    try:
+        return Path(path).read_text(encoding='utf-8').strip()
+    except OSError as error:
+        raise SettingsError(f"environment: {variable} points at {path}, "
+                            f"which cannot be read: {error.strerror or error}") from error
+
+
 def readEnvironment():
-    return {field.name: os.environ.get(ENV_PREFIX + field.name.upper())
-            for field in fields(Settings)}
+    values = {}
+    for field in fields(Settings):
+        name = ENV_PREFIX + field.name.upper()
+        value = os.environ.get(name)
+        if value is None and os.environ.get(name + '_FILE'):
+            value = readSecretFile(name + '_FILE', os.environ[name + '_FILE'])
+        values[field.name] = value
+    return values
 
 
 def readArguments(args):
@@ -263,7 +298,30 @@ def load(config_path=DEFAULT_CONFIG_PATH, args=None):
     return settings
 
 
+# The file holds a live session cookie, so keep it to the owner. On Windows
+# that means an ACL: drop the inherited entries and grant the current user
+# alone. Returns False when the file could not be locked down.
+def restrictToOwner(path, windows=None, runner=subprocess.run):
+    windows = sys.platform == 'win32' if windows is None else windows
+    if not windows:
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            return False
+        return True
+
+    try:
+        result = runner(['icacls', str(path), '/inheritance:r',
+                         '/grant:r', f'{getpass.getuser()}:F'],
+                        capture_output=True, check=False)
+    except (OSError, KeyError):
+        # KeyError: getpass found no user name to grant the file to.
+        return False
+    return result.returncode == 0
+
+
 # The per run settings stay out of the file on purpose; see RUNTIME_ONLY.
+# Returns whether the file ended up readable by its owner only.
 def save(settings, config_path=DEFAULT_CONFIG_PATH):
     parser = configparser.ConfigParser()
     parser.read(config_path, encoding='utf-8')
@@ -304,10 +362,4 @@ def save(settings, config_path=DEFAULT_CONFIG_PATH):
     with config_path.open('w', encoding='utf-8') as configFile:
         parser.write(configFile)
 
-    # The file holds a live session cookie, so keep it to the owner where the
-    # filesystem understands that idea.
-    if os.name != 'nt':
-        try:
-            os.chmod(config_path, 0o600)
-        except OSError:
-            pass
+    return restrictToOwner(config_path)
