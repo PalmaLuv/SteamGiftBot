@@ -65,6 +65,16 @@ python main.py
 
 `python -m steamgiftbot` does exactly the same thing as `python main.py`.
 
+Or install it as a command. Settings, state and logs then live in the folder you
+start it from:
+
+```bash
+pip install git+https://github.com/PalmaLuv/SteamGiftBot.git
+steamgiftbot --setup
+```
+
+Advice the bot prints, such as "run --setup", names whichever of these you used.
+
 ### Docker
 
 ```bash

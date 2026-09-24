@@ -13,6 +13,7 @@ from InquirerPy import prompt
 from prompt_toolkit import document as doc
 from prompt_toolkit.validation import ValidationError, Validator
 
+from steamgiftbot.console import log
 from steamgiftbot.settings import GIFT_TYPES
 
 # Ctrl+V support is a Windows nicety. On Linux 'keyboard' needs root and a
@@ -127,8 +128,8 @@ def askMaxEntries():
         return None
     value = int(answer)
     if value < LOWEST_SENSIBLE_ENTRIES:
-        print(f"  Note: below {LOWEST_SENSIBLE_ENTRIES} entries only a small share "
-              f"of giveaways qualify, so the bot will enter few of them.")
+        log(f"  Note: below {LOWEST_SENSIBLE_ENTRIES} entries only a small share "
+            f"of giveaways qualify, so the bot will enter few of them.", "yellow")
     return value
 
 

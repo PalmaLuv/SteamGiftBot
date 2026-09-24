@@ -30,8 +30,31 @@ from pathlib import Path
 def baseDir():
     if getattr(sys, 'frozen', False):
         return Path(sys.executable).resolve().parent
-    # One level above the package: next to main.py.
-    return Path(__file__).resolve().parent.parent
+    # A checkout or the Docker image: next to main.py, one level above the
+    # package. Installed with pip, that would be site-packages, so the folder
+    # the bot is started from is used instead.
+    root = Path(__file__).resolve().parent.parent
+    return root if (root / 'main.py').exists() else Path.cwd()
+
+
+# How the user started the program, so advice names a command that works for
+# them: the .exe, the installed script, python -m, or main.py from a checkout.
+def launchCommand(argv0=None, frozen=None):
+    frozen = getattr(sys, 'frozen', False) if frozen is None else frozen
+    if frozen:
+        return 'SteamGiftBot.exe'
+    if argv0 is None:
+        argv0 = sys.argv[0] if sys.argv else ''
+    name = Path(argv0).name.lower()
+    if name == '__main__.py':
+        return 'python -m steamgiftbot'
+    if name in ('steamgiftbot', 'steamgiftbot.exe', 'steamgiftbot-script.py'):
+        return 'steamgiftbot'
+    return 'python main.py'
+
+
+def hint(flags):
+    return f"{launchCommand()} {flags}"
 
 
 BASE_DIR            = baseDir()
@@ -189,7 +212,7 @@ def toTelegramChat(value):
     if not CHAT_SHAPE.match(text):
         raise ValueError(explainBadValue(text, "a chat id (987654321, or -100... "
                                                "for a group). Run "
-                                               "'python main.py --telegram-chat-id' "
+                                               f"'{hint('--telegram-chat-id')}' "
                                                "to find yours"))
     return text
 

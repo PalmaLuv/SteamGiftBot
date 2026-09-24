@@ -5,7 +5,7 @@ import pytest
 from conftest import FakeResponse, FakeSession
 
 from steamgiftbot import notify
-from steamgiftbot.bot import SESSION_ADVICE, SessionExpired, SteamGiftError
+from steamgiftbot.bot import SessionExpired, SteamGiftError, sessionAdvice
 from steamgiftbot.cli import buildParser, sendTestNotification
 from conftest import makeSettings
 
@@ -69,7 +69,7 @@ class TestItIsAnnounced:
         bot = makeBot(FakeSession(home='<html></html>'),
                       telegram_token='TOKEN', telegram_chat='42')
         bot.start()
-        assert SESSION_ADVICE.splitlines()[0] in capsys.readouterr().out
+        assert sessionAdvice().splitlines()[0] in capsys.readouterr().out
 
     def test_nothing_is_sent_when_telegram_is_switched_off(self, makeBot, sentMessages):
         bot = makeBot(FakeSession(home='<html></html>'),

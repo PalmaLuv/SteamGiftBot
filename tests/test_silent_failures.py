@@ -129,6 +129,29 @@ class TestNotifyOnlyForgivesBadJson:
             notify.checkAnswer(Broken(), 'Discord')
 
 
+class TestOneSourceForTheSite:
+    def test_win_links_follow_the_configured_site(self):
+        from bs4 import BeautifulSoup
+
+        from steamgiftbot import wins
+
+        page = ('<div class="table__row-inner-wrap">'
+                '<a href="/giveaway/abc12/some-game">Some Game</a></div>')
+        found, _ = wins.parseWonPage(BeautifulSoup(page, 'html.parser'),
+                                     'https://mirror.example')
+        assert found[0].url == 'https://mirror.example/giveaway/abc12/'
+
+    @pytest.mark.parametrize('text, expected', [
+        ('<title>Just a moment...</title>', True),
+        ('<script src="https://challenges.cloudflare.com/x"></script>', True),
+        ('<html>maintenance</html>', False),
+        (None, False),
+    ])
+    def test_the_cloudflare_check_is_recognised_in_one_place(self, text, expected):
+        from steamgiftbot.bot import isChallenge
+        assert isChallenge(text) is expected
+
+
 def test_the_fixture_pages_still_read_cleanly(makeBot):
     # The real listing must not trip the unreadable counter.
     bot = makeBot(FakeSession(pages={1: fixture('giveaways.html')}))

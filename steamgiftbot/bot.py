@@ -19,9 +19,9 @@ from time import sleep
 from urllib3.util import Retry
 
 from steamgiftbot import filters, notify, wins
-from steamgiftbot.console import log
+from steamgiftbot.console import countdown, log
 from steamgiftbot.giveaway import parseRow
-from steamgiftbot.settings import DEFAULT_CONFIG_PATH
+from steamgiftbot.settings import DEFAULT_CONFIG_PATH, hint
 from steamgiftbot.state import State, defaultPath
 from steamgiftbot.stats import RunStats
 from steamgiftbot.steam_api import get_game_info
@@ -49,6 +49,11 @@ CHALLENGE_MESSAGE = (
     "and try again once the site lets you through.")
 
 
+def isChallenge(text):
+    body = (text or '').lower()
+    return any(marker in body for marker in CHALLENGE_MARKERS)
+
+
 # Raised when the bot cannot continue: bad cookie, dead session, empty filter.
 class SteamGiftError(Exception):
     pass
@@ -60,10 +65,10 @@ class SessionExpired(SteamGiftError):
     pass
 
 
-SESSION_ADVICE = (
-    "Your SteamGifts session has expired, so the bot stopped.\n"
-    "Sign in at steamgifts.com, copy the new PHPSESSID cookie and run "
-    "'python main.py --setup'.")
+def sessionAdvice():
+    return ("Your SteamGifts session has expired, so the bot stopped.\n"
+            "Sign in at steamgifts.com, copy the new PHPSESSID cookie and run "
+            f"'{hint('--setup')}'.")
 
 
 class SteamGift :
@@ -125,8 +130,7 @@ class SteamGift :
             return None
 
         if res_soup.status_code != 200:
-            body = (res_soup.text or '').lower()
-            if any(marker in body for marker in CHALLENGE_MARKERS):
+            if isChallenge(res_soup.text):
                 raise SteamGiftError(CHALLENGE_MESSAGE)
             log(f"SteamGifts answered with HTTP {res_soup.status_code}", "red")
             return None
@@ -172,8 +176,7 @@ class SteamGift :
             jsonData = response.json()
         except ValueError as error:
             # An HTML body here means the session died or we are being rate limited.
-            body = (response.text or '').lower()
-            if any(marker in body for marker in CHALLENGE_MARKERS):
+            if isChallenge(response.text):
                 raise SteamGiftError(CHALLENGE_MESSAGE) from error
             raise SessionExpired("SteamGifts returned an unexpected answer. "
                                  "The session has probably expired.") from error
@@ -205,10 +208,10 @@ class SteamGift :
             + f"\nTo continue, you need at least {self.min_points}", "magenta")
         for remaining in range(self.pointsWait, 0, -1):
             if not self.running:
-                return
-            print(f"The are {remaining} seconds left.\t\r", end='')
+                break
+            countdown(f"There are {remaining} seconds left.")
             sleep(1)
-        print()
+        countdown(None)
 
     # Walks the giveaway pages. Returns as soon as the balance runs out or the
     # listing is exhausted; start() decides whether to go round again.
@@ -297,7 +300,7 @@ class SteamGift :
         if soup is None:
             return []
 
-        found, recognised = wins.parseWonPage(soup)
+        found, recognised = wins.parseWonPage(soup, self.baseURL)
         if not recognised:
             log("The won giveaways page did not look the way the bot expects, "
                 "so wins cannot be checked. Everything else keeps working.", "yellow")
@@ -351,8 +354,9 @@ class SteamGift :
         except SessionExpired as error:
             # Checked before SteamGiftError: it is a subclass of it.
             log(str(error), "red")
-            log(SESSION_ADVICE, "yellow")
-            self.report(extra=SESSION_ADVICE)
+            advice = sessionAdvice()
+            log(advice, "yellow")
+            self.report(extra=advice)
             return 1
         except SteamGiftError as error:
             log(str(error), "red")

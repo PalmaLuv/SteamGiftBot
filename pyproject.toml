@@ -1,5 +1,41 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "steamgiftbot"
+description = "Enters SteamGifts giveaways for you and tells you on Telegram when you win."
+readme = "README.md"
+license = "MPL-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "PalmaLuv" }]
+# The version lives in steamgiftbot/__init__.py; the dependencies stay pinned in
+# requirements.txt, which the Docker image and the .exe build install as well.
+dynamic = ["version", "dependencies"]
+
+[project.optional-dependencies]
+dev = ["pytest==9.0.1", "ruff==0.14.4"]
+
+[project.scripts]
+steamgiftbot = "steamgiftbot.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/PalmaLuv/SteamGiftBot"
+
+[tool.setuptools.dynamic]
+version = { attr = "steamgiftbot.__version__" }
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+include = ["steamgiftbot*"]
+
+[tool.setuptools.package-data]
+steamgiftbot = ["info.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The repository root, so the package imports without being installed.
+pythonpath = ["."]
 addopts = "-q"
 
 [tool.ruff]

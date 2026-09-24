@@ -9,7 +9,6 @@
 """Command line entry point: parse flags, settle the settings, start the bot."""
 import argparse
 import signal
-import sys
 
 from pathlib import Path
 
@@ -147,7 +146,7 @@ def missingNotifySetting(config):
     if config.telegram_token:
         return ("The Telegram token is set but telegram_chat is not, so there is "
                 "nowhere to send to.\nWrite to your bot, then run: "
-                "python main.py --telegram-chat-id")
+                + steamSettings.hint('--telegram-chat-id'))
     if config.telegram_chat:
         return ("telegram_chat is set but telegram_token is not.\n"
                 "Get a token from @BotFather in Telegram.")
@@ -283,6 +282,3 @@ def main(argv=None):
         log("\nStopped by user. Bye!", "white")
         return EXIT_OK
 
-
-if __name__ == '__main__':
-    sys.exit(main())

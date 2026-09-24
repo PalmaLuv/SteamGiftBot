@@ -35,7 +35,7 @@ jobs:
         os: [ubuntu-latest]
         # The Ctrl+V hotkey is Windows only, so cover that platform too.
         include:
-          - python-version: "3.11"
+          - python-version: "3.12"
             os: windows-latest
     runs-on: ${{ matrix.os }}
 

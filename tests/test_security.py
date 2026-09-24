@@ -112,3 +112,23 @@ class TestKeepingTheFilePrivate:
 def test_sigterm_stops_the_bot_like_ctrl_c():
     with pytest.raises(KeyboardInterrupt):
         cli.handleTermination(15, None)
+
+
+class TestAdviceNamesTheRightCommand:
+    @pytest.mark.parametrize('argv0, expected', [
+        ('main.py', 'python main.py'),
+        ('/app/main.py', 'python main.py'),
+        ('/usr/lib/python3/steamgiftbot/__main__.py', 'python -m steamgiftbot'),
+        ('/home/me/.local/bin/steamgiftbot', 'steamgiftbot'),
+        (r'C:\Python\Scripts\steamgiftbot.exe', 'steamgiftbot'),
+    ])
+    def test_from_how_it_was_started(self, argv0, expected):
+        assert settings.launchCommand(argv0, frozen=False) == expected
+
+    def test_the_packed_executable(self):
+        assert settings.launchCommand('whatever', frozen=True) == 'SteamGiftBot.exe'
+
+
+class TestWhereSettingsLive:
+    def test_a_checkout_keeps_them_beside_main_py(self):
+        assert (settings.baseDir() / 'main.py').exists()
