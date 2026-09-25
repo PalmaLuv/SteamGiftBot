@@ -323,6 +323,12 @@ rest of the bot is set up, and need no cookie.
 A notification that cannot be delivered is reported and dropped: a dead webhook
 never turns a good run into a failed one.
 
+The very first run writes down the wins already on your won page without
+announcing them, so you are not messaged about games won months ago; from then
+on only new wins arrive. A `--dry-run` sends nothing at all and remembers
+nothing: it only shows on screen what would have been sent. Use `--notify-test`
+to check the chat itself.
+
 ### Free games elsewhere
 
 With `free_games` set, the bot also tells you about games that are free to keep

@@ -18,6 +18,8 @@ class WinWatcher:
         self.config   = config
         self.state    = state
         self.stats    = stats
+        # A dry run looks but neither sends nor writes anything down.
+        self.dryRun   = bool(getattr(config, 'dry_run', False))
 
     # Announces anything that was not announced before. Only a dead session
     # gets out of here: missing a win is bad, failing the run over it is worse,
@@ -36,8 +38,16 @@ class WinWatcher:
                 "so wins cannot be checked. Everything else keeps working.", "yellow")
             return []
 
+        if self.state.fresh:
+            return self.rememberHistory(found)
+
         fresh = [win for win in found if self.state.isNew(win.code)]
         if not fresh:
+            return []
+
+        if self.dryRun:
+            for win in fresh:
+                log(f"Would announce: you won {win.name}! {win.url}", "cyan")
             return []
 
         for win in fresh:
@@ -50,3 +60,23 @@ class WinWatcher:
         self.state.save()
         self.stats.wins(len(fresh))
         return fresh
+
+    # With nothing remembered, every win on the page would look new, and a first
+    # run would message the user about games won months ago. Those are written
+    # down quietly instead; from here on only real news gets through.
+    def rememberHistory(self, found):
+        if self.dryRun:
+            if found:
+                log(f"First run: {len(found)} earlier wins will be remembered, "
+                    "not announced.", "cyan")
+            return []
+
+        for win in found:
+            self.state.remember(win.code)
+        # Saved even when empty, so the next run knows it is not the first.
+        self.state.save()
+        self.state.fresh = False
+        if found:
+            log(f"First run: remembered {len(found)} earlier wins without announcing them. "
+                "New wins will be announced from now on.", "white")
+        return []

@@ -80,6 +80,17 @@ report "$([ "${leaked:-1}" = "0" ] && echo 0 || echo 1)" "no cookie or state bak
 uid=$(docker run --rm --entrypoint id "$IMAGE" -u 2>/dev/null)
 report "$([ -n "$uid" ] && [ "$uid" != "0" ] && echo 0 || echo 1)" "does not run as root (uid ${uid:-?})"
 
+# A named volume on /app/data inherits the folder's owner; the bot must be able
+# to keep its state there or it repeats every win after a container is replaced.
+docker volume create sgb-check-data >/dev/null 2>&1
+if docker run --rm -v sgb-check-data:/app/data --entrypoint sh "$IMAGE" -c \
+    "touch /app/data/steamgiftbot-state.json" >/dev/null 2>&1; then
+    report 0 "a named volume on /app/data is writable"
+else
+    report 1 "a named volume on /app/data is writable"
+fi
+docker volume rm sgb-check-data >/dev/null 2>&1
+
 # Tests and CI files have no business being shipped.
 extra=$(docker run --rm --entrypoint sh "$IMAGE" -c \
     "ls -A /app | grep -E '^(tests|\.git|\.github)$' | wc -l" 2>/dev/null)

@@ -110,7 +110,9 @@ def test_dry_run_spends_nothing_on_the_site(runWith):
     assert bot.stats.entered == 2
 
 
-def test_wins_come_from_the_provider(runWith):
+def test_wins_come_from_the_provider(runWith, tmp_path):
+    # A bot that has run before; a first run only writes history down.
+    (tmp_path / 'state.json').write_text('{"announced_wins": []}', encoding='utf-8')
     toy = ToyProvider({1: []}, won=[Win(code='w1', name='Prize', base='https://toy.example')])
     bot = runWith(toy)
     assert [win.code for win in bot.announceWins()] == ['w1']

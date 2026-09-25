@@ -61,6 +61,13 @@ class FreeGameWatcher:
             return []
 
         fresh = [game for game in games if self.state.isNewFreeGame(game.id)]
+
+        # A dry run looks but neither sends nor writes anything down.
+        if getattr(self.config, 'dry_run', False):
+            for game in fresh:
+                log(f"Would announce free to keep: {game.title} {game.url}", "cyan")
+            return []
+
         # Forget offers that ended, so the state file does not grow for ever.
         self.state.keepFreeGames({game.id for game in games})
         if not fresh:

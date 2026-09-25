@@ -14,6 +14,12 @@ RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin app
 
 COPY --chown=app:app . .
 
+# Where config.ini and the state file go when a volume is mounted. Created here,
+# owned by the bot, because a new named volume copies the ownership of the
+# folder it is mounted over; without it the volume would belong to root and the
+# bot could not remember which wins it already announced.
+RUN mkdir -p /app/data && chown app:app /app/data
+
 USER app
 
 # Nobody is there to answer the setup questions, so the container reads its
