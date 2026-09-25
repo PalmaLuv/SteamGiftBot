@@ -30,10 +30,12 @@ class State:
         self.announcedWins = set()
         # Free game offers already announced, by their id at the source.
         self.announcedFreeGames = set()
+        # True until a state file has actually been read: the bot remembers
+        # nothing, so whatever is already on the won page is history, not news.
+        self.fresh = True
 
-    # A missing or damaged file is not worth failing a run over: the worst that
-    # happens is one repeated notification. Damage is still said out loud, or a
-    # file that breaks every time would repeat the same win for ever, unexplained.
+    # A missing or damaged file is not worth failing a run over. Damage is still
+    # said out loud, or a file that breaks every time would go unexplained.
     def load(self):
         try:
             raw = self.path.read_text(encoding='utf-8')
@@ -41,18 +43,19 @@ class State:
             # The first run: nothing announced yet.
             return self
         except OSError as error:
-            log(f"Could not read {self.path}: {error}. Old wins may be announced again.",
-                "yellow")
+            log(f"Could not read {self.path}: {error}. Wins already on the page will be "
+                "remembered again rather than announced.", "yellow")
             return self
 
         try:
             stored = json.loads(raw)
         except ValueError:
-            log(f"{self.path} is damaged and was ignored. Old wins may be announced again.",
-                "yellow")
+            log(f"{self.path} is damaged and was ignored. Wins already on the page will be "
+                "remembered again rather than announced.", "yellow")
             return self
 
         if isinstance(stored, dict):
+            self.fresh = False
             wins = stored.get('announced_wins')
             if isinstance(wins, list):
                 self.announcedWins = {str(code) for code in wins}

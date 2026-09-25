@@ -215,6 +215,11 @@ class SteamGift :
         log("\n" + summary, "white")
         if not notify.isConfigured(self.config):
             return
+        if self.dryRun:
+            # A trial run stays on the screen; --notify-test checks the chat.
+            log("Dry run: no message was sent. Use --notify-test to check "
+                "Telegram or Discord.", "cyan")
+            return
         text = summary if extra is None else f"{extra}\n\n{summary}"
         for problem in notify.send(self.config, "SteamGiftBot\n" + text):
             log(f"Could not deliver the notification. {problem}", "yellow")
