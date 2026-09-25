@@ -39,7 +39,9 @@ jobs:
       - name: Check the executable
         shell: bash
         run: |
-          set -u
+          # Actions runs bash with -e, which would stop at the first check that
+          # is meant to exit non-zero. Every code is collected and judged below.
+          set +e -u
           failures=0
 
           check() {
