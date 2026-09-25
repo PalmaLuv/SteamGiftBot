@@ -13,6 +13,7 @@ from InquirerPy import prompt
 from prompt_toolkit import document as doc
 from prompt_toolkit.validation import ValidationError, Validator
 
+from steamgiftbot.console import log
 from steamgiftbot.settings import GIFT_TYPES
 
 # Ctrl+V support is a Windows nicety. On Linux 'keyboard' needs root and a
@@ -62,8 +63,11 @@ def ask(type, name, msg, choices=None, validate=None, default=None):
 
     if type == 'input' and PASTE_HOTKEY:
         keyboard.add_hotkey('ctrl+v', lambda: keyboard.write(clipboard.paste()))
-        answers = prompt([question])
-        keyboard.remove_hotkey('ctrl+v')
+        # The hook is system wide: Ctrl+C in the prompt must not leave it behind.
+        try:
+            answers = prompt([question])
+        finally:
+            keyboard.remove_hotkey('ctrl+v')
     else:
         answers = prompt([question])
     return answers
@@ -124,8 +128,8 @@ def askMaxEntries():
         return None
     value = int(answer)
     if value < LOWEST_SENSIBLE_ENTRIES:
-        print(f"  Note: below {LOWEST_SENSIBLE_ENTRIES} entries only a small share "
-              f"of giveaways qualify, so the bot will enter few of them.")
+        log(f"  Note: below {LOWEST_SENSIBLE_ENTRIES} entries only a small share "
+            f"of giveaways qualify, so the bot will enter few of them.", "yellow")
     return value
 
 

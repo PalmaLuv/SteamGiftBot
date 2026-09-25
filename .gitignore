@@ -9,9 +9,11 @@ test.py
 *.log
 
 **/__pycache__
+.venv/
 
-# PyInstaller output
+# PyInstaller and pip build output
 build/
 dist/
+*.egg-info/
 .pytest_cache/
 .ruff_cache/

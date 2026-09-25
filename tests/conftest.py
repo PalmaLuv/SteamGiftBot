@@ -1,12 +1,9 @@
 """Shared test helpers: fixture HTML and a stand-in for requests.Session."""
 import json
-import sys
 
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 FIXTURES = Path(__file__).resolve().parent / 'fixtures'
 

@@ -8,7 +8,7 @@
 # License : MPL-2.0
 """Command line entry point: parse flags, settle the settings, start the bot."""
 import argparse
-import sys
+import signal
 
 from pathlib import Path
 
@@ -94,6 +94,9 @@ def buildParser():
                          default=None, help="switch Telegram off without removing the token")
     telling.add_argument('--no-check-wins', dest='check_wins', action='store_false',
                          default=None, help="do not watch the won giveaways page")
+    telling.add_argument('--free-games', dest='free_games', metavar='PLATFORMS',
+                         help="also announce games that are free to keep on these "
+                              "platforms, e.g. 'steam, epic, gog' (data by GamerPower)")
     telling.add_argument('--notify-test', dest='notify_test', action='store_true',
                          help="send a test message and exit, to check the setup")
     telling.add_argument('--telegram-chat-id', dest='telegram_chat_id', action='store_true',
@@ -146,7 +149,7 @@ def missingNotifySetting(config):
     if config.telegram_token:
         return ("The Telegram token is set but telegram_chat is not, so there is "
                 "nowhere to send to.\nWrite to your bot, then run: "
-                "python main.py --telegram-chat-id")
+                + steamSettings.hint('--telegram-chat-id'))
     if config.telegram_chat:
         return ("telegram_chat is set but telegram_token is not.\n"
                 "Get a token from @BotFather in Telegram.")
@@ -172,6 +175,12 @@ def sendTestNotification(config):
     return EXIT_OK
 
 
+def saveConfig(config, configPath):
+    if not steamSettings.save(config, configPath):
+        log(f"Could not make {configPath} private to your account. It holds your "
+            "session cookie, so keep it out of shared folders.", "yellow")
+
+
 # Asks only for what is still missing, then remembers the answers.
 def askMissing(config, configPath):
     if not config.cookie:
@@ -184,7 +193,7 @@ def askMissing(config, configPath):
         config.pinned = ui.askPinned()
     if config.min_points is None:
         config.min_points = ui.askMinPoints()
-    steamSettings.save(config, configPath)
+    saveConfig(config, configPath)
     return config
 
 
@@ -209,8 +218,14 @@ def editConfig(config, configPath):
         elif choice == 'exit':
             break
         if config.log_info is not None and not config.missing():
-            steamSettings.save(config, configPath)
+            saveConfig(config, configPath)
     return config
+
+
+# 'docker stop' and systemd send SIGTERM. Treated like Ctrl+C, so the bot stops
+# where it is and still sends the summary instead of dying mid-sentence.
+def handleTermination(signum, frame):
+    raise KeyboardInterrupt
 
 
 def run(argv=None):
@@ -258,6 +273,7 @@ def run(argv=None):
     # somewhere else does not scatter them across the disk.
     beside = Path(args.config).resolve().parent
     startLogFile(config.log_info, beside / 'log')
+    signal.signal(signal.SIGTERM, handleTermination)
     return SteamGift(config, statePath=defaultPath(args.config)).start()
 
 
@@ -269,6 +285,3 @@ def main(argv=None):
         log("\nStopped by user. Bye!", "white")
         return EXIT_OK
 
-
-if __name__ == '__main__':
-    sys.exit(main())

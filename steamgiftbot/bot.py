@@ -6,71 +6,48 @@
 # Created by: github.com/PalmaLuv
 # Stay tuned for further app updates
 # License : MPL-2.0
-import json
+"""The run itself: walk the listing, pick giveaways, spend points, report.
 
-import requests
-
-from pathlib import Path
+Nothing in here knows which site it is talking to; that is the provider's job
+(see providers/base.py). SteamGifts is the provider unless another is given.
+"""
 from random import randint as rand
-
-from bs4 import BeautifulSoup
-from requests.adapters import HTTPAdapter
 from time import sleep
-from urllib3.util import Retry
 
-from steamgiftbot import filters, notify, wins
-from steamgiftbot.console import log
-from steamgiftbot.giveaway import parseRow
-from steamgiftbot.settings import DEFAULT_CONFIG_PATH
+from steamgiftbot import filters, notify
+from steamgiftbot.console import countdown, log
+from steamgiftbot.errors import SessionExpired, SteamGiftError
+from steamgiftbot.feeds import FreeGameWatcher
+from steamgiftbot.feeds.gamerpower import GamerPowerFeed
+from steamgiftbot.providers import steamgifts
+from steamgiftbot.providers.base import Outcome, Unreadable
+from steamgiftbot.settings import DEFAULT_CONFIG_PATH, hint
 from steamgiftbot.state import State, defaultPath
 from steamgiftbot.stats import RunStats
-from steamgiftbot.steam_api import get_game_info
+from steamgiftbot.winwatch import WinWatcher
 
-# Resolved next to this module, so the bot can be started from any directory.
-INFO_PATH = Path(__file__).resolve().parent / 'info.json'
+# Kept importable from here: they were public before the split.
+from steamgiftbot.providers.steamgifts import (  # noqa: F401
+    CHALLENGE_MARKERS, CHALLENGE_MESSAGE, INFO_PATH, RATE_LIMIT_WAIT, TIMEOUT, URL, info,
+    isChallenge)
 
-with INFO_PATH.open('r', encoding='utf-8') as infoFile:
-    info = json.load(infoFile)
-
-URL         = info['URL']
-TIMEOUT     = info['timeout']
 POINTS_WAIT = info['pointsWaitSeconds']
 
-# Pacing between entries, and how long to hold off when SteamGifts says 429.
-ENTRY_DELAY      = tuple(info['entryDelaySeconds'])
-RATE_LIMIT_WAIT  = info['rateLimitWaitSeconds']
+# Pacing between entries.
+ENTRY_DELAY = tuple(info['entryDelaySeconds'])
 
-# Words that mark a Cloudflare interstitial rather than a real SteamGifts page.
-CHALLENGE_MARKERS = ('just a moment', 'challenges.cloudflare.com', 'cf-browser-verification')
-
-CHALLENGE_MESSAGE = (
-    "SteamGifts answered with a Cloudflare check instead of the site. "
-    "The bot cannot get past that on its own; open steamgifts.com in a browser "
-    "and try again once the site lets you through.")
+__all__ = ['SteamGift', 'SteamGiftError', 'SessionExpired', 'sessionAdvice']
 
 
-# Raised when the bot cannot continue: bad cookie, dead session, empty filter.
-class SteamGiftError(Exception):
-    pass
-
-
-# The cookie stopped working. Told apart from the rest because it is the one
-# failure the user has to act on, and the one worth a message on its own.
-class SessionExpired(SteamGiftError):
-    pass
-
-
-SESSION_ADVICE = (
-    "Your SteamGifts session has expired, so the bot stopped.\n"
-    "Sign in at steamgifts.com, copy the new PHPSESSID cookie and run "
-    "'python main.py --setup'.")
+def sessionAdvice():
+    return ("Your SteamGifts session has expired, so the bot stopped.\n"
+            "Sign in at steamgifts.com, copy the new PHPSESSID cookie and run "
+            f"'{hint('--setup')}'.")
 
 
 class SteamGift :
-    def __init__(self, config, statePath=None):
+    def __init__(self, config, statePath=None, provider=None):
         self.config     = config
-        self.cookie     = { 'PHPSESSID' : config.cookie }
-        self.type       = config.gift_type
         self.pinned     = config.pinned
         self.min_points = int(config.min_points)
         # One pass and out, for cron or Task Scheduler. Never sleeps for points.
@@ -79,124 +56,51 @@ class SteamGift :
         self.dryRun     = bool(config.dry_run)
         self.pointsWait = POINTS_WAIT if config.points_wait is None else config.points_wait
 
-        self.baseURL   = URL
-        self.filterURL = info['filterURL']
+        self.provider   = provider or steamgifts.SteamGiftsProvider(config)
 
-        self.points     = 0
-        self.xsrfToken  = None
         self.running    = True
         self.stats      = RunStats()
+        self.warnedUnreadable = False
 
         # Watching the won page is on unless it was turned off.
-        self.checkWins = config.check_wins is not False
-        self.state     = State(statePath or defaultPath(DEFAULT_CONFIG_PATH)).load()
+        self.checkWins  = config.check_wins is not False
+        self.state      = State(statePath or defaultPath(DEFAULT_CONFIG_PATH)).load()
+        self.watcher    = WinWatcher(self.provider, config, self.state, self.stats)
 
-        # Built once, up front: every request below goes through it.
-        self.session = self.requestsRetrySession()
+        # Free games elsewhere: announced only, never claimed. Off unless asked for.
+        self.freeGames  = (FreeGameWatcher(GamerPowerFeed(config.free_games), config, self.state)
+                           if config.free_games else None)
 
-    def requestsRetrySession(self, retries=5, backoffFactor=0.3):
-        session = requests.Session()
-        retry = Retry(
-            total=retries,
-            read=retries,
-            connect=retries,
-            backoff_factor=backoffFactor,
-            # 429 included so urllib3 honours Retry-After instead of hammering.
-            # POST is intentionally left out of the retried methods: replaying an
-            # entry could burn points twice.
-            status_forcelist=(429, 500, 502, 503, 504)
-        )
-        session.headers.update({'User-Agent': info['userAgent']})
-        session.cookies.update(self.cookie)
-        adapter = HTTPAdapter(max_retries=retry)
-        session.mount(info['http'], adapter)
-        session.mount(info['https'], adapter)
-        return session
+    # The provider holds the session and the balance; these keep the old
+    # spelling working for callers and tests written before the split.
+    @property
+    def points(self):
+        return self.provider.points
+
+    @points.setter
+    def points(self, value):
+        self.provider.points = value
+
+    @property
+    def session(self):
+        return self.provider.session
+
+    @session.setter
+    def session(self, value):
+        self.provider.session = value
+
+    @property
+    def xsrfToken(self):
+        return self.provider.xsrfToken
+
+    def GetSoupFromPage(self, url):
+        return self.provider.getSoup(url)
+
+    def updateInfo(self):
+        self.provider.refresh()
 
     def stop(self):
         self.running = False
-
-    def GetSoupFromPage(self, url):
-        try:
-            res_soup = self.session.get(url, timeout=TIMEOUT)
-        except requests.RequestException as error:
-            log(f"Network error while loading the page: {error}", "red")
-            return None
-
-        if res_soup.status_code != 200:
-            body = (res_soup.text or '').lower()
-            if any(marker in body for marker in CHALLENGE_MARKERS):
-                raise SteamGiftError(CHALLENGE_MESSAGE)
-            log(f"SteamGifts answered with HTTP {res_soup.status_code}", "red")
-            return None
-
-        return BeautifulSoup(res_soup.text, 'html.parser')
-
-    def updateInfo(self):
-        soup = self.GetSoupFromPage(self.baseURL)
-        if soup is None:
-            raise SteamGiftError("Could not reach SteamGifts.")
-
-        token  = soup.find('input', {'name': 'xsrf_token'})
-        points = soup.find('span', {'class': 'nav__points'})
-        if token is None or points is None:
-            raise SessionExpired("Cookie is not valid, or the SteamGifts layout has changed.")
-
-        self.xsrfToken = token['value']
-        self.points    = int(points.text.replace(',', '').strip())
-
-    def entryGIFT(self, id, cost):
-        payload = {
-        'xsrf_token' : self.xsrfToken,
-        'do'        : 'entry_insert',
-        'code'      : id
-        }
-
-        try:
-            response = self.session.post(info['ajaxURL'], data=payload, timeout=TIMEOUT)
-        except requests.RequestException as error:
-            log(f"Network error while entering the giveaway: {error}", "red")
-            return False
-
-        # The retry adapter deliberately leaves POST alone, so a rate limit on an
-        # entry has to be handled here. Wait as long as the site asks.
-        if response.status_code == 429:
-            wait = self.retryAfter(response)
-            log(f"SteamGifts asked us to slow down. Waiting {wait} seconds.", "yellow")
-            self.stats.rateLimit()
-            sleep(wait)
-            return False
-
-        try:
-            jsonData = response.json()
-        except ValueError as error:
-            # An HTML body here means the session died or we are being rate limited.
-            body = (response.text or '').lower()
-            if any(marker in body for marker in CHALLENGE_MARKERS):
-                raise SteamGiftError(CHALLENGE_MESSAGE) from error
-            raise SessionExpired("SteamGifts returned an unexpected answer. "
-                                 "The session has probably expired.") from error
-
-        if jsonData.get('type') != 'success':
-            log(f"Entry rejected: {jsonData.get('msg', 'unknown reason')}", "yellow")
-            self.stats.rejection()
-            return False
-
-        # Trust the balance reported by the server; fall back to local math.
-        if 'points' in jsonData:
-            self.points = int(jsonData['points'])
-        else:
-            self.points = max(self.points - cost, 0)
-        self.stats.entry(cost)
-        return True
-
-    # Honours Retry-After when the site sends one, falls back to our own wait.
-    def retryAfter(self, response):
-        header = response.headers.get('Retry-After') if hasattr(response, 'headers') else None
-        try:
-            return max(1, int(header))
-        except (TypeError, ValueError):
-            return RATE_LIMIT_WAIT
 
     # Counts down until the balance is worth checking again. Returns early on stop().
     def waitForPoints(self):
@@ -204,10 +108,35 @@ class SteamGift :
             + f"\nTo continue, you need at least {self.min_points}", "magenta")
         for remaining in range(self.pointsWait, 0, -1):
             if not self.running:
-                return
-            print(f"The are {remaining} seconds left.\t\r", end='')
+                break
+            countdown(f"There are {remaining} seconds left.")
             sleep(1)
-        print()
+        countdown(None)
+
+    # A row the parser could not read is counted every time, and shown once per
+    # run: a redesign of the listing would otherwise look like a quiet day.
+    def noteUnreadable(self, row):
+        self.stats.skip(filters.UNREADABLE)
+        if self.warnedUnreadable:
+            return
+        self.warnedUnreadable = True
+        log(f"Could not read a giveaway row, the {self.provider.name} layout may have "
+            f"changed: {row.sample!r}", "yellow")
+
+    def enter(self, giveaway):
+        result = self.provider.enter(giveaway)
+        if result.outcome is Outcome.ENTERED:
+            self.stats.entry(giveaway.cost)
+            return True
+        if result.outcome is Outcome.RATE_LIMITED:
+            log(f"{self.provider.name} asked us to slow down. "
+                f"Waiting {result.wait} seconds.", "yellow")
+            self.stats.rateLimit()
+            sleep(result.wait)
+        elif result.outcome is Outcome.REJECTED:
+            log(f"Entry rejected: {result.message}", "yellow")
+            self.stats.rejection()
+        return False
 
     # Walks the giveaway pages. Returns as soon as the balance runs out or the
     # listing is exhausted; start() decides whether to go round again.
@@ -216,20 +145,17 @@ class SteamGift :
         while self.running:
             log(f"Getting games from page {_page}", "magenta")
 
-            filtered_url = self.filterURL[self.type] % _page
-            paginated_url = f"{self.baseURL}/giveaways/{filtered_url}"
-            soup = self.GetSoupFromPage(paginated_url)
-            if soup is None:
+            listing = self.provider.listGiveaways(_page)
+            if listing is None:
                 return
 
-            game_list = soup.find_all('div', {'class': 'giveaway__row-inner-wrap'})
-            if not len(game_list):
+            if not listing:
                 if _page == 1:
                     raise SteamGiftError("Page is empty. Please, choose another type.")
                 log("No giveaways left on this page, starting over.", "magenta")
                 return
 
-            for item in game_list:
+            for giveaway in listing:
                 if not self.running:
                     return
 
@@ -242,15 +168,15 @@ class SteamGift :
                     self.waitForPoints()
                     return
 
-                giveaway = parseRow(item)
-                if giveaway is None:
+                if isinstance(giveaway, Unreadable):
+                    self.noteUnreadable(giveaway)
                     continue
 
                 reason = filters.reasonToSkip(giveaway, self.config, self.points,
-                                              hasCards=get_game_info)
+                                              hasCards=self.provider.hasCards)
                 if reason is not None:
                     self.stats.skip(reason)
-                    if reason in (filters.NOT_ENOUGH, filters.NO_CARDS):
+                    if reason in (filters.NOT_ENOUGH, filters.NO_CARDS, filters.CARDS_UNKNOWN):
                         log(f"Skipping {giveaway.name}: {reason}", "red")
                     continue
 
@@ -262,46 +188,25 @@ class SteamGift :
                     self.stats.entry(giveaway.cost)
                     continue
 
-                if self.entryGIFT(giveaway.code, giveaway.cost):
+                if self.enter(giveaway):
                     log(f"One more game {giveaway.name}", "green")
                     sleep(rand(*ENTRY_DELAY))
             _page  += 1
 
-    # Looks at the won page and announces anything that was not announced
-    # before. Never raises: missing a win is bad, failing the run over it is
-    # worse.
     def announceWins(self):
         if not self.checkWins:
             return []
+        return self.watcher.announce()
 
-        try:
-            soup = self.GetSoupFromPage(self.baseURL + wins.WON_PATH)
-        except SteamGiftError as error:
-            log(f"Could not check for wins: {error}", "yellow")
+    def announceFreeGames(self):
+        if self.freeGames is None:
             return []
-        if soup is None:
-            return []
+        return self.freeGames.announce()
 
-        found, recognised = wins.parseWonPage(soup)
-        if not recognised:
-            log("The won giveaways page did not look the way the bot expects, "
-                "so wins cannot be checked. Everything else keeps working.", "yellow")
-            return []
-
-        fresh = [win for win in found if self.state.isNew(win.code)]
-        if not fresh:
-            return []
-
-        for win in fresh:
-            log(f"You won {win.name}! {win.url}", "green")
-            self.state.remember(win.code)
-            if notify.isConfigured(self.config):
-                for problem in notify.send(self.config, wins.announcement(win)):
-                    log(f"Could not deliver the win notification. {problem}", "yellow")
-
-        self.state.save()
-        self.stats.wins(len(fresh))
-        return fresh
+    # Everything worth telling the user that is not an entry of ours.
+    def announce(self):
+        self.announceWins()
+        self.announceFreeGames()
 
     def report(self, extra=None):
         summary = self.stats.summary()
@@ -322,7 +227,7 @@ class SteamGift :
             log("Script running", "green")
             # Outer loop replaces the old recursive restart, which grew the call
             # stack every time the bot waited for points.
-            self.announceWins()
+            self.announce()
             while self.running:
                 self.getGameContent()
                 if self.once:
@@ -331,13 +236,14 @@ class SteamGift :
                 if self.running:
                     # A cycle ends after a wait for points, so this is roughly a
                     # quarter hour apart: often enough not to miss a win.
-                    self.announceWins()
+                    self.announce()
                     self.updateInfo()
         except SessionExpired as error:
             # Checked before SteamGiftError: it is a subclass of it.
             log(str(error), "red")
-            log(SESSION_ADVICE, "yellow")
-            self.report(extra=SESSION_ADVICE)
+            advice = sessionAdvice()
+            log(advice, "yellow")
+            self.report(extra=advice)
             return 1
         except SteamGiftError as error:
             log(str(error), "red")
