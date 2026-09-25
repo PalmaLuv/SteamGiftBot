@@ -45,7 +45,8 @@ def launchCommand(argv0=None, frozen=None):
         return 'SteamGiftBot.exe'
     if argv0 is None:
         argv0 = sys.argv[0] if sys.argv else ''
-    name = Path(argv0).name.lower()
+    # Split on both separators: Path only knows its own platform's.
+    name = re.split(r'[\\/]', str(argv0))[-1].lower()
     if name == '__main__.py':
         return 'python -m steamgiftbot'
     if name in ('steamgiftbot', 'steamgiftbot.exe', 'steamgiftbot-script.py'):
