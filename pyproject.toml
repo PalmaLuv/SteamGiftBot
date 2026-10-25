@@ -14,7 +14,7 @@ authors = [{ name = "PalmaLuv" }]
 dynamic = ["version", "dependencies"]
 
 [project.optional-dependencies]
-dev = ["pytest==9.0.1", "ruff==0.14.4"]
+dev = ["pytest==9.1.1", "ruff==0.17.2"]
 
 [project.scripts]
 steamgiftbot = "steamgiftbot.cli:main"
