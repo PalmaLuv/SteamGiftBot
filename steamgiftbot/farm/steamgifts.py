@@ -1,26 +1,24 @@
-"""SteamGifts inside the farm. The bot that already exists does the work; this
-only runs it in a thread, lets the panel stop or wake it, and keeps its
-settings in config.ini where the command line version expects them."""
+"""SteamGifts inside the farm. The command line bot's runner and its SteamGifts
+provider do the work; this only runs them in a thread, lets the panel stop or
+wake them, adds the farm's own rules and keeps the settings in config.ini where
+the command line version expects them."""
 import logging
 import re
 import threading
 
 from steamgiftbot import filters
 from steamgiftbot import settings as sgSettings
-from steamgiftbot.bot import URL, SessionExpired, SteamGift, SteamGiftError
+from steamgiftbot.bot import SteamGift
+from steamgiftbot.errors import SessionExpired, SteamGiftError
 from steamgiftbot.farm import rules
 from steamgiftbot.farm.base import (AuthError, Platform, PlatformError, RetryLater, RingHandler,
                                     applySettings, coerce, cookieGuide, field, grouped,
                                     parseCookies, presetFields, scheduleFields)
-from steamgiftbot.giveaway import parseRow
 from steamgiftbot.logging_setup import LOGGER_NAME
+from steamgiftbot.providers.base import Outcome, Unreadable
+from steamgiftbot.providers.steamgifts import URL, SteamGiftsProvider
 from steamgiftbot.state import defaultPath
-from steamgiftbot.steam_api import get_game_info
 
-ENTERED_LINE = re.compile(r'^One more game (.+)$')
-
-# A page of the giveaway listing, as the bot asks for it.
-LISTING_PAGE  = re.compile(r'/giveaways/search\?page=(\d+)')
 DEFAULT_PAGES = 10
 
 # How far a dry run looks: SteamGifts lists 50 giveaways a page.
@@ -48,6 +46,7 @@ REASONS = {
     filters.NOT_ENOUGH: 'не хватает поинтов',
     filters.NO_CARDS: 'без карточек',
     filters.UNKNOWN_APP: 'нельзя проверить карточки',
+    filters.CARDS_UNKNOWN: 'Steam не ответил про карточки',
 }
 
 
@@ -60,12 +59,43 @@ class FarmPause(Exception):
         self.seconds = seconds
 
 
+def giveawayURL(code):
+    return f"{URL}/giveaway/{code}/"
+
+
+class FarmProvider(SteamGiftsProvider):
+    """The command line bot's SteamGifts provider, with the farm's page limit
+    and its record of what was entered and what was refused for good."""
+
+    def __init__(self, platform, config):
+        self.platform = platform
+        super().__init__(config)
+
+    # The runner walks the listing until an empty page. With a balance just
+    # over the minimum only the cheapest giveaways fit, and that walk covered
+    # the whole catalogue (150+ pages) every quarter hour. Stop after
+    # max_pages: a page that does not load ends the walk, and the farm then
+    # waits for points.
+    def listGiveaways(self, page):
+        limit = self.platform.extra.get('max_pages') or DEFAULT_PAGES
+        if page > limit:
+            self.platform.info(f"Просмотрено {limit} стр., дальше в этом проходе не иду.")
+            return None
+        return super().listGiveaways(page)
+
+    def enter(self, giveaway):
+        result = super().enter(giveaway)
+        self.platform.entryResult(giveaway, result, self.points)
+        return result
+
+
 class FarmSteamGift(SteamGift):
-    """The command line bot, with its waits routed through the farm."""
+    """The command line runner, with its waits routed through the farm and
+    the farm's rules asked before every entry."""
 
     def __init__(self, platform, config, statePath):
         self.platform = platform
-        super().__init__(config, statePath=statePath)
+        super().__init__(config, statePath=statePath, provider=FarmProvider(platform, config))
 
     def waitForPoints(self):
         self.waitedForPoints = True
@@ -76,44 +106,15 @@ class FarmSteamGift(SteamGift):
                                                           f"{self.min_points} P"):
             self.stop()
 
-    def extraSkipReason(self, giveaway):
-        return self.platform.extraReason(giveaway, self.points, self.min_points)
-
-    # The bot walks the listing until an empty page. With a balance just over
-    # the minimum only the cheapest giveaways fit, and that walk covered the
-    # whole catalogue (150+ pages) every quarter hour. Stop after max_pages:
-    # a missing page ends the walk, and the farm then waits for points.
-    def GetSoupFromPage(self, url):
-        found = LISTING_PAGE.search(url)
-        limit = self.platform.extra.get('max_pages') or DEFAULT_PAGES
-        if found and int(found.group(1)) > limit:
-            self.platform.info(f"Просмотрено {limit} стр., дальше в этом проходе не иду.")
-            return None
-        return super().GetSoupFromPage(url)
-
-    def entryGIFT(self, id, cost):
-        self.lastRejection = ''
-        done = super().entryGIFT(id, cost)
-        if done:
-            self.platform.balance = self.points
-            self.platform.pendingCost[id] = cost
-        elif self.lastRejection and FINAL_REFUSAL.search(self.lastRejection):
-            self.platform.manager.state.markSeen(self.platform.key, REFUSED + id)
-        return done
-
-
-class EntryWatcher(logging.Handler):
-    """The bot announces each entry by name only in its log line, so the
-    history is filled from there."""
-
-    def __init__(self, platform):
-        super().__init__()
-        self.platform = platform
-
-    def emit(self, record):
-        found = ENTERED_LINE.match(record.getMessage())
-        if found:
-            self.platform.enteredByName(found.group(1))
+    # The runner calls this only for a giveaway that passed its own filters,
+    # so the farm's rules come last, as they did before the split. FarmPause
+    # leaves the walk altogether.
+    def enter(self, giveaway):
+        reason = self.platform.extraReason(giveaway, self.points, self.min_points)
+        if reason is not None:
+            self.stats.skip(reason)
+            return False
+        return super().enter(giveaway)
 
 
 class SteamGiftsPlatform(Platform):
@@ -160,13 +161,12 @@ class SteamGiftsPlatform(Platform):
         super().__init__(manager)
         self.bot = None
         self.extra = {}
-        self.pendingCost = {}
         self.configPath = manager.configPath
 
         self.attachLogger()
 
     # The bot logs through the package logger; mirror that into this site's
-    # panel log and pick the entries out of it. Called again whenever
+    # panel log. Called again whenever
     # something (startLogFile) resets that logger's handlers.
     def attachLogger(self):
         sgLogger = logging.getLogger(LOGGER_NAME)
@@ -176,7 +176,6 @@ class SteamGiftsPlatform(Platform):
         ring = RingHandler(self)
         ring.setFormatter(logging.Formatter('%(message)s'))
         sgLogger.addHandler(ring)
-        sgLogger.addHandler(EntryWatcher(self))
         sgLogger.setLevel(logging.INFO)
         sgLogger.propagate = False
 
@@ -229,15 +228,15 @@ class SteamGiftsPlatform(Platform):
             raise ValueError("в тексте нет cookie PHPSESSID: скопируйте запрос как cURL целиком")
         config = self.loadConfig()
         config.cookie = session
-        bot = SteamGift(config, statePath=defaultPath(self.configPath))
+        provider = SteamGiftsProvider(config)
         try:
-            bot.updateInfo()
+            provider.refresh()
         except SessionExpired as error:
             raise AuthError("SteamGifts не узнаёт этот cookie: войдите на сайт и скопируйте "
                             "запрос заново.") from error
         except SteamGiftError as error:
             raise RetryLater(str(error)) from error
-        return {'account': '', 'balance': bot.points}
+        return {'account': '', 'balance': provider.points}
 
     def disconnect(self):
         self.stop(wait=15)
@@ -285,12 +284,13 @@ class SteamGiftsPlatform(Platform):
         except PlatformError:
             return False
 
-    def enteredByName(self, name):
-        cost = 0
-        if self.pendingCost:
-            # Entries are made one at a time, so the newest pending one is it.
-            _code, cost = self.pendingCost.popitem()
-        self.recordEntry(name, cost, self.siteURL)
+    # Told by the provider after every attempt, with what the site answered.
+    def entryResult(self, giveaway, result, balance):
+        if result.outcome is Outcome.ENTERED:
+            self.balance = balance
+            self.recordEntry(giveaway.name, giveaway.cost, giveawayURL(giveaway.code))
+        elif result.outcome is Outcome.REJECTED and FINAL_REFUSAL.search(result.message or ''):
+            self.manager.state.markSeen(self.key, REFUSED + giveaway.code)
 
     # The bot sends the Telegram message itself; the farm only keeps a record.
     def announce(self, bot):
@@ -340,11 +340,10 @@ class SteamGiftsPlatform(Platform):
         missing = config.missing()
         if missing:
             raise ValueError("не заполнены настройки: " + ', '.join(missing))
-        config.once = True
-        config.dry_run = True
-        bot = SteamGift(config, statePath=defaultPath(self.configPath))
+        provider = SteamGiftsProvider(config)
+        minPoints = int(config.min_points)
         try:
-            bot.updateInfo()
+            provider.refresh()
         except SessionExpired as error:
             raise AuthError(f"{error} Вставьте новый PHPSESSID в настройках.") from error
         except SteamGiftError as error:
@@ -353,28 +352,24 @@ class SteamGiftsPlatform(Platform):
         library = self.ownedGames(conf)
         entriesLeft, spendLeft = self.dailyLeft(conf)
         seen = self.manager.state.seen(self.key)
-        points, items = bot.points, []
+        points, items = provider.points, []
         for page in range(1, PREVIEW_PAGES + 1):
-            soup = bot.GetSoupFromPage(f"{bot.baseURL}/giveaways/"
-                                       f"{bot.filterURL[bot.type] % page}")
-            rows = soup.find_all('div', {'class': 'giveaway__row-inner-wrap'}) if soup else []
-            if not rows:
+            listing = provider.listGiveaways(page)
+            if not listing:
                 break
-            for row in rows:
-                giveaway = parseRow(row)
-                if giveaway is None:
+            for giveaway in listing:
+                if isinstance(giveaway, Unreadable):
                     continue
-                if points <= 0 or points < bot.min_points:
-                    reason = f"баланс ниже минимума ({bot.min_points} P)"
+                if points <= 0 or points < minPoints:
+                    reason = f"баланс ниже минимума ({minPoints} P)"
                 else:
                     reason = filters.reasonToSkip(giveaway, config, points,
-                                                  hasCards=get_game_info)
+                                                  hasCards=provider.hasCards)
                     reason = REASONS.get(reason, reason)
                 if reason is None and entriesLeft == 0:
                     reason = 'дневной лимит входов'
                 if reason is None:
-                    reason = self.budgetReason(giveaway, points, bot.min_points, spendLeft,
-                                               seen)
+                    reason = self.budgetReason(giveaway, points, minPoints, spendLeft, seen)
                 if reason is None:
                     reason = self.farmReason(conf, giveaway, library)
                 if reason is None:
@@ -383,25 +378,27 @@ class SteamGiftsPlatform(Platform):
                         entriesLeft -= 1
                     if spendLeft is not None:
                         spendLeft -= giveaway.cost
-                items.append({'name': giveaway.name, 'url': f"{URL}/giveaway/{giveaway.code}/",
+                items.append({'name': giveaway.name, 'url': giveawayURL(giveaway.code),
                               'cost': giveaway.cost, 'entries': giveaway.entries,
                               'enter': reason is None, 'reason': reason or ''})
-        return {'balance': bot.points, 'account': '', 'items': items,
+        return {'balance': provider.points, 'account': '', 'items': items,
                 'note': self.previewNote(conf)}
 
     # With 'wishlist first' on, every pass starts with SteamGifts' own
-    # wishlist section, then goes on with the chosen type.
+    # wishlist section, then goes on with the chosen type. The type is the
+    # provider's: it builds the listing address from it.
     def wishlistPass(self, bot, config):
-        if not self.manager.farmSettings().get('wishlist_first') or bot.type == 'WishList':
+        if not self.manager.farmSettings().get('wishlist_first') or config.gift_type == 'WishList':
             return
-        bot.type = 'WishList'
+        bot.provider.type = 'WishList'
         try:
             bot.getGameContent()
         except SteamGiftError as error:
+            # The runner's word for an empty first page: nothing wished for is up.
             if 'Page is empty' not in str(error):
                 raise
         finally:
-            bot.type = config.gift_type
+            bot.provider.type = config.gift_type
 
     def onWinStatus(self, win, status):
         if status not in ('received', 'activated') or not self.extraSettings().get('mark_received'):
@@ -415,10 +412,10 @@ class SteamGiftsPlatform(Platform):
     # as the page would send it. Returns True when the site said success.
     def markReceived(self, code, pages=5):
         try:
-            bot = SteamGift(self.loadConfig(), statePath=defaultPath(self.configPath))
-            bot.updateInfo()
+            provider = SteamGiftsProvider(self.loadConfig())
+            provider.refresh()
             for page in range(1, pages + 1):
-                soup = bot.GetSoupFromPage(f"{URL}/giveaways/won/search?page={page}")
+                soup = provider.getSoup(f"{URL}/giveaways/won/search?page={page}")
                 if soup is None:
                     break
                 for link in soup.find_all('a', href=re.compile(rf'/giveaway/{code}/')):
@@ -429,8 +426,8 @@ class SteamGiftsPlatform(Platform):
                     data = {field.get('name'): field.get('value', '')
                             for field in form.find_all('input') if field.get('name')}
                     data['action'] = '1'
-                    data.setdefault('xsrf_token', bot.xsrfToken)
-                    response = bot.session.post(f"{URL}/ajax.php", data=data, timeout=30)
+                    data.setdefault('xsrf_token', provider.xsrfToken)
+                    response = provider.session.post(f"{URL}/ajax.php", data=data, timeout=30)
                     ok = response.ok and response.json().get('type') == 'success'
                     self.info(f"SteamGifts: «получено» для {code}: "
                               f"{'отмечено' if ok else 'сайт отказал'}")

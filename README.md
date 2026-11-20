@@ -33,6 +33,13 @@ What both do:
   whether the game has Steam trading cards
 - Wait for points instead of burning through them, and back off when a site asks
 - Message you on Telegram the moment you win, and when your session expires
+- Keep a log of every run
+
+What the command line bot adds:
+
+- Runs unattended: as a service, from cron, or in Docker
+- Optionally tells you about games that are free to keep on Steam, Epic, GOG
+  and more
 
 What the farm adds:
 
@@ -50,7 +57,7 @@ What the farm adds:
 [Command line bot](#first-run): [first run](#first-run),
 [settings](#settings), [choosing giveaways](#choosing-giveaways),
 [Telegram](#telegram-1), [running unattended](#running-unattended) ·
-[Updating](#updating) · [When something goes wrong](#when-something-goes-wrong) ·
+[Security and risks](#security-and-risks) · [Updating](#updating) · [When something goes wrong](#when-something-goes-wrong) ·
 [Contributing](#contributing)
 
 ---
@@ -83,6 +90,16 @@ python main.py
 ```
 
 `python -m steamgiftbot` does exactly the same thing as `python main.py`.
+
+Or install it as a command. Settings, state and logs then live in the folder you
+start it from:
+
+```bash
+pip install git+https://github.com/PalmaLuv/SteamGiftBot.git
+steamgiftbot --setup
+```
+
+Advice the bot prints, such as "run --setup", names whichever of these you used.
 
 ### Docker
 
@@ -471,9 +488,34 @@ rest of the bot is set up, and need no cookie.
 | `telegram_chat` | chat id | where the message goes |
 | `check_wins` | `yes` / `no` | watch the won giveaways page (on by default) |
 | `discord_webhook` | webhook URL | the same messages, to Discord instead or as well |
+| `free_games` | platforms, e.g. `steam, epic, gog` | also announce games that are free to keep (off when empty) |
 
 A notification that cannot be delivered is reported and dropped: a dead webhook
 never turns a good run into a failed one.
+
+The very first run writes down the wins already on your won page without
+announcing them, so you are not messaged about games won months ago; from then
+on only new wins arrive. A `--dry-run` sends nothing at all and remembers
+nothing: it only shows on screen what would have been sent. Use `--notify-test`
+to check the chat itself.
+
+### Free games elsewhere
+
+With `free_games` set, the bot also tells you about games that are free to keep
+right now on the platforms you name, like this week's Epic Games Store freebie
+or a Steam key giveaway:
+
+```ini
+free_games = steam, epic, gog
+```
+
+The list comes from [GamerPower](https://www.gamerpower.com/), which offers it
+openly and asks to be credited, so every message says where it came from. Each
+offer is announced once, in a single message per check. The bot only tells you:
+claiming the game is up to you, one click on the link. Known platforms are `pc`,
+`steam`, `epic-games-store` (or `epic`), `gog`, `ubisoft`, `itchio`, `origin`,
+`battlenet`, `drm-free`, `ps4`, `ps5`, `xbox-one`, `xbox-series-xs`, `xbox-360`,
+`switch`, `android`, `ios` and `vr`.
 
 ## Running unattended
 
@@ -510,6 +552,52 @@ docker run -d --name steamgiftbot --restart unless-stopped -v /srv/steamgiftbot:
 Put your `config.ini` in `/srv/steamgiftbot` first. `--no-input` is already built
 into the image, so an incomplete setup fails with exit code 2 instead of waiting
 for an answer nobody will type.
+
+The container runs as an ordinary user with UID 1000, not as root. It has to be
+able to read `config.ini` and write the state file beside it, so give the
+directory to that user once:
+
+```bash
+sudo chown -R 1000:1000 /srv/steamgiftbot
+```
+
+**Docker with secrets.** A value passed with `-e` can be read by anyone who can
+run `docker inspect`. Every setting also accepts a `_FILE` variant that reads the
+value from a file, which is how Docker and Kubernetes secrets arrive:
+
+```bash
+docker run --rm -v /srv/steamgiftbot/cookie:/run/secrets/cookie:ro -e STEAMGIFTBOT_COOKIE_FILE=/run/secrets/cookie -e STEAMGIFTBOT_GIFT_TYPE=All -e STEAMGIFTBOT_MIN_POINTS=0 -e STEAMGIFTBOT_PINNED=no ghcr.io/palmaluv/steamgiftbot:latest --once
+```
+
+`docker stop` lets the bot finish cleanly: it stops where it is and still sends
+the summary.
+
+## Security and risks
+
+**Your account.** SteamGifts' rules have long said that scripts which enter
+giveaways for you are not allowed, and accounts have been suspended for it in
+the past. The bot paces itself and never tries to get past Cloudflare, but using
+it is still your decision and your risk.
+
+**Your cookie.** `PHPSESSID` is a signed in session: whoever has it is you on
+SteamGifts until you sign out. The bot only ever sends it to steamgifts.com and
+never writes it to the log. When it saves `config.ini` it makes the file
+readable by your account alone (`chmod 600`, or an owner-only ACL on Windows)
+and warns you if that did not work. Keep the file out of shared and synced
+folders anyway, and sign out on steamgifts.com to kill a cookie you think leaked.
+
+**Your notification tokens.** A Telegram token lets anyone post as your bot.
+`discord_webhook` only accepts a real `https://discord.com/api/webhooks/...`
+address, so a typo cannot send your messages somewhere else.
+
+**The executable.** `SteamGiftBot.exe` is not code signed, so Windows may warn
+about it. Every release carries `SteamGiftBot.exe.sha256`; compare it with
+
+```bash
+certutil -hashfile SteamGiftBot.exe SHA256
+```
+
+The Docker image is signed with cosign and runs as a non-root user.
 
 ## Updating
 
@@ -590,8 +678,14 @@ higher than your real level, most giveaways are being skipped for you.
 main.py             entry point, kept where everybody expects it
 steamgiftbot/
   cli.py            flags, settings resolution, startup
-  settings.py       config.ini + environment + command line
-  bot.py            the giveaway walker itself
+  settings.py       config.ini + environment + command line; one line per setting
+  bot.py            the run: walk, filter, spend, wait, report (any site)
+  providers/
+    base.py         what a giveaway site must offer (GiveawayProvider)
+    steamgifts.py   steamgifts.com: session, listing, entries, won page
+  winwatch.py       noticing wins and announcing each one once
+  feeds/            free games to announce, never to enter (GamerPower)
+  errors.py         the failures that end a run
   giveaway.py       one listing row, parsed
   filters.py        whether a giveaway is worth points
   wins.py           reading the won giveaways page
@@ -629,6 +723,14 @@ ruff check .                    # the same lint the CI runs
 bash scripts/check-docker.sh    # build the image and exercise it
 pyinstaller SteamGiftBot.spec   # the Windows executable, into dist/
 ```
+
+**Adding a giveaway site** means one class in `steamgiftbot/providers/` with the
+methods listed in `providers/base.py`, registered in `providers/__init__.py`. The
+runner brings the filters, dry runs, pacing, waiting and the summary with it;
+`tests/test_providers.py` shows a whole site written in memory.
+
+**Adding a setting** is one line in the `Settings` dataclass: how to read it and
+how to save it. A test fails until it also has a command line flag.
 
 The tests replay trimmed SteamGifts pages from `tests/fixtures`, several of them
 copied verbatim from the live site, so they never touch the real site and never

@@ -328,3 +328,14 @@ def test_info_json_is_found_from_any_directory(tmp_path, monkeypatch):
     assert botModule.INFO_PATH.is_absolute()
     with botModule.INFO_PATH.open(encoding='utf-8') as infoFile:
         assert json.load(infoFile)['URL'].startswith('https://')
+
+
+def test_countdown_stays_out_of_logs_without_a_terminal(monkeypatch, capsys):
+    from steamgiftbot import console
+    monkeypatch.setattr(console, 'isInteractive', lambda: False)
+    console.countdown("There are 5 seconds left.")
+    console.countdown(None)
+    assert capsys.readouterr().out == ''
+    monkeypatch.setattr(console, 'isInteractive', lambda: True)
+    console.countdown("There are 5 seconds left.")
+    assert 'There are 5 seconds left.' in capsys.readouterr().out

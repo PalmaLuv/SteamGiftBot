@@ -765,24 +765,27 @@ def test_steamgifts_empty_min_points_is_refused(manager):
     assert not platform.configured()
 
 
+def farmProvider(platform):
+    from steamgiftbot.farm.steamgifts import FarmProvider
+    provider = object.__new__(FarmProvider)
+    provider.platform, provider.points = platform, 100
+    return provider
+
+
 def test_steamgifts_remembers_final_refusals(manager, monkeypatch):
-    from steamgiftbot.bot import SteamGift
-    from steamgiftbot.farm.steamgifts import FarmSteamGift, SteamGiftsPlatform
+    from steamgiftbot.farm.steamgifts import SteamGiftsPlatform
     from steamgiftbot.giveaway import Giveaway
+    from steamgiftbot.providers.base import EntryResult, Outcome
+    from steamgiftbot.providers.steamgifts import SteamGiftsProvider
 
     answers = {'dlc1': 'Missing Base Game', 'own1': 'Exists in Account',
                'poor': 'Not Enough Points'}
-
-    def entry(self, code, cost):
-        self.lastRejection = answers[code]
-        return False
-
-    monkeypatch.setattr(SteamGift, 'entryGIFT', entry)
+    monkeypatch.setattr(SteamGiftsProvider, 'enter', lambda self, giveaway: EntryResult(
+        Outcome.REJECTED, message=answers[giveaway.code]))
     platform = manager.platforms['steamgifts']
-    bot = object.__new__(FarmSteamGift)
-    bot.platform = platform
+    provider = farmProvider(platform)
     for code in answers:
-        bot.entryGIFT(code, 5)
+        assert provider.enter(Giveaway(code, 'Game', 5)).outcome is Outcome.REJECTED
     seen = manager.state.seen('steamgifts')
     assert {'no:dlc1', 'no:own1'} <= seen and 'no:poor' not in seen
     reason = SteamGiftsPlatform.budgetReason
@@ -888,17 +891,53 @@ def test_opiumpulses_empty_keys_table_is_not_a_win(manager):
 
 
 def test_steamgifts_walk_stops_after_max_pages(manager, monkeypatch):
-    from steamgiftbot.bot import SteamGift
-    from steamgiftbot.farm.steamgifts import FarmSteamGift
+    from steamgiftbot.providers.steamgifts import SteamGiftsProvider
     asked = []
-    monkeypatch.setattr(SteamGift, 'GetSoupFromPage', lambda self, url: asked.append(url) or 'soup')
+    monkeypatch.setattr(SteamGiftsProvider, 'listGiveaways',
+                        lambda self, page: asked.append(page) or ['row'])
     platform = manager.platforms['steamgifts']
     platform.extra = {'max_pages': 3}
-    bot = object.__new__(FarmSteamGift)
-    bot.platform = platform
-    base_url = 'https://www.steamgifts.com/giveaways/search?page=%d'
-    assert bot.GetSoupFromPage(base_url % 3) == 'soup'
-    assert bot.GetSoupFromPage(base_url % 4) is None
-    # Other pages (the won list) are never cut.
-    assert bot.GetSoupFromPage('https://www.steamgifts.com/giveaways/won') == 'soup'
-    assert len(asked) == 2
+    provider = farmProvider(platform)
+    assert provider.listGiveaways(3) == ['row']
+    # Past the limit the page counts as not loaded, which ends the walk.
+    assert provider.listGiveaways(4) is None
+    assert asked == [3]
+
+
+def test_steamgifts_walk_records_entries_and_obeys_the_farm(manager, monkeypatch):
+    """The runner's own walk, with the site faked: entries land in the history
+    with their price, the farm's rules skip, and its limits pause."""
+    from steamgiftbot.farm.steamgifts import FarmPause, FarmSteamGift
+    from steamgiftbot.giveaway import Giveaway
+    from steamgiftbot.providers.base import EntryResult, Outcome
+    from steamgiftbot.providers.steamgifts import SteamGiftsProvider
+    from steamgiftbot import bot as runner
+
+    pages = {1: [Giveaway('g1', 'Fine Game', 5), Giveaway('g2', 'Game Soundtrack', 5),
+                 Giveaway('g3', 'Other Game', 7)]}
+    monkeypatch.setattr(SteamGiftsProvider, 'listGiveaways',
+                        lambda self, page: pages.get(page, []))
+
+    def enter(self, giveaway):
+        self.points -= giveaway.cost
+        return EntryResult(Outcome.ENTERED)
+
+    monkeypatch.setattr(SteamGiftsProvider, 'enter', enter)
+    monkeypatch.setattr(runner, 'sleep', lambda seconds: None)
+    platform = manager.platforms['steamgifts']
+    platform.extra = dict(platform.extraSettings(), skip_junk=True)
+    config = platform.loadConfig()
+    bot = FarmSteamGift(platform, config, manager.dataDir / 'sg-state.json')
+    bot.points = 100
+    bot.getGameContent()
+
+    entries = manager.state.data['steamgifts']['entries']
+    assert [(entry['name'], entry['cost']) for entry in entries] == [
+        ('Fine Game', 5), ('Other Game', 7)]
+    assert entries[0]['url'].endswith('/giveaway/g1/')
+    assert platform.balance == 88
+    assert bot.stats.skipped
+
+    platform.extra = dict(platform.extra, daily_entries=2)
+    with pytest.raises(FarmPause):
+        bot.getGameContent()

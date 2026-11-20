@@ -34,7 +34,7 @@ class NotifyError(Exception):
 def describe(response):
     try:
         body = response.json()
-    except Exception:
+    except ValueError:
         text = (getattr(response, 'text', '') or '').strip()
         return text[:200]
     if isinstance(body, dict):
@@ -52,7 +52,7 @@ def checkAnswer(response, service):
     # Telegram can also answer 200 with ok=false.
     try:
         body = response.json()
-    except Exception:
+    except ValueError:
         return
     if isinstance(body, dict) and body.get('ok') is False:
         raise NotifyError(f"{service} refused the request: {describe(response)}")
@@ -108,9 +108,12 @@ def findChats(token, session=None):
     return list(found.values())
 
 
+# allowed_mentions off: messages carry text from other sites (game titles), and
+# an '@everyone' in one must not ping the whole server.
 def sendDiscord(webhook, text, session=None):
     poster = session.post if session else requests.post
-    checkAnswer(poster(webhook, json={'content': text}, timeout=TIMEOUT), 'Discord')
+    checkAnswer(poster(webhook, json={'content': text, 'allowed_mentions': {'parse': []}},
+                       timeout=TIMEOUT), 'Discord')
 
 
 def sendTelegram(token, chat, text, session=None):

@@ -10,6 +10,14 @@ def parseFixture(name='won.html'):
     return wins.parseWonPage(BeautifulSoup(fixture(name), 'html.parser'))
 
 
+# A bot that has run before: its memory exists, so what the page shows is news.
+# A first run is quieter on purpose; see test_first_run.py.
+def knownState(tmp_path):
+    path = tmp_path / 'state.json'
+    path.write_text('{"announced_wins": []}', encoding='utf-8')
+    return path
+
+
 class TestReadingTheWonPage:
     def test_it_finds_every_win(self):
         found, recognised = parseFixture()
@@ -50,7 +58,7 @@ class TestRemembering:
     def test_a_win_is_announced_once_and_not_again(self, makeBot, tmp_path):
         sent = []
         session = FakeSession(won=fixture('won.html'))
-        statePath = tmp_path / 'state.json'
+        statePath = knownState(tmp_path)
 
         bot = makeBot(session, statePath=statePath, telegram_token='T',
                       telegram_chat='42')
@@ -72,7 +80,7 @@ class TestRemembering:
 
     def test_the_memory_survives_a_restart(self, makeBot, tmp_path, monkeypatch):
         session = FakeSession(won=fixture('won.html'))
-        statePath = tmp_path / 'state.json'
+        statePath = knownState(tmp_path)
         monkeypatch.setattr('steamgiftbot.bot.notify.send',
                             lambda config, text, session=None: [])
 
@@ -89,7 +97,7 @@ class TestRemembering:
         monkeypatch.setattr('steamgiftbot.bot.notify.send',
                             lambda config, text, session=None: [])
         session = FakeSession(won=fixture('won.html'))
-        bot = makeBot(session, statePath=tmp_path / 'state.json')
+        bot = makeBot(session, statePath=knownState(tmp_path))
         bot.announceWins()
         assert "You won 3 giveaways!" in bot.stats.summary()
 

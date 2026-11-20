@@ -59,6 +59,19 @@ def log(text, color="white"):
         print(text)
 
 
+# A line that rewrites itself in place, for the wait between point checks.
+# Kept out of the log file: a line a second would bury everything else.
+# None ends the countdown and moves to a fresh line. Only on a terminal: under
+# systemd or docker every tick would become another line in the journal.
+def countdown(text):
+    if not isInteractive():
+        return
+    if text is None:
+        print()
+    else:
+        print(f"{text}\t\r", end='', flush=True)
+
+
 def printBanner():
     for line in LOGO:
         log(line, "green")

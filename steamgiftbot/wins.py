@@ -27,14 +27,19 @@ ROW_CLASSES = ('table__row-inner-wrap', 'giveaway__row-inner-wrap')
 GIVEAWAY_LINK = re.compile(r'/giveaway/([A-Za-z0-9]+)/([^/?#]*)')
 
 
+DEFAULT_BASE = 'https://www.steamgifts.com'
+
+
 @dataclass
 class Win:
     code : str
     name : str
+    # The site the win came from; the bot passes the one in info.json.
+    base : str = DEFAULT_BASE
 
     @property
     def url(self):
-        return f"https://www.steamgifts.com/giveaway/{self.code}/"
+        return f"{self.base.rstrip('/')}/giveaway/{self.code}/"
 
 
 def nameFromSlug(slug):
@@ -48,20 +53,20 @@ def findRows(soup):
     return rows
 
 
-def winFromRow(row):
+def winFromRow(row, base=DEFAULT_BASE):
     for link in row.find_all('a', href=True):
         found = GIVEAWAY_LINK.search(link['href'])
         if not found:
             continue
         code, slug = found.group(1), found.group(2)
         name = link.get_text().strip() or nameFromSlug(slug)
-        return Win(code=code, name=name)
+        return Win(code=code, name=name, base=base)
     return None
 
 
 # Returns (wins, recognised). recognised is False when the page held no row
 # container we know, which is worth telling the user about.
-def parseWonPage(soup):
+def parseWonPage(soup, base=DEFAULT_BASE):
     rows = findRows(soup)
     if not rows:
         return [], False
@@ -69,7 +74,7 @@ def parseWonPage(soup):
     wins = []
     seen = set()
     for row in rows:
-        win = winFromRow(row)
+        win = winFromRow(row, base)
         if win and win.code not in seen:
             seen.add(win.code)
             wins.append(win)
