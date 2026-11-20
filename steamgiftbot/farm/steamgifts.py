@@ -119,7 +119,8 @@ class FarmSteamGift(SteamGift):
 
 
 # The bot's per-page chatter: only in the panel's 'Подробно' view.
-NOISY = ('Getting games from page',)
+# 'Skipping X: not enough points' repeats the farm's own 'Пропуск' line.
+NOISY = ('Getting games from page', 'Skipping ')
 
 
 class ForwardHandler(logging.Handler):
