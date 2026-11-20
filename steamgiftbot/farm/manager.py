@@ -26,6 +26,7 @@ FARM_FILE  = 'farm.json'
 STATE_FILE = 'botfarm-state.json'
 # Added accounts keep their own files (SteamGifts: config.ini and state) here.
 ACCOUNTS_DIR = 'accounts'
+MAIN_PROFILE = 'main'
 ACCOUNT_KEY  = re.compile(r'^[a-z]+-[0-9]{1,3}$')
 
 # Remembered giveaway ids per site; old ones fall off the end.
@@ -321,7 +322,12 @@ class FarmManager:
                     SteamFreePlatform, GOGPlatform, ItchPlatform):
             self.kinds[cls.key] = cls
             self.platforms[cls.key] = cls(self)
-        # Added accounts: [{'key': 'steamgifts-2', 'kind': 'steamgifts'}].
+        # Accounts are people (yours, a brother's): each has its own set of
+        # sites. The main one holds the sites' first cards.
+        self.farm.setdefault('profiles', [])
+        if not any(item.get('id') == MAIN_PROFILE for item in self.farm['profiles']):
+            self.farm['profiles'].insert(0, {'id': MAIN_PROFILE, 'name': 'Основная'})
+        # Sites added to an account: [{'key': 'steamgifts-2', 'kind': 'steamgifts'}].
         self.farm.setdefault('accounts', [])
         for item in self.farm['accounts']:
             cls = self.kinds.get(item.get('kind'))
@@ -600,18 +606,85 @@ class FarmManager:
     def accountDir(self, key):
         return self.dataDir / ACCOUNTS_DIR / key
 
-    # Titles tell accounts apart once a site has more than one:
-    # "SteamGifts · palma", the name the user gave or the account's own.
+    # ---- accounts (profiles) ------------------------------------------------
+
+    def profiles(self):
+        return self.farm['profiles']
+
+    def profile(self, ident):
+        for item in self.farm['profiles']:
+            if item.get('id') == ident:
+                return item
+        raise ValueError("нет такой учётки")
+
+    def profileOf(self, key):
+        platform = self.platforms.get(key)
+        if platform is not None and platform.primary:
+            return MAIN_PROFILE
+        wanted = self.farm['platforms'].get(key, {}).get('profile') or MAIN_PROFILE
+        return wanted if any(item.get('id') == wanted for item in self.farm['profiles']) \
+            else MAIN_PROFILE
+
+    @staticmethod
+    def cleanName(name):
+        name = ' '.join(str(name or '').split())[:40]
+        if not name:
+            raise ValueError("у учётки должно быть имя")
+        return name
+
+    def createProfile(self, name, asfBot=''):
+        name = self.cleanName(name)
+        with self.accountsLock:
+            if any(item['name'].lower() == name.lower() for item in self.farm['profiles']):
+                raise ValueError(f"учётка «{name}» уже есть")
+            seq = self.farm.get('profileSeq', 1) + 1
+            self.farm['profileSeq'] = seq
+            item = {'id': f'p{seq}', 'name': name, 'asf_bot': str(asfBot or '').strip()}
+            self.farm['profiles'].append(item)
+            self.saveFarm()
+        return item
+
+    def updateProfile(self, ident, name=None, asfBot=None):
+        item = self.profile(ident)
+        if name is not None:
+            name = self.cleanName(name)
+            if any(other is not item and other['name'].lower() == name.lower()
+                   for other in self.farm['profiles']):
+                raise ValueError(f"учётка «{name}» уже есть")
+            item['name'] = name
+        if asfBot is not None:
+            item['asf_bot'] = str(asfBot or '').strip()
+        self.saveFarm()
+        self.retitle()
+        return item
+
+    # Removes an account with every site connected in it.
+    def deleteProfile(self, ident):
+        if ident == MAIN_PROFILE:
+            raise ValueError("основную учётку удалить нельзя")
+        item = self.profile(ident)
+        for key in [key for key in self.platforms if self.profileOf(key) == ident]:
+            self.removeAccount(key)
+        self.farm['profiles'] = [other for other in self.farm['profiles'] if other is not item]
+        self.saveFarm()
+        self.retitle()
+
+    def publicProfiles(self):
+        return [{'id': item['id'], 'name': item['name'], 'asfBot': item.get('asf_bot', ''),
+                 'main': item['id'] == MAIN_PROFILE} for item in self.farm['profiles']]
+
+    # Titles tell accounts apart: "IndieGala · Брат". A site that only the
+    # main account has keeps its plain name.
     def retitle(self):
-        counts = {}
-        for platform in self.platforms.values():
-            counts[platform.kind] = counts.get(platform.kind, 0) + 1
-        for platform in self.platforms.values():
-            entry = self.farm['platforms'].get(platform.key, {})
-            name = entry.get('label') or ''
-            if not name and (counts[platform.kind] > 1 or not platform.primary):
-                name = entry.get('account') or ('основная' if platform.primary
-                                                else f'#{platform.number}')
+        names = {item['id']: item['name'] for item in self.farm['profiles']}
+        owners = {}
+        for key, platform in self.platforms.items():
+            owners.setdefault(platform.kind, set()).add(self.profileOf(key))
+        for key, platform in self.platforms.items():
+            profile = self.profileOf(key)
+            name = self.farm['platforms'].get(key, {}).get('label') or ''
+            if not name and (profile != MAIN_PROFILE or len(owners[platform.kind]) > 1):
+                name = names.get(profile, '')
             platform.title = f"{platform.baseTitle} · {name}" if name else platform.baseTitle
 
     # Asks the site who the cookie belongs to, and refuses an account that is
@@ -626,7 +699,7 @@ class FarmManager:
                     continue
                 known = self.farm['platforms'].get(other.key, {}).get('account') or other.account
                 if known and str(known).strip().lower() == account.lower():
-                    raise ValueError(f"учётка {account} уже подключена здесь: {other.title}")
+                    raise ValueError(f"аккаунт {account} уже подключён: {other.title}")
         return found
 
     def rememberAccount(self, platform, found):
@@ -638,12 +711,26 @@ class FarmManager:
 
     # Checks the pasted cookie on a new instance and keeps it only if the site
     # accepted it, so a failed try leaves nothing behind.
-    def addAccount(self, kind, values):
+    def addAccount(self, kind, values, profile=MAIN_PROFILE):
         cls = self.kinds.get(kind)
         if cls is None:
             raise ValueError("нет такой площадки")
         if not cls.multiAccount:
             raise ValueError(f"у {cls.title} одна карточка на все учётки")
+        owner = self.profile(profile)
+        # The main account's first card of a site is the site's own one.
+        primary = self.platforms.get(kind)
+        if profile == MAIN_PROFILE and primary is not None and not primary.configured():
+            found = self.checkAccount(primary, values)
+            primary.updateSettings({name: values[name] for name in primary.connectFields
+                                    if name in values})
+            self.platformEntry(kind)['connected'] = True
+            self.rememberAccount(primary, found)
+            return primary, found
+        for key, other in self.platforms.items():
+            if other.kind == kind and self.profileOf(key) == profile \
+                    and (other.configured() or not other.primary):
+                raise ValueError(f"в учётке «{owner['name']}» {cls.title} уже подключена")
         with self.accountsLock:
             used = [platform.number for platform in self.platforms.values()
                     if platform.kind == kind]
@@ -655,6 +742,7 @@ class FarmManager:
             self.farm['accounts'].append({'key': key, 'kind': kind})
             entry = self.platformEntry(key)
             entry['connected'] = True
+            entry['profile'] = profile
             if found.get('account'):
                 entry['account'] = str(found['account']).strip()
             self.platforms[key] = platform
@@ -690,9 +778,16 @@ class FarmManager:
         self.retitle()
         return self.platforms[key].title
 
-    # The ASF bot a site's keys go to: its own choice, else the farm's.
+    # The ASF bot a site's keys go to: the site's own choice, else its
+    # account's Steam bot, else the farm's.
     def keyBotFor(self, key):
-        return str(self.farm['platforms'].get(key, {}).get('asf_bot') or '').strip()
+        own = str(self.farm['platforms'].get(key, {}).get('asf_bot') or '').strip()
+        if own:
+            return own
+        try:
+            return str(self.profile(self.profileOf(key)).get('asf_bot') or '').strip()
+        except ValueError:
+            return ''
 
     def setKeyBot(self, key, bot):
         self.platformEntry(key)['asf_bot'] = str(bot or '').strip()

@@ -40,8 +40,8 @@ What the farm adds:
 - A dry run: what it would enter right now, and why it skips the rest
 - Working hours, daily limits, ready-made filters (DLC, adult games, games you
   already own), your Steam wishlist first
-- Several accounts per site, each with its own card, limits and history;
-  several Steam accounts are several ASF bots
+- Accounts for several people: each has its own set of sites, cards, limits
+  and history, and its own Steam (an ASF bot) for the keys it wins
 - Wins with key status, keys activated through ArchiSteamFarm
 - Telegram commands: `/status`, `/pause`, `/run`, `/preview`…
 - A chart of entries per day, a searchable log and history, CSV export

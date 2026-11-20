@@ -28,6 +28,7 @@ STATIC_DIR      = Path(__file__).resolve().parent / 'static'
 
 log = logging.getLogger('botfarm')
 
+PROFILE_ROUTE = re.compile(r'^/api/profiles/(?P<id>[a-z0-9]{1,12})/(?P<action>update|delete)$')
 ROUTE = re.compile(r'^/api/platforms/(?P<key>[a-z]+(?:-[0-9]{1,3})?)/(?P<action>[a-z-]+)$')
 
 # Files the page may load besides itself; everything else is 404.
@@ -140,6 +141,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.json({'platforms': [platform.snapshot() for platform
                                             in self.manager.platforms.values()],
                               'wins': self.manager.openWins(),
+                              'profiles': self.manager.publicProfiles(),
                               'time': time.time()})
 
         if url.path in ('/api/history', '/api/history.csv'):
@@ -276,12 +278,24 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/accounts/add':
             try:
                 platform, found = manager.addAccount(str(data.get('kind') or ''),
-                                                     data.get('values') or {})
+                                                     data.get('values') or {},
+                                                     str(data.get('profile') or 'main'))
             except (AuthError, PlatformError, RetryLater) as error:
                 raise ValueError(str(error)) from error
             return self.json({'ok': True, 'key': platform.key, 'title': platform.title,
                               'account': found.get('account') or '',
                               'balance': found.get('balance')})
+        if path == '/api/profiles/create':
+            item = manager.createProfile(data.get('name'), data.get('asfBot') or '')
+            return self.json({'ok': True, 'id': item['id'], 'name': item['name']})
+        found = PROFILE_ROUTE.match(path)
+        if found and found['action'] == 'update':
+            item = manager.updateProfile(found['id'], name=data.get('name'),
+                                         asfBot=data.get('asfBot'))
+            return self.json({'ok': True, 'name': item['name']})
+        if found and found['action'] == 'delete':
+            manager.deleteProfile(found['id'])
+            return self.json({'ok': True})
         if path == '/api/asf/check':
             found = manager.asf.check()
             online = ', '.join(found['online']) or 'ни одного'

@@ -839,6 +839,7 @@ class Platform:
             'multi': self.multiAccount,
             'label': self.manager.platformEntry(self.key).get('label', ''),
             'keyBot': self.manager.keyBotFor(self.key),
+            'profile': self.manager.profileOf(self.key),
             'description': self.description,
             'state': self.state, 'error': self.lastError,
             'balance': self.balance, 'account': self.account,
