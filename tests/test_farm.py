@@ -15,7 +15,7 @@ import requests
 
 from conftest import fixture
 
-from steamgiftbot.farm import base, rules, web
+from steamgiftbot.farm import base, cards, rules, web
 from steamgiftbot.farm.base import AuthError, parseCookies
 from steamgiftbot.farm.indiegala import parseListing
 from steamgiftbot.farm.manager import FarmManager
@@ -512,7 +512,7 @@ def test_farm_settings_validate_and_hide_the_key(manager):
 
 def test_daily_report_goes_out_once(manager):
     sent = []
-    manager.notify = lambda text: sent.append(text) or []
+    manager.notify = lambda text=None, card=None: sent.append(card.plain() if card else text) or []
     manager.state.addEntry('indiegala', {'time': time.time(), 'name': 'Oxenfree', 'cost': 8})
     manager.state.addWin('indiegala', {'time': time.time(), 'name': 'Oxenfree'})
     manager.updateFarmSettings({'daily_report': True, 'report_hour': '21'})
@@ -521,8 +521,8 @@ def test_daily_report_goes_out_once(manager):
     manager.localNow = lambda: at(21, 5)
     assert manager.reportTick()
     assert not manager.reportTick()
-    assert 'IndieGala: 1 вх., потрачено 8' in sent[0]
-    assert '🎉 Oxenfree' in sent[0]
+    assert 'IG  1 вх.  8 iS' in sent[0]
+    assert 'Выигрышей за сутки: 1 — Oxenfree' in sent[0]
 
 
 def test_steamgifts_farm_rules(manager):
@@ -878,7 +878,7 @@ def test_opiumpulses_empty_keys_table_is_not_a_win(manager):
     empty = '<table><tbody><tr><td colspan="4">No results found.</td></tr></tbody></table>'
     platform = manager.platforms['opiumpulses']
     notes = []
-    platform.notify = lambda text, icon='': notes.append(text)
+    platform.notify = lambda text='', icon='', **card: notes.append(card.get('headline') or text)
     for page in (table('Old Game'), empty, table('Old Game', 'Cool Game')):
         platform.session = FakeOpium({WON_KEYS: (200, page)})
         platform.checkWins()
@@ -995,29 +995,32 @@ def test_command_line_wins_are_imported_as_received(tmp_path):
 
 def test_telegram_messages_have_one_look_and_follow_the_language(manager):
     sent = []
-    manager.notify = lambda text: sent.append(text) or []
+    manager.notify = lambda text=None, card=None: sent.append(card.plain() if card else text) or []
     manager.panelURLs = ['http://192.168.1.10:8092/', 'http://100.64.0.5:8092/']
     platform = manager.platforms['indiegala']
-    platform.notify("снова работает.", '✅')
-    assert sent[-1] == '✅ IndieGala: снова работает.'
+    platform.notify("строка", '✅', headline="Проход прошёл без ошибок.")
+    assert sent[-1] == '✅ ГОТОВО · IndieGala\nПроход прошёл без ошибок.\nстрока'
     assert manager.panelLink('/wins') == 'http://100.64.0.5:8092/#/wins'
     manager.updateUi({'lang': 'en'})
-    assert manager.translate("📊 Сводка за сутки\nЗа сутки ни одного входа.") == \
-        "📊 Daily summary\nNo entries in the last 24 hours."
+    assert manager.translate("За сутки ни одного входа.") == "No entries in the last 24 hours."
+    card = manager.translateCard(cards.Card('🔑', headline="Сессия больше не действует",
+                                            buttons=[("Подключить заново", 'http://x/')]))
+    assert card.heading() == 'SIGN-IN NEEDED' and card.buttons == [('Reconnect', 'http://x/')]
     manager.updateUi({'lang': 'ru'})
-    assert manager.translate("📊 Сводка за сутки") == "📊 Сводка за сутки"
+    assert manager.translate("СВОДКА ЗА СУТКИ") == "СВОДКА ЗА СУТКИ"
 
 
 def test_watchdog_speaks_once_after_an_hour_and_once_when_back(manager):
     sent = []
     platform = manager.platforms['indiegala']
-    platform.notify = lambda text, icon='': sent.append(icon + ' ' + text)
+    platform.notify = lambda text='', icon='', **card: sent.append(
+        icon + ' ' + (card.get('headline') or text))
     for _ in range(base.WATCH_AFTER + 2):
         platform.watch('IndieGala недоступна')
-    assert len(sent) == 1 and sent[0].startswith('⚠️ не работает уже 60 мин')
+    assert sent == ['⚠️ Не работает уже 60 мин']
     platform.passStartedAt = time.time()
     platform.finishPass("Проход окончен: вошёл в 0")
-    assert sent[-1] == '✅ снова работает.' and platform.failures == 0
+    assert sent[-1] == '✅ Проход прошёл без ошибок.' and platform.failures == 0
     platform.finishPass("Проход окончен: вошёл в 0")
     assert len(sent) == 2
 
@@ -1025,24 +1028,25 @@ def test_watchdog_speaks_once_after_an_hour_and_once_when_back(manager):
 def test_free_games_come_in_one_message_per_pass(manager):
     sent = []
     platform = manager.platforms['indiegala']
-    platform.notify = lambda text, icon='': sent.append(icon + ' ' + text)
+    platform.notify = lambda text='', icon='', **card: sent.append(
+        icon + ' ' + (card.get('headline') or text))
     for name in ('Alpha', 'Beta'):
         platform.recordEntry(name, 0, '')
     platform.recordEntry('Paid', 3, '')
     platform.announceClaims()
     platform.announceClaims()
-    assert sent == ['🎁 забрано бесплатных игр: 2 — Alpha, Beta']
+    assert sent == ['🎁 −100% · забрано игр: 2']
 
 
 def test_steamgifts_win_goes_out_in_the_farm_format(manager):
     from steamgiftbot.farm.steamgifts import FarmSteamGift
     from steamgiftbot.wins import Win
     sent = []
-    manager.notify = lambda text: sent.append(text) or []
+    manager.notify = lambda text=None, card=None: sent.append(card.plain() if card else text) or []
     manager.panelURLs = ['http://192.168.1.10:8092/']
     bot = object.__new__(FarmSteamGift)
     bot.platform = manager.platforms['steamgifts']
     win = Win('8caCY', 'Patrician Iii')
     bot.tellWin(win)
-    assert sent[0].startswith('🎉 SteamGifts: выигрыш: Patrician Iii\n')
-    assert win.url in sent[0] and sent[0].endswith('http://192.168.1.10:8092/#/wins')
+    assert sent[0].startswith('🎉 ВЫИГРЫШ · SteamGifts\nPatrician Iii — ' + win.url)
+    assert sent[0].endswith('Выигрыши: http://192.168.1.10:8092/#/wins')

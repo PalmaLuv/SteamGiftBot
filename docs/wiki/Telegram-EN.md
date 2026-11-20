@@ -22,21 +22,35 @@ keeps only recent messages.
 
 ## What the farm sends
 
-Every message looks the same: an icon, the site and the text, plus a link to
-the right part of the panel where it helps (the Tailscale address when there is
-one, so the link opens from your phone anywhere). The language is the one
-chosen in the panel.
+Messages are laid out like the project page and the panel: an icon and a
+title in capitals, the site's code (SG, IG, OP, GOG), the point in bold,
+figures in a monospace table, and buttons that open the right page of the
+panel or the site. The language is the one chosen in the panel.
 
-| Message | When |
-| --- | --- |
-| 🎉 SteamGifts: win: game + links to the giveaway and to Wins | as soon as the farm notices a win (SteamGifts, OpiumPulses) |
-| 🔑 IndieGala: the session no longer works… + "Reconnect" | the site stopped accepting the cookie; the site is stopped |
-| ⛔ site stopped: reason | the farm cannot go on (no cookie, account banned from giveaways, a settings error) |
-| ⚠️ not working for 60 min: error | the site could not be reached for about an hour in a row; the farm keeps trying |
-| ✅ working again. | the first successful run after such an outage |
-| 🎁 free games claimed: N — names | GOG, free Steam games, itch.io; one message per run |
-| ✅ / ⏳ / ⚠️ key "game" — result | after "Activate in ASF" («Активировать в ASF») or auto-activation |
-| 📊 Daily summary | every day at the chosen hour, if enabled |
+```
+🎉 WIN · SG SteamGifts
+Hollow Knight
+Get the key and mark it as received in the panel: SteamGifts requires it.
+[ Get key ] [ Wins ]
+```
+
+| Title | When | Buttons |
+| --- | --- | --- |
+| 🎉 WIN | the farm noticed a win (SteamGifts, OpiumPulses) | Get key, Wins |
+| 🔑 SIGN-IN NEEDED | the site stopped accepting the cookie; the site is stopped | Reconnect |
+| ⛔ SITE STOPPED | the farm cannot go on (no cookie, account banned, settings error) | Open the site |
+| ⚠️ NOT WORKING | the site could not be reached for about an hour | Log |
+| ✅ WORKING AGAIN | the first successful run after such an outage | — |
+| 🎁 FREE | free games claimed (GOG, Steam, itch.io), one message per run | Site |
+| ✅ KEY ACTIVATED / ⏳ WILL RETRY LATER / ⚠️ KEY REJECTED | the ASF activation result | Wins |
+| 📊 DAILY SUMMARY | every day at the chosen hour | Open the panel, Wins |
+
+Command replies look the same: `/status` is a table of sites with state
+icons, `/preview` is "PREVIEW" with the list of giveaways, `/wins` lists the
+unmarked wins.
+
+If Telegram refuses a button that links to a home address, the message still
+arrives, with the links written out under it.
 
 A single network blip does not send anything: the farm quietly tries again in
 15 minutes and only writes when the outage lasts about an hour.

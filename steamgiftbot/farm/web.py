@@ -19,6 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from steamgiftbot.farm import cards
 from steamgiftbot.farm.base import AuthError, PlatformError, RetryLater
 from steamgiftbot.farm.manager import FARM_FIELDS
 
@@ -265,7 +266,11 @@ class Handler(BaseHTTPRequestHandler):
                 platform.stop()
             return self.json({'ok': True})
         if path == '/api/notify-test':
-            problems = manager.notify("✅ Бот-ферма на связи: это тестовое сообщение из панели.")
+            problems = manager.notify(card=cards.Card(
+                '✅', 'БОТ-ФЕРМА НА СВЯЗИ', headline="Это тестовое сообщение из панели.",
+                lines=["Так будут выглядеть уведомления: выигрыши, слетевшие cookie, "
+                       "сбои площадок и сводка за сутки."],
+                buttons=[("Открыть панель", manager.panelLink('/overview'))]))
             if problems:
                 raise ValueError('; '.join(problems))
             return self.json({'ok': True})
@@ -309,7 +314,7 @@ class Handler(BaseHTTPRequestHandler):
                                                       f"в сети: {online}",
                               'bots': found['bots'], 'online': found['online']})
         if path == '/api/farm/report':
-            problems = manager.notify(manager.report())
+            problems = manager.notify(card=manager.reportCard())
             if problems:
                 raise ValueError('; '.join(problems))
             return self.json({'ok': True})

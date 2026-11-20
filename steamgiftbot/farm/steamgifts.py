@@ -90,9 +90,11 @@ class FarmSteamGift(SteamGift):
         return self.platform.extraReason(giveaway, self.points, self.min_points)
 
     def tellWin(self, win):
-        link = self.platform.manager.panelLink('/wins')
-        self.platform.notify(f"выигрыш: {win.name}\n{win.url}" +
-                             (f"\nОтметьте получение ключа: {link}" if link else ''), '🎉')
+        self.platform.notify('', '🎉', headline=win.name, link=win.url,
+                             note="Заберите ключ и отметьте в панели, что он получен: "
+                                  "SteamGifts этого требует.",
+                             buttons=[("Забрать ключ", win.url),
+                                      ("Выигрыши", self.platform.manager.panelLink('/wins'))])
 
     def skipped(self, giveaway, reason):
         super().skipped(giveaway, reason)

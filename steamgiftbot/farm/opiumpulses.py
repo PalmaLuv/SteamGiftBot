@@ -381,9 +381,10 @@ class OpiumPulsesPlatform(Platform):
             if not first:
                 self.info(f"Новый ключ на OpiumPulses: {name}")
                 self.recordWin(name, WON_KEYS)
-                link = self.manager.panelLink('/wins')
-                self.notify(f"выигрыш: {name}\nКлюч: {WON_KEYS}" +
-                            (f"\nВ панели: {link}" if link else ''), '🎉')
+                self.notify('', '🎉', headline=name, link=WON_KEYS,
+                            note="Ключ лежит в разделе «Giveaway keys» на сайте.",
+                            buttons=[("Забрать ключ", WON_KEYS),
+                                     ("Выигрыши", self.manager.panelLink('/wins'))])
         if fresh or first:
             state.setFlag(self.key, 'won_keys', sorted(known))
         state.setFlag(self.key, 'wins_seeded')

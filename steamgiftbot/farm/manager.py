@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 from steamgiftbot import notify
 from steamgiftbot import settings as sgSettings
-from steamgiftbot.farm import rules
+from steamgiftbot.farm import cards, rules
 from steamgiftbot.farm.base import (HISTORY_LENGTH, actingFor, applySettings, field, grouped,
                                     publicValues)
 
@@ -691,7 +691,10 @@ class FarmManager:
         self.state.updateWin(key, moment, name, **changes)
         title = self.platforms[key].title if key in self.platforms else key
         icon = {'ok': '✅', 'owned': '✅', 'retry': '⏳'}.get(kind, '⚠️')
-        self.notify(f"{icon} {title}: ключ «{name}» — {words}")
+        heading = {'ok': 'КЛЮЧ АКТИВИРОВАН', 'owned': 'КЛЮЧ: ИГРА УЖЕ ЕСТЬ',
+                   'retry': 'КЛЮЧ: ПОВТОРИМ ПОЗЖЕ'}.get(kind, 'КЛЮЧ НЕ ПОДОШЁЛ')
+        self.notify(card=cards.Card(icon, heading, title, key, name, lines=[words],
+                                    buttons=[("Выигрыши", self.panelLink('/wins'))]))
         if kind in ('ok', 'owned'):
             self.platforms[key].onWinStatus(win, 'activated')
         return kind, words
@@ -699,38 +702,39 @@ class FarmManager:
     # ---- daily report ----------------------------------------------------------
 
     def report(self, now=None):
+        return self.reportCard(now).plain()
+
+    # The daily summary: a table like the project page's log window, then the
+    # wins, the problems and what is waiting for the user.
+    def reportCard(self, now=None):
         since = (now or time.time()) - 86400
-        lines = ["📊 Сводка за сутки"]
-        winsTotal = 0
+        rows, wins, problems = [], [], []
         for platform in self.platforms.values():
             count, spent, _ = self.state.usage(platform.key)
-            wins = self.state.winsSince(platform.key, since)
-            winsTotal += len(wins)
-            if not count and not wins and not platform.running:
+            won = self.state.winsSince(platform.key, since)
+            wins += [(platform, win) for win in won]
+            if not count and not won and not platform.running:
                 continue
             unit = f" {platform.unit}" if platform.unit else ''
-            line = f"• {platform.title}: {count} вх."
-            if spent:
-                line += f", потрачено {spent}{unit}"
-            if platform.balance is not None:
-                line += f", баланс {platform.balance}{unit}"
-            if wins:
-                line += f"\n  🎉 {', '.join(win['name'] for win in wins)}"
+            rows.append([cards.code(platform.key), f"{count} вх.",
+                         f"{spent}{unit}" if spent else '—',
+                         '' if platform.balance is None else f"баланс {platform.balance}{unit}"])
             if platform.lastError:
-                line += f"\n  ⚠️ {platform.lastError}"
-            lines.append(line)
-        if len(lines) == 1:
-            lines.append("За сутки ни одного входа.")
-        lines.append(f"Выигрышей за сутки: {winsTotal}")
+                problems.append(f"⚠️ {platform.title}: {platform.lastError}")
+        card = cards.Card('📊', site='', headline=self.localNow().strftime('%d.%m, %H:%M'))
+        card.block = cards.table(rows) if rows else ["За сутки ни одного входа."]
+        card.lines.append(f"🎉 Выигрышей за сутки: {len(wins)}" +
+                          (f" — {', '.join(win['name'] for _, win in wins[:8])}" if wins else ''))
+        card.lines += problems
         waiting = self.openWins()
         if waiting:
-            lines.append(f"🔔 Не отмечено, что ключ получен: {len(waiting)} "
-                         f"({', '.join(win['name'] for win in waiting[:5])}). SteamGifts "
-                         "требует отмечать полученные выигрыши.")
-            link = self.panelLink('/wins')
-            if link:
-                lines.append(f"Отметить: {link}")
-        return '\n'.join(lines)
+            card.lines.append(f"🔔 Не отмечено, что ключ получен: {len(waiting)} "
+                              f"({', '.join(win['name'] for win in waiting[:5])})")
+            card.note = "SteamGifts требует отмечать полученные выигрыши."
+        card.buttons = [("Открыть панель", self.panelLink('/overview'))]
+        if waiting:
+            card.buttons.append(("Выигрыши", self.panelLink('/wins')))
+        return card
 
     # Sends the report once a day at the chosen hour. True when it went out.
     def reportTick(self):
@@ -742,7 +746,7 @@ class FarmManager:
         if now.hour != conf['report_hour'] or self.state.value('_farm', 'reportDay') == today:
             return False
         self.state.setFlag('_farm', 'reportDay', today)
-        self.notify(self.report())
+        self.notify(card=self.reportCard())
         return True
 
     def startClock(self):
@@ -1071,15 +1075,27 @@ class FarmManager:
                 lines.append(pattern.sub(lambda m: words.get(m.group(0), m.group(0)), line))
         return '\n'.join(lines)
 
+    # Every text of a card in the panel's language.
+    def translateCard(self, card):
+        tr = self.translate
+        return cards.Card(card.icon, tr(card.heading()), card.site, card.key, tr(card.headline),
+                          card.link, [tr(line) for line in card.lines],
+                          [tr(line) for line in card.block], tr(card.note),
+                          [(tr(text), url) for text, url in card.buttons])
+
     # Telegram / Discord settings are the ones SteamGiftBot already has.
-    def notify(self, text):
+    # Pass a cards.Card, or a plain text for a one-line note.
+    def notify(self, text=None, card=None):
         try:
             config = sgSettings.load(self.configPath)
         except sgSettings.SettingsError:
             return ['config.ini не читается']
         if not notify.isConfigured(config):
             return ['уведомления не настроены']
-        problems = notify.send(config, self.translate(text))
+        if card is None:
+            card = cards.Card(lines=[text or ''])
+        card = self.translateCard(card)
+        problems = notify.send(config, card.plain(), card=card)
         for problem in problems:
             log.warning(f"Уведомление не доставлено: {problem}")
         return problems

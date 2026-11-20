@@ -9,6 +9,8 @@ import threading
 
 import requests
 
+from steamgiftbot.farm import cards
+
 log = logging.getLogger('botfarm')
 
 API     = 'https://api.telegram.org/bot{token}/{method}'
@@ -49,24 +51,32 @@ class TelegramControl:
         return [platform for platform in platforms
                 if platform.key.startswith(word) or platform.title.lower().startswith(word)]
 
-    def statusText(self):
-        lines = []
+    def statusCard(self):
+        rows, notes = [], []
         for platform in self.manager.platforms.values():
             if not platform.configured():
                 continue
             snap = platform.snapshot()
-            balance = ('' if snap['balance'] is None
-                       else f", баланс {snap['balance']} {platform.unit}")
-            line = (f"{STATE_ICON.get(snap['state'], '•')} {platform.title}: "
-                    f"{snap['totals']['today']} вх. за 24 ч{balance}")
-            if snap['reason']:
-                line += f"\n    {snap['reason']}"
+            unit = f" {platform.unit}" if platform.unit else ''
+            rows.append([STATE_ICON.get(snap['state'], '•'), platform.title[:18],
+                         f"{snap['totals']['today']} вх./24 ч",
+                         '' if snap['balance'] is None else f"баланс {snap['balance']}{unit}"])
             if snap['error']:
-                line += f"\n    ⚠ {snap['error']}"
-            lines.append(line)
-        return '\n'.join(lines) or "Ни одна площадка не подключена."
+                notes.append(f"⚠️ {platform.title}: {snap['error']}")
+            elif snap['reason']:
+                notes.append(f"{cards.code(platform.key)}: {snap['reason']}")
+        if not rows:
+            return cards.Card('ℹ️', 'СТАТУС', headline="Ни одна площадка не подключена.",
+                              buttons=[("Подключить", self.manager.panelLink('/sites'))])
+        return cards.Card('ℹ️', 'СТАТУС', block=cards.table(rows), lines=notes,
+                          note="▶️ работает · ⏳ ждёт · ⏹ стоит · ⚠️ ошибка · 🔑 нужен вход",
+                          buttons=[("Открыть панель", self.manager.panelLink('/overview'))])
 
-    def handle(self, text):
+    def statusText(self):
+        return self.statusCard().plain()
+
+    # The answer to one message as a card, or None for anything not a command.
+    def reply(self, text):
         parts = (text or '').strip().split()
         if not parts or not parts[0].startswith('/'):
             return None
@@ -74,25 +84,30 @@ class TelegramControl:
         argument = parts[1] if len(parts) > 1 else ''
         manager = self.manager
         if command in ('help', 'commands'):
-            return '\n'.join(f"/{name} — {about}" for name, about in COMMANDS)
+            return cards.Card('ℹ️', 'КОМАНДЫ',
+                              lines=[f"/{name} — {about}" for name, about in COMMANDS])
         if command == 'status':
-            return self.statusText()
+            return self.statusCard()
         if command == 'report':
-            return manager.report()
+            return manager.reportCard()
         if command == 'wins':
             wins = manager.openWins()
             if not wins:
-                return "Неотмеченных выигрышей нет."
-            return '\n'.join(f"🎉 {win['name']} ({win['title']})" for win in wins[:15])
+                return cards.Card('✅', 'ВЫИГРЫШИ', headline="Неотмеченных выигрышей нет.")
+            return cards.Card('🎉', 'ВЫИГРЫШИ БЕЗ ОТМЕТКИ',
+                              lines=[f"• {win['name']} — {win['title']}" for win in wins[:15]],
+                              buttons=[("Выигрыши", manager.panelLink('/wins'))])
         if command in ('start', 'pause', 'stop', 'run', 'preview'):
             sites = self.findSites(argument)
             if not sites:
-                return f"Не знаю площадку «{argument}». Есть: " + ', '.join(
-                    platform.key for platform in manager.platforms.values())
+                return cards.Card('⚠️', 'ВНИМАНИЕ', headline=f"Не знаю площадку «{argument}».",
+                                  lines=["Есть: " + ', '.join(platform.key for platform
+                                                             in manager.platforms.values())])
             if command == 'preview':
                 if len(sites) != 1:
-                    return "Укажите одну площадку: /preview indiegala"
-                return self.previewText(sites[0])
+                    return cards.Card('⚠️', 'ВНИМАНИЕ',
+                                      headline="Укажите одну площадку: /preview indiegala")
+                return self.previewCard(sites[0])
             done = []
             for platform in sites:
                 if command == 'start' and platform.configured() and platform.start():
@@ -106,26 +121,36 @@ class TelegramControl:
             verb = {'start': 'Запущено', 'pause': 'Остановлено', 'stop': 'Остановлено',
                     'run': 'Новый проход начат'}[command]
             if not done:
-                return "Нечего делать: площадки уже в этом состоянии."
-            return f"{verb}: {', '.join(done)}"
-        return "Не знаю такой команды. /help — список."
+                return cards.Card('ℹ️', 'ФЕРМА',
+                                  headline="Нечего делать: площадки уже в этом состоянии.")
+            return cards.Card('✅', 'ГОТОВО', headline=f"{verb}: {', '.join(done)}")
+        return cards.Card('⚠️', 'ВНИМАНИЕ', headline="Не знаю такой команды. /help — список.")
 
-    def previewText(self, platform):
+    def handle(self, text):
+        card = self.reply(text)
+        return card.plain() if card else None
+
+    def previewCard(self, platform):
         try:
             result = platform.runPreview()
         except Exception as error:
-            return f"{platform.title}: не получилось — {error}"
+            return cards.Card('⚠️', 'ЧТО ВОЗЬМЁТ', platform.title, platform.key,
+                              headline=f"не получилось — {error}")
         take = [item for item in result['items'] if item['enter']]
         cost = sum(item.get('cost') or 0 for item in take)
-        lines = [f"{platform.title}: войдёт в {len(take)} из {len(result['items'])} "
-                 f"на {cost} {platform.unit}"]
-        lines += [f"• {item['name']} ({item.get('cost') or 0} {platform.unit})"
-                  for item in take[:15]]
+        lines = [f"• {item['name']} ({item.get('cost') or 0} {platform.unit})"
+                 for item in take[:15]]
         if len(take) > 15:
             lines.append(f"…и ещё {len(take) - 15}")
-        if result.get('note'):
-            lines.append(result['note'])
-        return '\n'.join(lines)
+        return cards.Card('🔍', 'ЧТО ВОЗЬМЁТ', platform.title, platform.key,
+                          headline=f"войдёт в {len(take)} из {len(result['items'])} "
+                                   f"на {cost} {platform.unit}",
+                          lines=lines, note=result.get('note') or '',
+                          buttons=[("Пробный проход в панели",
+                                    self.manager.panelLink(f'/site/{platform.key}/preview'))])
+
+    def previewText(self, platform):
+        return self.previewCard(platform).plain()
 
     # ---- talking to Telegram ---------------------------------------------------
 
@@ -148,10 +173,25 @@ class TelegramControl:
         message = update.get('message') or update.get('edited_message') or {}
         if str((message.get('chat') or {}).get('id')) != chat:
             return None
-        reply = self.manager.translate(self.handle(message.get('text')))
-        if reply:
-            self.call(token, 'sendMessage', chat_id=chat, text=reply[:4000])
-        return reply
+        card = self.reply(message.get('text'))
+        if card is None:
+            return None
+        card = self.manager.translateCard(card)
+        try:
+            self.send(token, chat, card)
+        except RuntimeError:
+            if not card.buttons:
+                raise
+            # A button Telegram will not take: the links written out instead.
+            self.send(token, chat, card.withoutButtons())
+        return card.plain()
+
+    def send(self, token, chat, card):
+        params = {'chat_id': chat, 'text': card.html()[:4000], 'parse_mode': 'HTML',
+                  'disable_web_page_preview': True}
+        if card.keyboard():
+            params['reply_markup'] = card.keyboard()
+        self.call(token, 'sendMessage', **params)
 
     # Skips whatever piled up while the farm was off and announces the commands.
     def prepare(self, token):

@@ -136,7 +136,7 @@ def test_asf_errors_are_plain(manager):  # noqa: F811
 
 def test_win_key_and_redeem(manager):  # noqa: F811
     manager.asf.session = FakeASF()
-    manager.notify = lambda text: []
+    manager.notify = lambda text=None, card=None: []
     gala = manager.platforms['indiegala']
     gala.recordWin('Hollow Pact', 'https://x/')
     win = manager.openWins()[0]
@@ -151,7 +151,7 @@ def test_win_key_and_redeem(manager):  # noqa: F811
 
 def test_auto_redeem_on_new_key(manager):  # noqa: F811
     manager.asf.session = fake = FakeASF(detail=9, status=2)
-    manager.notify = lambda text: []
+    manager.notify = lambda text=None, card=None: []
     manager.updateFarmSettings({'auto_redeem': True})
     manager.platforms['indiegala'].recordWin('Old Game')
     win = manager.openWins()[0]

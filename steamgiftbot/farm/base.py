@@ -22,7 +22,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
-from steamgiftbot.farm import rules
+from steamgiftbot.farm import cards, rules
 
 # A recent desktop Chrome. Sites behind Incapsula or Cloudflare tie their
 # cookies to the browser that earned them, so each site lets the user paste
@@ -646,7 +646,7 @@ class Platform:
     # reported, say it works again.
     def recovered(self):
         if self.failures >= WATCH_AFTER:
-            self.notify("снова работает.", '✅')
+            self.notify('', '✅', title='СНОВА РАБОТАЕТ', headline="Проход прошёл без ошибок.")
         self.failures = 0
 
     # A failed try. Said once, after about an hour of them; a single blip is
@@ -655,8 +655,10 @@ class Platform:
         self.failures += 1
         if self.failures == WATCH_AFTER:
             minutes = WATCH_AFTER * ERROR_RETRY_SECONDS // 60
-            self.notify(f"не работает уже {minutes} мин: {error}\n"
-                        f"Ферма пробует снова каждые {ERROR_RETRY_SECONDS // 60} мин.", '⚠️')
+            self.notify(str(error), '⚠️', title='НЕ РАБОТАЕТ',
+                        headline=f"Не работает уже {minutes} мин",
+                        note=f"Ферма пробует снова каждые {ERROR_RETRY_SECONDS // 60} мин.",
+                        buttons=[("Журнал", self.manager.panelLink('/journal/log'))])
 
     def warn(self, text):
         self.logger.warning(text)
@@ -679,9 +681,14 @@ class Platform:
     def recordWin(self, name, url=''):
         self.manager.state.addWin(self.key, {'time': time.time(), 'name': name, 'url': url})
 
-    # '🔑 IndieGala: …' — one look for every message a site sends.
-    def notify(self, text, icon='ℹ️'):
-        self.manager.notify(f"{icon} {self.title}: {text}")
+    # One look for every message a site sends: a card (see cards.py) with
+    # this site's name and code. text gives the plain lines under the headline.
+    def notify(self, text='', icon='ℹ️', title='', headline='', link='', note='',
+               buttons=None):
+        self.manager.notify(card=cards.Card(
+            icon, title, self.title, self.key, headline, link,
+            [line for line in (text or '').split('\n') if line], note=note,
+            buttons=list(buttons or [])))
 
     # Free games taken this pass, in one message rather than one per game.
     def announceClaims(self):
@@ -689,8 +696,11 @@ class Platform:
         self.passClaims = []
         if not names:
             return
-        shown = ', '.join(names[:10]) + (f" и ещё {len(names) - 10}" if len(names) > 10 else '')
-        self.notify(f"забрано бесплатных игр: {len(names)} — {shown}", '🎁')
+        lines = [f"• {name}" for name in names[:10]]
+        if len(names) > 10:
+            lines.append(f"…и ещё {len(names) - 10}")
+        self.notify('\n'.join(lines), '🎁', headline=f"−100% · забрано игр: {len(names)}",
+                    buttons=[("Площадка", self.manager.panelLink(f'/site/{self.key}'))])
 
     # ---- rules every site shares -------------------------------------------
 
@@ -846,17 +856,18 @@ class Platform:
                 self.state = AUTH
                 self.lastError = str(error)
                 self.warn(f"Нужна новая авторизация: {error}")
-                link = self.manager.panelLink(f'/connect/{self.key}')
-                self.notify(f"сессия больше не действует, площадка остановлена.\n{error}" +
-                            (f"\nПодключить заново: {link}" if link else ''), '🔑')
+                self.notify(str(error), '🔑', headline="Сессия больше не действует",
+                            note="Площадка остановлена до нового подключения.",
+                            buttons=[("Подключить заново",
+                                      self.manager.panelLink(f'/connect/{self.key}'))])
                 return
             except PlatformError as error:
                 self.state = ERROR
                 self.lastError = str(error)
                 self.warn(f"Площадка остановлена: {error}")
-                link = self.manager.panelLink(f'/site/{self.key}')
-                self.notify(f"площадка остановлена: {error}" +
-                            (f"\nОткрыть: {link}" if link else ''), '⛔')
+                self.notify(str(error), '⛔', headline="Продолжать нельзя",
+                            buttons=[("Открыть площадку",
+                                      self.manager.panelLink(f'/site/{self.key}'))])
                 return
             except RetryLater as error:
                 self.state = ERROR
