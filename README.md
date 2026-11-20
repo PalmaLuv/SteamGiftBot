@@ -14,7 +14,7 @@
 
 Enters giveaways for you and tells you on Telegram when you win one.
 
-**[Русская версия](README.ru.md)**
+**[Русская версия](README.ru.md)** · **[Подробная вики (на русском)](docs/wiki/Home.md)**
 
 SteamGiftBot comes two ways, sharing one install:
 
