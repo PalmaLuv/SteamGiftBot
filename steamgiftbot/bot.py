@@ -19,7 +19,7 @@ from time import sleep
 from urllib3.util import Retry
 
 from steamgiftbot import filters, notify, wins
-from steamgiftbot.console import log
+from steamgiftbot.console import isInteractive, log
 from steamgiftbot.giveaway import parseRow
 from steamgiftbot.settings import DEFAULT_CONFIG_PATH
 from steamgiftbot.state import State, defaultPath
@@ -84,6 +84,7 @@ class SteamGift :
 
         self.points     = 0
         self.xsrfToken  = None
+        self.lastRejection = ''
         self.running    = True
         self.stats      = RunStats()
 
@@ -178,6 +179,9 @@ class SteamGift :
                                  "The session has probably expired.") from error
 
         if jsonData.get('type') != 'success':
+            # Kept for whoever embeds the bot: the farm remembers refusals that
+            # will never change, so it does not ask again every quarter hour.
+            self.lastRejection = jsonData.get('msg', '') or ''
             log(f"Entry rejected: {jsonData.get('msg', 'unknown reason')}", "yellow")
             self.stats.rejection()
             return False
@@ -202,15 +206,25 @@ class SteamGift :
     def waitForPoints(self):
         log(f"Sleeping to get more points. We have {self.points} points."
             + f"\nTo continue, you need at least {self.min_points}", "magenta")
+        # The countdown is for a terminal; under systemd or docker every tick
+        # would become another line of carriage returns in the journal.
+        countdown = isInteractive()
         for remaining in range(self.pointsWait, 0, -1):
             if not self.running:
                 return
-            print(f"The are {remaining} seconds left.\t\r", end='')
+            if countdown:
+                print(f"The are {remaining} seconds left.\t\r", end='')
             sleep(1)
-        print()
+        if countdown:
+            print()
 
     # Walks the giveaway pages. Returns as soon as the balance runs out or the
     # listing is exhausted; start() decides whether to go round again.
+    # A place for whoever embeds the bot to add rules of its own (the farm
+    # skips games already owned). None means 'enter it'.
+    def extraSkipReason(self, giveaway):
+        return None
+
     def getGameContent(self, page=1):
         _page = page
         while self.running:
@@ -248,6 +262,8 @@ class SteamGift :
 
                 reason = filters.reasonToSkip(giveaway, self.config, self.points,
                                               hasCards=get_game_info)
+                if reason is None:
+                    reason = self.extraSkipReason(giveaway)
                 if reason is not None:
                     self.stats.skip(reason)
                     if reason in (filters.NOT_ENOUGH, filters.NO_CARDS):

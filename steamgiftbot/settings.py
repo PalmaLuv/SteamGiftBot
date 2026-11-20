@@ -113,7 +113,8 @@ def toInt(value):
     if value is None or isinstance(value, bool):
         return value
     text = str(value).strip()
-    if text == '':
+    # 'None' is what an older farm wrote for an empty box; read it as unset.
+    if text == '' or text.lower() == 'none':
         return None
     number = int(text)
     if number < 0:
@@ -274,7 +275,7 @@ def save(settings, config_path=DEFAULT_CONFIG_PATH):
         'log_info'  : 'yes' if settings.log_info else 'no',
         'gift_type' : settings.gift_type,
         'pinned'    : 'yes' if settings.pinned else 'no',
-        'min_points': str(settings.min_points),
+        'min_points': '' if settings.min_points is None else str(settings.min_points),
         'cards_only': 'yes' if settings.cards_only else 'no',
         'skip_region_locked': 'yes' if settings.skip_region_locked else 'no',
         'blacklist' : ', '.join(settings.blacklist),

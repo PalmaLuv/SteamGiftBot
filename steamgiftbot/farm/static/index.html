@@ -1,0 +1,1227 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#171b21">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Бот-ферма">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<title>Бот-ферма</title>
+<style>
+:root{
+  --bg:#0f1216;--panel:#171b21;--panel2:#1e232b;--line:#2a303a;--field:#646d7e;--text:#e6e9ee;--muted:#9aa3b2;
+  --link:#4f8cff;--primary:#2563eb;--ok:#2fbf71;--warn:#e0a526;--bad:#f0726b;--sleep:#8b98ff;--focus:#8ab4ff;
+  --radius:10px;--nav:224px;font-synthesis:none;
+  /* one colour per site, checked for colour-blind separation on --panel */
+  --s-steamgifts:#3987e5;--s-indiegala:#d95926;--s-opiumpulses:#199e70;--s-other:#c98500;
+}
+*{box-sizing:border-box}
+html{color-scheme:dark}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--link);text-decoration:none}
+a:hover{text-decoration:underline}
+h1{font-size:22px;margin:0;line-height:1.25}
+h2{font-size:16px;margin:0}
+h3{font-size:14px;margin:0}
+p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+button,.btn{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 12px;min-height:36px;cursor:pointer;color:var(--text);text-decoration:none;white-space:nowrap}
+button:hover,.btn:hover{border-color:#3d4654;text-decoration:none}
+button.primary,.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+button.danger{color:var(--bad)}
+button.ghost{background:none;border-color:transparent}
+button:disabled{opacity:.45;cursor:default}
+button.icon{padding:6px;min-width:36px;justify-content:center}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+input,select,textarea{background:#0c0f13;border:1px solid var(--field);border-radius:8px;padding:8px 10px;width:100%;min-height:38px}
+textarea{min-height:90px;resize:vertical;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.hidden{display:none!important}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ---- shell ---- */
+.shell{display:grid;grid-template-columns:var(--nav) minmax(0,1fr);min-height:100vh}
+.side{position:sticky;top:0;height:100vh;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:16px 12px;gap:4px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px;padding:4px 8px 16px}
+.brand img{width:28px;height:28px}
+.nav a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:var(--muted);font-weight:500}
+.nav a:hover{background:var(--panel2);color:var(--text);text-decoration:none}
+.nav a.on{background:var(--panel2);color:var(--text)}
+.nav a.on svg{color:var(--link)}
+.badge{margin-left:auto;background:var(--ok);color:#0b1a12;font-size:11px;font-weight:700;border-radius:99px;padding:1px 7px;min-width:20px;text-align:center}
+.badge.bad{background:var(--bad);color:#1f0b0a}
+.side .foot{margin-top:auto;display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted);padding:8px}
+.content{padding:24px 28px 40px;max-width:1240px;width:100%;margin:0 auto}
+.page-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin-bottom:18px}
+.page-head .lead{flex:0 0 100%;color:var(--muted)}
+.page-head .actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.back{display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-size:13px;margin-bottom:6px}
+.tabbar{display:none}
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr}
+  .side{display:none}
+  .content{padding:16px 16px 96px}
+  .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--panel);border-top:1px solid var(--line);padding:4px 4px calc(4px + env(safe-area-inset-bottom))}
+  .tabbar a{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;min-height:52px;color:var(--muted);font-size:11px;position:relative}
+  .tabbar a.on{color:var(--text)}
+  .tabbar a.on svg{color:var(--link)}
+  .tabbar .dot{position:absolute;top:4px;left:calc(50% + 8px);width:9px;height:9px;border-radius:50%;background:var(--ok)}
+  button,.btn{min-height:44px}
+  button.icon{min-width:44px}
+  h1{font-size:20px}
+}
+
+/* ---- blocks ---- */
+.block{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.block + .block,.stack > * + *{margin-top:16px}
+.block-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.block-head a{margin-left:auto;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.pill{font-size:12px;padding:2px 10px;border-radius:99px;border:1px solid currentColor;white-space:nowrap}
+.s-running{color:var(--ok)}.s-sleeping{color:var(--sleep)}.s-stopped{color:var(--muted)}
+.s-error{color:var(--warn)}.s-auth{color:var(--bad)}.s-unset{color:var(--muted)}
+.dot-site{width:10px;height:10px;border-radius:3px;flex:none}
+.why{font-size:13px;background:var(--panel2);border-radius:8px;padding:7px 10px}
+.err{background:rgba(240,114,107,.1);border:1px solid rgba(240,114,107,.4);color:#f5aaa5;border-radius:8px;padding:8px 10px;font-size:13px;word-break:break-word}
+.okbox{background:rgba(47,191,113,.1);border:1px solid rgba(47,191,113,.45);border-radius:8px;padding:10px 12px}
+.note{background:rgba(224,165,38,.08);border:1px solid rgba(224,165,38,.35);border-radius:8px;padding:10px 12px;font-size:13px}
+.empty{color:var(--muted);padding:22px 4px;text-align:center}
+.empty b{display:block;color:var(--text);font-size:15px;margin-bottom:4px}
+.empty .btn,.empty button{margin-top:12px}
+
+/* overview */
+.summary{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:16px;margin-bottom:16px}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-content:start}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+.tile b{display:block;font-size:22px;font-variant-numeric:tabular-nums;line-height:1.25}
+.tile b.long{font-size:15px;padding:4px 0 2px}
+.tile small{color:var(--muted);font-size:12px}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;position:relative;min-width:0}
+.chart-head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:6px}
+.chart-head h2{margin-right:auto;font-size:14px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted)}
+.legend i,.tip i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-wrap:wrap}
+.seg button{border:0;border-radius:0;padding:4px 10px;min-height:30px;background:none;color:var(--muted);font-size:12px}
+.seg button.on{background:var(--panel2);color:var(--text)}
+#chartBox{min-height:190px}
+#chartBox svg{display:block}
+#chartBox .hit:hover{fill:rgba(255,255,255,.04)}
+.tbl{max-height:190px;overflow:auto}
+.tip{position:absolute;pointer-events:none;background:#0c0f13;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:12px;white-space:nowrap;z-index:2;line-height:1.6}
+.tip .n{float:right;margin-left:14px;font-variant-numeric:tabular-nums}
+.rows{display:flex;flex-direction:column}
+.srow{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,2fr) auto;gap:10px 16px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.srow:first-child{border-top:0}
+.srow .name{display:flex;align-items:center;gap:8px;font-weight:600;min-width:0}
+.srow .name a{color:var(--text)}
+.srow .info{font-size:13px;min-width:0}
+.srow .info .muted{font-size:12px}
+.srow .act{display:flex;gap:6px}
+@media (max-width:900px){.summary{grid-template-columns:1fr}.srow{grid-template-columns:1fr auto}.srow .info{grid-column:1/-1;grid-row:2}}
+.wins{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.win{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;background:rgba(47,191,113,.1);border:1px solid rgba(47,191,113,.45);border-radius:var(--radius);padding:10px 14px}
+.win .big{font-size:20px}
+.win .sp{flex:1}
+.more{color:var(--muted);font-size:12px}
+
+/* site cards and catalog */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:12px}
+.card-head{display:flex;align-items:flex-start;gap:10px}
+.card-head .pill{margin-left:auto}
+.card-head .desc{color:var(--muted);font-size:12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--panel2);border-radius:8px;padding:8px 10px;min-width:0}
+.stat b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+.stat small{color:var(--muted);font-size:12px}
+.card .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:auto}
+.cat{border-style:dashed}
+.tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:var(--muted);background:var(--panel2);border-radius:6px;padding:2px 7px}
+.bars{display:flex;flex-direction:column;gap:8px}
+.bar{font-size:12px;color:var(--muted)}
+.bar .v{float:right;color:var(--text);font-variant-numeric:tabular-nums}
+.bar .track{height:6px;background:var(--panel2);border-radius:99px;overflow:hidden;margin-top:3px}
+.bar .fill{height:100%;background:var(--link);border-radius:99px}
+.bar.full .fill{background:var(--warn)}
+
+/* tabs */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:16px;overflow-x:auto}
+.tabs a,.tabs button{border:0;background:none;border-bottom:2px solid transparent;border-radius:0;padding:10px 12px;color:var(--muted);min-height:40px;font-weight:500}
+.tabs a:hover{text-decoration:none;color:var(--text)}
+.tabs .on{color:var(--text);border-bottom-color:var(--link)}
+
+/* forms */
+.form{display:flex;flex-direction:column;gap:14px}
+.fieldset{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:14px}
+.fieldset > h2{font-size:15px}
+.fieldset > p{color:var(--muted);font-size:13px;margin-top:-8px}
+.f label{display:block;font-size:13px;margin-bottom:5px;font-weight:500}
+.f small{display:block;color:var(--muted);font-size:12px;margin-top:4px}
+.chk{display:flex;gap:10px;align-items:flex-start}
+.chk input{width:20px;height:20px;min-height:0;margin:1px 0 0;flex:none;accent-color:var(--primary)}
+.chk label{margin:0;font-weight:400}
+.cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.savebar{position:sticky;bottom:0;display:flex;gap:10px;align-items:center;justify-content:flex-end;background:var(--bg);padding:12px 0;border-top:1px solid var(--line);z-index:3}
+@media (max-width:900px){.savebar{bottom:64px}}
+.presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.preset{background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:12px;display:flex;flex-direction:column;gap:6px;text-align:left;white-space:normal;align-items:flex-start;cursor:pointer}
+.preset b{font-size:14px}
+.preset span{color:var(--muted);font-size:12px}
+.preset.on{border-color:var(--link);box-shadow:inset 0 0 0 1px var(--link)}
+
+/* wizard */
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;counter-reset:step}
+.steps li{display:grid;grid-template-columns:32px 1fr;gap:4px 12px;counter-increment:step;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+.steps li::before{content:counter(step);grid-row:span 2;width:28px;height:28px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.steps li h3{font-size:15px}
+.steps li p{color:var(--muted);font-size:13px}
+.steps li .btn{margin-top:8px;justify-self:start}
+
+/* tables */
+.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:9px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+tr:last-child td{border-bottom:0}
+th{color:var(--muted);font-weight:500;font-size:12px;position:sticky;top:0;background:var(--panel);z-index:1}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.ok{color:var(--ok)}td.skip{color:var(--muted)}
+td.act{white-space:nowrap;text-align:right;width:1%}
+td.act button{min-height:32px;padding:3px 8px;margin-left:4px}
+td select{width:auto;min-height:32px;padding:3px 6px;font-size:12px}
+.key{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:var(--panel2);border-radius:6px;padding:2px 6px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.toolbar input[type=search]{max-width:280px}
+.toolbar select{width:auto}
+.toolbar .sp{flex:1}
+.pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;font-size:13px}
+.log{height:min(62vh,640px);overflow:auto;padding:10px 14px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+.log .t{color:var(--muted)}.log .s{color:var(--muted)}.log .WARNING{color:var(--warn)}.log .ERROR{color:var(--bad)}.log .hit{color:#9fe3bd}
+
+/* settings */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:6px 12px;border-radius:99px;background:var(--panel);border:1px solid var(--line);color:var(--text)}
+.chip:hover{text-decoration:none;border-color:#3d4654}
+.chip.good{border-color:rgba(47,191,113,.5)}.chip.warn{border-color:rgba(224,165,38,.5)}
+.sects .sect{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+.sects .sect + .sect{margin-top:10px}
+.sect > summary{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;list-style:none;border-radius:var(--radius)}
+.sect > summary::-webkit-details-marker{display:none}
+.sect > summary:hover{background:rgba(255,255,255,.02)}
+.sect-ico{width:36px;height:36px;border-radius:9px;background:var(--panel2);display:flex;align-items:center;justify-content:center;color:var(--link);flex:none}
+.sect-t{display:flex;flex-direction:column;min-width:0;flex:1}
+.sect-t b{font-size:15px;font-weight:600}
+.sect-dirty{font-size:12px;color:var(--warn);border:1px solid rgba(224,165,38,.45);border-radius:99px;padding:1px 8px}
+.chev{transition:transform .15s;color:var(--muted)}
+.sect[open] .chev{transform:rotate(180deg)}
+.sect-body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px;border-top:1px solid var(--line);padding-top:14px}
+.sect-foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-top:1px solid var(--line);padding-top:12px}
+.sect-foot .sp{flex:1}
+.f.wide{grid-column:1/-1}
+.f.span2{grid-column:span 2}
+.sub-block{border-top:1px solid var(--line);padding-top:14px;display:flex;flex-direction:column;gap:10px}
+@media (max-width:600px){.f.span2{grid-column:auto}}
+.inline{display:flex;gap:8px}
+.inline input{flex:1;min-width:0}
+.quick,.picklist{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.pillbtn{min-height:30px;padding:3px 10px;border-radius:99px;font-size:12px}
+.secret-set{display:flex;align-items:center;gap:10px;min-height:38px}
+.okText{color:var(--ok);font-size:13px}.warnText{color:var(--warn)}
+.howto{background:var(--panel2);border-radius:8px;padding:10px 12px}
+.howto summary{cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:500}
+.howto ol{margin:10px 0 2px;padding-left:20px;display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:13px}
+.howto ol b{color:var(--text)}
+.addrs{display:flex;flex-direction:column;gap:8px}
+.addr{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--panel2);border-radius:8px;padding:8px 10px}
+.addr .muted{min-width:170px}
+.addr code{font-size:14px;flex:1}
+.numbered{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:10px;font-size:14px}
+.numbered li::marker{color:var(--link);font-weight:700}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;background:var(--panel2);border-radius:5px;padding:1px 5px}
+input.switch{appearance:none;-webkit-appearance:none;width:40px;height:22px;min-height:0;border-radius:99px;background:#3a4250;border:0;position:relative;cursor:pointer;flex:none;margin:0;padding:0;transition:background .15s}
+input.switch::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s}
+input.switch:checked{background:var(--primary)}
+input.switch:checked::after{transform:translateX(18px)}
+@media (max-width:600px){.inline{flex-direction:column}.addr .muted{min-width:0;flex-basis:100%}}
+
+/* dialogs and toast */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:10}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);width:100%;max-width:560px;padding:20px}
+.modal.wide{max-width:920px}
+.modal h2{margin-bottom:12px}
+.row{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;flex-wrap:wrap}
+.pv-sum{font-size:13px;display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.pv-table{max-height:55vh}
+#login{max-width:360px;margin:12vh auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:24px}
+#login .brand{padding:0 0 16px}
+#login .msg{color:var(--bad);font-size:13px;min-height:20px;margin-top:8px}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:8px;z-index:20;max-width:90vw}
+#toast.bad{border-color:var(--bad);color:#f5aaa5}
+@media (max-width:900px){#toast{bottom:84px}}
+</style>
+</head>
+<body>
+
+<div id="login" class="hidden">
+  <div class="brand"><img src="/icon.svg" alt="">Бот-ферма</div>
+  <form id="loginForm" class="form">
+    <div class="f"><label for="pw">Пароль панели</label><input id="pw" type="password" autocomplete="current-password" autofocus></div>
+    <button class="primary" type="submit">Войти</button>
+    <div class="msg" id="loginMsg" role="alert"></div>
+  </form>
+</div>
+
+<div id="app" class="shell hidden">
+  <aside class="side" aria-label="Разделы">
+    <div class="brand"><img src="/icon.svg" alt="">Бот-ферма</div>
+    <nav class="nav" id="nav"></nav>
+    <div class="foot"><span id="clock"></span><button class="ghost" data-act="logout" style="justify-content:flex-start;padding-left:2px"><svg class="i"><use href="#i-out"/></svg>Выйти</button></div>
+  </aside>
+  <main class="content" id="view" tabindex="-1"></main>
+  <nav class="tabbar" id="tabbar" aria-label="Разделы"></nav>
+</div>
+
+<div id="overlay" class="overlay hidden"><div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"></div></div>
+<div id="toast" class="hidden" role="status" aria-live="polite"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-sites" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></symbol>
+  <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></symbol>
+  <symbol id="i-log" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8M21 3v5h-5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v12M6 12l6 6 6-6M4 21h16"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></symbol>
+  <symbol id="i-lib" viewBox="0 0 24 24"><path d="M4 19V5a2 2 0 0 1 2-2h4v18H6a2 2 0 0 1-2-2zM14 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4z"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3M17 6l3 3M14 9l2 2"/></symbol>
+</svg>
+
+<script>
+'use strict';
+/* ====================== helpers ====================== */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const icon = (name, label) => `<svg class="i" ${label ? `role="img" aria-label="${esc(label)}"` : 'aria-hidden="true"'}><use href="#i-${name}"/></svg>`;
+function localStorageGet(k){ try { return localStorage.getItem('bf_' + k) } catch { return null } }
+function localStorageSet(k, v){ try { localStorage.setItem('bf_' + k, v) } catch {} }
+async function api(path, body){
+  const opts = body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Requested-With': 'BotFarm'}, body: JSON.stringify(body)};
+  const r = await fetch(path, {...opts, credentials: 'same-origin'});
+  let data = {}; try { data = await r.json() } catch {}
+  if (r.status === 401 && !path.endsWith('/login')) { showLogin(); throw new Error('нужно войти') }
+  if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+  return data;
+}
+function toast(text, bad){
+  const t = $('#toast'); t.textContent = text; t.className = bad ? 'bad' : '';
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.add('hidden'), 4000);
+}
+const hm = ts => ts ? new Date(ts * 1000).toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'}) : '—';
+const dt = ts => ts ? new Date(ts * 1000).toLocaleString('ru-RU', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) : '—';
+function ago(ts){
+  if (!ts) return 'ещё не было'; const s = Math.max(0, Date.now() / 1000 - ts);
+  if (s < 60) return 'только что'; if (s < 3600) return Math.floor(s / 60) + ' мин назад';
+  if (s < 86400) return Math.floor(s / 3600) + ' ч назад'; return Math.floor(s / 86400) + ' дн назад';
+}
+function until(ts){ if (!ts) return ''; const m = Math.max(0, Math.round((ts - Date.now() / 1000) / 60)); return m < 1 ? 'меньше минуты' : m < 120 ? m + ' мин' : Math.round(m / 60) + ' ч'; }
+const sum = (list, f) => list.reduce((a, x) => a + f(x), 0);
+const SITE_COLOR = key => `var(--s-${key}, var(--s-other))`;
+const UNIT = key => platforms.find(p => p.key === key)?.unit || '';
+
+/* ====================== state ====================== */
+const STATE = {
+  running: ['Работает', 's-running'], sleeping: ['Ждёт', 's-sleeping'], stopped: ['Остановлена', 's-stopped'],
+  error: ['Ошибка, повтор', 's-error'], auth: ['Нужен вход заново', 's-auth'],
+};
+const CATEGORY = {points: 'Раздачи за баллы', free: 'Бесплатные игры'};
+const NEEDS = {cookie: 'Подключение: cookie из браузера', asf: 'Подключение: ArchiSteamFarm на этом сервере', none: 'Ничего не нужно'};
+let platforms = [], openWins = [], summary = null, summaryAt = 0, timer = null, farmConf = null;
+let days = +localStorageGet('days') || 30, chartMode = 'chart';
+let logCursor = {}, logBuf = {}, previewSeq = 0, lastFocus = null;
+const connected = () => platforms.filter(p => p.configured);
+const catalog = () => platforms.filter(p => !p.configured);
+const byKey = key => platforms.find(p => p.key === key);
+
+function stateOf(p){
+  if (!p.configured && p.state === 'stopped') return ['Не подключена', 's-unset'];
+  const [label, cls] = STATE[p.state] || [p.state, ''];
+  if (p.state === 'sleeping' && p.nextCycle) return [label + ' · ' + until(p.nextCycle), cls];
+  return [label, cls];
+}
+const isActive = p => ['running', 'sleeping', 'error'].includes(p.state);
+function whyText(p){
+  if (!isActive(p)) return '';
+  if (p.reason) return p.reason;
+  if (p.state === 'sleeping') return 'Пауза между проходами';
+  if (p.state === 'running') return 'Идёт проход';
+  return '';
+}
+const balance = p => p.balance == null ? '—' : `${p.balance} ${p.unit}`;
+
+/* ====================== routing ====================== */
+const NAV = [
+  ['overview', 'Обзор', 'home'], ['sites', 'Площадки', 'sites'], ['wins', 'Выигрыши', 'trophy'],
+  ['journal', 'Журнал', 'log'], ['settings', 'Настройки', 'gear'],
+];
+function parseRoute(){
+  const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  return {page: parts[0] || 'overview', key: parts[1], tab: parts[2]};
+}
+function go(hash){ if (location.hash === hash) render(); else location.hash = hash; }
+function renderNav(){
+  const {page} = parseRoute(), current = page === 'site' || page === 'connect' ? 'sites' : page;
+  const winsN = openWins.length, authN = platforms.filter(p => p.state === 'auth').length;
+  const badge = key => key === 'wins' && winsN ? `<span class="badge" aria-label="${winsN} новых">${winsN}</span>`
+    : key === 'sites' && authN ? `<span class="badge bad" aria-label="нужно внимание">${authN}</span>` : '';
+  $('#nav').innerHTML = NAV.map(([k, l, i]) => `<a href="#/${k}" class="${k === current ? 'on' : ''}" ${k === current ? 'aria-current="page"' : ''}>${icon(i)}${l}${badge(k)}</a>`).join('');
+  $('#tabbar').innerHTML = NAV.map(([k, l, i]) => `<a href="#/${k}" class="${k === current ? 'on' : ''}" ${k === current ? 'aria-current="page"' : ''}>${icon(i)}<span>${l}</span>${badge(k) ? '<span class="dot"></span>' : ''}</a>`).join('');
+}
+const PAGES = {overview: pageOverview, sites: pageSites, site: pageSite, connect: pageConnect, wins: pageWins, journal: pageJournal, settings: pageSettings};
+let currentPage = null;
+async function render(){
+  const route = parseRoute(), fn = PAGES[route.page] || pageOverview;
+  currentPage = route.page; renderNav(); closeModal();
+  const view = $('#view');
+  try { await fn(view, route); } catch (err) { view.innerHTML = `<div class="err">${esc(err.message)}</div>`; }
+  document.title = (openWins.length ? `🎉 ${openWins.length} · ` : '') + (NAV.find(n => n[0] === (route.page === 'site' || route.page === 'connect' ? 'sites' : route.page))?.[1] || 'Обзор') + ' · Бот-ферма';
+  view.focus({preventScroll: true}); window.scrollTo(0, 0);
+}
+let stayHere = false;
+window.addEventListener('hashchange', () => {
+  if (stayHere) { stayHere = false; return; }
+  if (typeof dirtyForms !== 'undefined' && dirtyForms.size && !confirm('В настройках есть несохранённые изменения. Уйти без сохранения?')) { stayHere = true; history.back(); return; }
+  if (typeof dirtyForms !== 'undefined') dirtyForms.clear();
+  render();
+});
+
+/* ====================== auth & loop ====================== */
+function showLogin(){ clearInterval(timer); timer = null; $('#app').classList.add('hidden'); $('#login').classList.remove('hidden'); $('#pw').focus(); }
+async function boot(){
+  const s = await api('/api/session');
+  if (!s.signedIn) { showLogin(); if (!s.hasPassword) $('#loginMsg').textContent = 'Пароль не задан. На сервере выполните: python -m steamgiftbot.farm --set-password'; return; }
+  $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
+  await poll(); await render();
+  if (!timer) timer = setInterval(tick, 3000);
+}
+$('#loginForm').addEventListener('submit', async e => {
+  e.preventDefault(); $('#loginMsg').textContent = '';
+  try { await api('/api/login', {password: $('#pw').value}); $('#pw').value = ''; boot(); }
+  catch (err) { $('#loginMsg').textContent = err.message; }
+});
+async function poll(){
+  const s = await api('/api/status');
+  platforms = s.platforms; openWins = s.wins || [];
+  $('#clock').textContent = 'Обновлено ' + new Date().toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+}
+async function tick(){
+  try { await poll(); } catch (err) { if (err.message !== 'нужно войти') $('#clock').textContent = 'Нет связи с фермой'; return; }
+  renderNav(); live();
+  if (currentPage === 'overview' && Date.now() - summaryAt > 30000) loadSummary();
+}
+// Redraws only the parts of the open page that show live status, never forms.
+function live(){
+  const route = parseRoute();
+  if (route.page === 'overview') { renderWinsBanner(); renderSiteRows(); }
+  if (route.page === 'sites') renderSiteCards();
+  if (route.page === 'site') renderSiteHead(route.key);
+  if (route.page === 'site' && (route.tab || 'overview') === 'overview') renderSiteOverview(route.key);
+  if (route.page === 'journal' && (route.key || 'log') === 'log') renderLog(false);
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const act = b.dataset.act, key = b.dataset.key;
+  try {
+    if (act === 'logout') { await api('/api/logout', {}); return showLogin(); }
+    if (act === 'start-all') { const r = await api('/api/start-all', {}); toast(r.started.length ? 'Запущено: ' + r.started.length : 'Все подключённые площадки уже работают'); }
+    if (act === 'stop-all') { await api('/api/stop-all', {}); toast('Все площадки останавливаются'); }
+    if (act === 'start' || act === 'stop' || act === 'run-now') {
+      b.disabled = true;
+      await api(`/api/platforms/${key}/${act}`, {});
+      toast({start: `${byKey(key).title}: запущена`, stop: `${byKey(key).title}: останавливается`, 'run-now': `${byKey(key).title}: новый проход начат`}[act]);
+    }
+    if (act === 'preview') return openPreview(key);
+  } catch (err) { toast(err.message, true); }
+  await tick();
+});
+
+/* ====================== shared pieces ====================== */
+function siteActions(p, compact){
+  if (!p.configured) return `<a class="btn primary" href="#/connect/${p.key}">${icon('plus')}Подключить</a>`;
+  const main = isActive(p)
+    ? `<button class="danger" data-act="stop" data-key="${p.key}" ${compact ? `aria-label="Остановить ${esc(p.title)}"` : ''}>${icon('stop')}${compact ? '' : 'Стоп'}</button>`
+    : `<button class="primary" data-act="start" data-key="${p.key}" ${compact ? `aria-label="Запустить ${esc(p.title)}"` : ''}>${icon('play')}${compact ? '' : 'Старт'}</button>`;
+  const now = `<button data-act="run-now" data-key="${p.key}" ${p.state === 'sleeping' || p.state === 'error' ? '' : 'disabled'} title="Пройти сейчас, не дожидаясь паузы" ${compact ? `aria-label="Пройти сейчас: ${esc(p.title)}"` : ''}>${icon('refresh')}${compact ? '' : 'Сейчас'}</button>`;
+  return main + now;
+}
+function limitBar(label, l, unit){
+  if (!l || l.max == null) return '';
+  const pct = l.max ? Math.min(100, l.used / l.max * 100) : 100;
+  return `<div class="bar ${l.used >= l.max ? 'full' : ''}">${label}<span class="v">${l.used} / ${l.max}${unit ? ' ' + unit : ''}</span>
+    <div class="track" role="progressbar" aria-label="${label}" aria-valuemin="0" aria-valuemax="${l.max}" aria-valuenow="${l.used}"><div class="fill" style="width:${pct}%"></div></div></div>`;
+}
+function authHelp(p){
+  return p.state === 'auth' ? `<div class="err">${esc(p.error || 'Сайт больше не узнаёт cookie.')}<br><a class="btn" style="margin-top:8px" href="#/connect/${p.key}">${icon('key')}Подключить заново</a></div>`
+    : p.error ? `<div class="err">${esc(p.error)}</div>` : '';
+}
+function listButtons(site, name){
+  const lists = byKey(site)?.lists || [];
+  const b = (list, ic, title) => lists.includes(list)
+    ? `<button class="icon" data-list="${list}" data-site="${site}" data-name="${esc(name)}" title="${title}" aria-label="${title}: ${esc(name)}">${icon(ic)}</button>` : '';
+  return b('blacklist', 'ban', 'Больше не брать') + b('priority', 'star', 'Брать первой');
+}
+document.addEventListener('click', e => {
+  const r = e.target.closest('[data-replace]'); if (!r) return;
+  const field = $('#' + r.dataset.replace); field.hidden = false; field.focus(); r.parentElement.remove();
+});
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-list]'); if (!b) return;
+  const where = b.dataset.list === 'blacklist' ? 'в чёрном списке' : 'в приоритетных';
+  b.disabled = true;
+  try {
+    const r = await api(`/api/platforms/${b.dataset.site}/list`, {list: b.dataset.list, value: b.dataset.name});
+    toast(r.added ? `«${b.dataset.name}» теперь ${where}${r.restarted ? '. SteamGifts перезапущен' : ''}` : `«${b.dataset.name}» уже ${where}`);
+  } catch (err) { toast(err.message, true); b.disabled = false; }
+});
+const WIN_STATUS = [['', 'Новый'], ['received', 'Ключ получен'], ['activated', 'Активирован']];
+function winSelect(w){
+  return `<select data-win data-site="${w.key}" data-time="${w.time}" data-name="${esc(w.name)}" aria-label="Статус выигрыша ${esc(w.name)}">` +
+    WIN_STATUS.map(([v, l]) => `<option value="${v}" ${(w.status || '') === v ? 'selected' : ''}>${l}</option>`).join('') + '</select>';
+}
+async function setWin(site, time, name, status){
+  try { await api(`/api/platforms/${site}/win`, {time: +time, name, status}); toast(status ? 'Отмечено' : 'Отметка снята'); }
+  catch (err) { toast(err.message, true); }
+  await poll(); renderNav(); if (currentPage === 'wins') renderWinsTable(); else live();
+}
+document.addEventListener('change', e => {
+  const s = e.target.closest('select[data-win]'); if (s) setWin(s.dataset.site, s.dataset.time, s.dataset.name, s.value);
+});
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-winset]'); if (!b) return;
+  b.disabled = true; setWin(b.dataset.site, b.dataset.time, b.dataset.name, b.dataset.winset);
+});
+
+/* ====================== dialogs ====================== */
+function openModal(html, wide){
+  lastFocus = document.activeElement;
+  $('#modal').className = 'modal' + (wide ? ' wide' : ''); $('#modal').innerHTML = html;
+  $('#overlay').classList.remove('hidden');
+  $$('[data-close]', $('#modal')).forEach(b => b.onclick = closeModal);
+  ($('input,textarea,select,button.primary', $('#modal')) || $('button', $('#modal')))?.focus();
+}
+function closeModal(){
+  if ($('#overlay').classList.contains('hidden')) return;
+  $('#overlay').classList.add('hidden'); previewSeq++; lastFocus?.focus?.();
+}
+$('#overlay').addEventListener('click', e => { if (e.target.id === 'overlay') closeModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Tab' && !$('#overlay').classList.contains('hidden')) {   // keep focus inside the dialog
+    const f = $$('a[href],button:not(:disabled),input,select,textarea', $('#modal'));
+    if (!f.length) return;
+    if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+    else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+  }
+});
+function confirmDialog(title, text, okLabel, danger){
+  return new Promise(resolve => {
+    openModal(`<h2 id="modalTitle">${esc(title)}</h2><p class="muted">${esc(text)}</p>
+      <div class="row"><button data-close>Отмена</button><button class="${danger ? 'danger' : 'primary'}" id="confirmOk">${esc(okLabel)}</button></div>`);
+    $('#confirmOk').onclick = () => { closeModal(); resolve(true); };
+    $$('[data-close]', $('#modal')).forEach(b => b.onclick = () => { closeModal(); resolve(false); });
+    $('#confirmOk').focus();
+  });
+}
+
+/* ====================== overview ====================== */
+async function pageOverview(view){
+  view.innerHTML = `<div class="page-head"><h1>Обзор</h1>
+      <div class="actions"><button class="primary" data-act="start-all">${icon('play')}Запустить всё</button><button data-act="stop-all">${icon('stop')}Остановить всё</button></div></div>
+    <div id="winsBanner" class="wins hidden"></div>
+    <div class="summary">
+      <div class="tiles" id="tiles"></div>
+      <div class="chart" id="chart">
+        <div class="chart-head"><h2>Входы по дням</h2><div class="legend" id="legend"></div>
+          <div class="seg" id="range" role="group" aria-label="Период"><button data-days="7">7 дн</button><button data-days="30">30 дн</button></div>
+          <div class="seg" id="chartMode" role="group" aria-label="Вид"><button data-mode="chart">График</button><button data-mode="table">Таблица</button></div>
+        </div>
+        <div id="chartBox"></div><div class="tip hidden" id="tip"></div>
+      </div>
+    </div>
+    <section class="block" aria-labelledby="rowsTitle"><div class="block-head"><h2 id="rowsTitle">Площадки</h2><a href="#/sites">Все площадки и каталог →</a></div><div class="rows" id="siteRows"></div></section>`;
+  $('#range').onclick = e => { const b = e.target.closest('[data-days]'); if (b) { days = +b.dataset.days; localStorageSet('days', days); loadSummary(); } };
+  $('#chartMode').onclick = e => { const b = e.target.closest('[data-mode]'); if (b) { chartMode = b.dataset.mode; renderSummary(); } };
+  $('#chartBox').addEventListener('mousemove', chartHover);
+  $('#chartBox').addEventListener('mouseleave', () => $('#tip').classList.add('hidden'));
+  renderWinsBanner(); renderSiteRows(); renderSummary(); loadSummary();
+}
+let winsKey = null;
+function renderWinsBanner(){
+  const box = $('#winsBanner'); if (!box) return;
+  const key = JSON.stringify(openWins.map(w => [w.key, w.time])); if (key === box.dataset.k) return; box.dataset.k = key;
+  box.classList.toggle('hidden', !openWins.length);
+  const attrs = w => `data-site="${w.key}" data-time="${w.time}" data-name="${esc(w.name)}"`;
+  box.innerHTML = openWins.slice(0, 3).map(w => `<div class="win"><span class="big" aria-hidden="true">🎉</span>
+      <div><b>${esc(w.name)}</b><div class="small muted">Выигрыш на ${esc(w.title)}, ${dt(w.time)}</div></div><span class="sp"></span>
+      ${w.url ? `<a class="btn" href="${esc(w.url)}" target="_blank" rel="noopener">${icon('ext')}Забрать ключ</a>` : ''}
+      <button data-winset="received" ${attrs(w)}>Ключ получен</button><button class="primary" data-winset="activated" ${attrs(w)}>Активирован</button></div>`).join('') +
+    (openWins.length > 3 ? `<a class="more" href="#/wins">И ещё ${openWins.length - 3} — все в разделе «Выигрыши» →</a>` : '');
+}
+function renderSiteRows(){
+  const box = $('#siteRows'); if (!box) return;
+  const list = connected();
+  if (!list.length) { box.innerHTML = `<div class="empty"><b>Пока ни одна площадка не подключена</b>Подключите первый сайт с раздачами — это займёт пару минут.<br><a class="btn primary" href="#/sites">${icon('plus')}Подключить площадку</a></div>`; return; }
+  box.innerHTML = list.map(p => {
+    const [label, cls] = stateOf(p), why = whyText(p);
+    return `<div class="srow"><div class="name"><span class="dot-site" style="background:${SITE_COLOR(p.key)}"></span><a href="#/site/${p.key}">${esc(p.title)}</a><span class="pill ${cls}">${esc(label)}</span></div>
+      <div class="info">${p.state === 'auth' ? `<a href="#/connect/${p.key}" style="color:var(--bad)">Сайт не узнаёт cookie — подключить заново</a>` : esc(why || (p.error ? p.error : 'Остановлена'))}
+        <div class="muted">Баланс ${esc(balance(p))} · ${p.totals.today} входов за сутки · проход ${esc(ago(p.lastCycle))}</div></div>
+      <div class="act">${siteActions(p, true)}</div></div>`;
+  }).join('');
+}
+
+/* ---- summary and chart ---- */
+async function loadSummary(){
+  try { summary = await api('/api/summary?days=' + days); summaryAt = Date.now(); renderSummary(); } catch {}
+}
+function renderSummary(){
+  if (!summary || !$('#tiles')) return;
+  const S = summary.sites, entered = sum(S, s => s.entered), wins = sum(S, s => s.wins);
+  const spent = S.filter(s => s.spentToday).map(s => `${s.spentToday} ${s.unit}`).join(' · ') || '0';
+  const luck = entered ? (wins / entered * 100).toFixed(wins && wins / entered < .01 ? 2 : 1) + '%' : '—';
+  $('#tiles').innerHTML = [
+    [sum(S, s => s.today), 'входов за 24 ч'], [spent, 'потрачено за 24 ч'],
+    [wins, `выигрышей, ${sum(S, s => s.winsWeek)} за 7 дней`], [luck, `выигрышей на ${entered} входов`],
+  ].map(([v, l]) => `<div class="tile"><b class="${String(v).length > 8 ? 'long' : ''}">${esc(v)}</b><small>${esc(l)}</small></div>`).join('');
+  const shown = S.filter(s => s.entered || s.entries.some(Boolean));
+  $('#legend').innerHTML = shown.map(s => `<span><i style="background:${SITE_COLOR(s.key)}"></i>${esc(s.title)}</span>`).join('');
+  $$('#range button').forEach(b => b.classList.toggle('on', +b.dataset.days === days));
+  $$('#chartMode button').forEach(b => b.classList.toggle('on', b.dataset.mode === chartMode));
+  if (chartMode === 'table') renderChartTable(shown); else renderChart(shown);
+}
+const dayLabel = (d, long) => long ? new Date(d + 'T12:00').toLocaleDateString('ru-RU', {weekday: 'short', day: 'numeric', month: 'long'}) : `${+d.slice(8)}.${d.slice(5, 7)}`;
+function niceStep(max){ const raw = max / 4, mag = 10 ** Math.floor(Math.log10(raw || 1)), n = raw / mag; return Math.max(1, (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag); }
+const topRounded = (x, y, w, h, r) => `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
+function renderChart(S){
+  const box = $('#chartBox'), D = summary.days;
+  const totals = D.map((_, i) => sum(S, s => s.entries[i])), max = Math.max(0, ...totals);
+  if (!max) { box.innerHTML = '<div class="empty">За этот период входов нет.</div>'; return; }
+  const W = Math.max(260, box.clientWidth), H = 190, L = 30, B = 22, T = 8;
+  const step = niceStep(max), top = Math.ceil(max / step) * step, y = v => T + (H - T - B) * (1 - v / top);
+  const slot = (W - L) / D.length, bw = Math.max(3, Math.min(26, slot * .62));
+  const every = Math.ceil(D.length / Math.max(2, Math.floor((W - L) / 44)));
+  let grid = '', bars = '', labels = '', hits = '';
+  for (let v = 0; v <= top; v += step) grid += `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--line)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  D.forEach((d, i) => {
+    const x = L + slot * i + (slot - bw) / 2, segs = S.filter(s => s.entries[i] > 0);
+    let acc = 0;
+    segs.forEach((s, j) => {
+      const y0 = y(acc), y1 = y(acc + s.entries[i]); acc += s.entries[i];
+      const h = Math.max(1, y0 - y1 - (j ? 2 : 0));   // 2 px of surface between stacked segments
+      bars += j === segs.length - 1
+        ? `<path d="${topRounded(x, y1, bw, h, Math.min(4, bw / 2, h))}" style="fill:${SITE_COLOR(s.key)}"/>`
+        : `<rect x="${x}" y="${y1}" width="${bw}" height="${h}" style="fill:${SITE_COLOR(s.key)}"/>`;
+    });
+    const lx = x + bw / 2, edge = lx > W - 18;
+    if ((D.length - 1 - i) % every === 0) labels += `<text x="${edge ? W - 1 : lx}" y="${H - 6}" text-anchor="${edge ? 'end' : 'middle'}">${dayLabel(d)}</text>`;
+    hits += `<rect class="hit" data-i="${i}" x="${L + slot * i}" y="${T}" width="${slot}" height="${H - T - B}" fill="transparent"/>`;
+  });
+  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-size="11" style="fill:var(--muted)" role="img" aria-label="Входы по дням за ${D.length} дн., всего ${sum(totals, t => t)}. Подробно — во вкладке «Таблица».">${grid}${bars}${labels}${hits}</svg>`;
+}
+function renderChartTable(S){
+  const D = summary.days;
+  $('#chartBox').innerHTML = `<div class="tbl"><table><thead><tr><th>День</th>${S.map(s => `<th class="n">${esc(s.title)}</th>`).join('')}<th class="n">Всего</th></tr></thead><tbody>` +
+    D.map((d, i) => [d, i]).reverse().map(([d, i]) => `<tr><td>${dayLabel(d, true)}</td>${S.map(s => `<td class="n">${s.entries[i]}${s.winsByDay[i] ? ' 🎉' : ''}</td>`).join('')}<td class="n">${sum(S, s => s.entries[i])}</td></tr>`).join('') + '</tbody></table></div>';
+}
+function chartHover(e){
+  const hit = e.target.closest('.hit'), tip = $('#tip');
+  if (!hit || !summary) { tip.classList.add('hidden'); return; }
+  const i = +hit.dataset.i, S = summary.sites.filter(s => s.entered || s.entries.some(Boolean));
+  tip.innerHTML = `<b>${dayLabel(summary.days[i], true)}</b><br>` +
+    S.map(s => `<i style="background:${SITE_COLOR(s.key)}"></i>${esc(s.title)}<span class="n">${s.entries[i]} вх. · ${s.spentByDay[i]} ${s.unit}${s.winsByDay[i] ? ' · 🎉 ' + s.winsByDay[i] : ''}</span>`).join('<br>') +
+    `<br>Всего<span class="n">${sum(S, s => s.entries[i])} вх.</span>`;
+  tip.classList.remove('hidden');
+  const box = $('#chart').getBoundingClientRect(), w = tip.offsetWidth;
+  let left = e.clientX - box.left + 14; if (left + w > box.width - 6) left = e.clientX - box.left - w - 14;
+  tip.style.left = Math.max(6, left) + 'px'; tip.style.top = (e.clientY - box.top + 12) + 'px';
+}
+let resizeTimer = null;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(renderSummary, 150); });
+
+/* ====================== sites ====================== */
+async function pageSites(view){
+  view.innerHTML = `<div class="page-head"><h1>Площадки</h1>
+      <p class="lead">Подключённые сайты работают сами, по расписанию. Откройте площадку, чтобы поменять настройки или посмотреть, что ферма возьмёт сейчас.</p></div>
+    <section aria-labelledby="hConnected"><h2 id="hConnected" style="margin-bottom:12px">Подключены</h2><div class="grid" id="siteCards"></div></section>
+    <section aria-labelledby="hCatalog" style="margin-top:28px"><h2 id="hCatalog">Добавить площадку</h2>
+      <p class="muted" style="margin:4px 0 12px">Каждую площадку подключает пошаговая инструкция. Пароли от сайтов ферме не нужны.</p><div class="grid" id="catalog"></div></section>`;
+  renderSiteCards();
+}
+function siteCard(p){
+  const [label, cls] = stateOf(p), why = whyText(p), lim = p.limits || {};
+  const bars = limitBar('Входы за сутки', lim.entries, '') + limitBar('Траты за сутки', lim.spend, p.unit);
+  return `<article class="card" aria-labelledby="t-${p.key}">
+    <div class="card-head"><span class="dot-site" style="background:${SITE_COLOR(p.key)};margin-top:6px"></span><div><h2 id="t-${p.key}"><a href="#/site/${p.key}" style="color:var(--text)">${esc(p.title)}</a></h2><div class="desc">${esc(p.description)}</div></div><span class="pill ${cls}">${esc(label)}</span></div>
+    <div class="stats"><div class="stat"><b>${esc(balance(p))}</b><small>баланс</small></div><div class="stat"><b>${p.totals.today}</b><small>входов за сутки</small></div><div class="stat"><b>${p.totals.wins}</b><small>выигрышей</small></div></div>
+    ${why ? `<div class="why">⏳ ${esc(why)}</div>` : ''}${bars ? `<div class="bars">${bars}</div>` : ''}${authHelp(p)}
+    <div class="actions">${siteActions(p)}<button data-act="preview" data-key="${p.key}">${icon('search')}Что возьмёт</button><a class="btn" href="#/site/${p.key}/settings">${icon('gear')}Настройки</a></div></article>`;
+}
+function catalogCard(p){
+  return `<article class="card cat"><div><span class="tag">${esc(CATEGORY[p.category] || p.category)}</span></div>
+    <div><h2>${esc(p.title)}</h2><p class="muted small" style="margin-top:4px">${esc(p.description)}</p></div>
+    <p class="small">${esc(NEEDS[p.needs] || '')}</p>
+    <div class="actions"><a class="btn primary" href="#/connect/${p.key}">${icon('plus')}Подключить</a><a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener">${icon('ext')}Сайт</a></div></article>`;
+}
+function renderSiteCards(){
+  const cards = $('#siteCards'), cat = $('#catalog'); if (!cards) return;
+  if (cards.contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
+  const list = connected();
+  cards.innerHTML = list.length ? list.map(siteCard).join('') : `<div class="empty" style="grid-column:1/-1"><b>Пока пусто</b>Выберите площадку в каталоге ниже.</div>`;
+  const rest = catalog();
+  cat.innerHTML = rest.length ? rest.map(catalogCard).join('') : `<div class="empty" style="grid-column:1/-1">Все доступные площадки уже подключены.</div>`;
+}
+
+/* ---- one site ---- */
+const SITE_TABS = [['overview', 'Состояние'], ['settings', 'Настройки'], ['preview', 'Что возьмёт'], ['connection', 'Подключение']];
+async function pageSite(view, {key, tab}){
+  const p = byKey(key); if (!p) { view.innerHTML = '<div class="empty"><b>Нет такой площадки</b><a class="btn" href="#/sites">К площадкам</a></div>'; return; }
+  if (!p.configured) return go(`#/connect/${key}`);
+  tab = tab || 'overview';
+  view.innerHTML = `<a class="back" href="#/sites">← Площадки</a>
+    <div class="page-head" id="siteHead"></div>
+    <nav class="tabs" aria-label="Разделы площадки">${SITE_TABS.map(([k, l]) => `<a href="#/site/${key}/${k}" class="${k === tab ? 'on' : ''}" ${k === tab ? 'aria-current="page"' : ''}>${l}</a>`).join('')}</nav>
+    <div id="siteBody"></div>`;
+  renderSiteHead(key);
+  const body = $('#siteBody');
+  if (tab === 'overview') { body.innerHTML = '<div id="siteOverview" class="stack"></div>'; renderSiteOverview(key); loadRecent(key); }
+  if (tab === 'settings') await renderSiteSettings(body, p);
+  if (tab === 'preview') renderPreviewTab(body, p);
+  if (tab === 'connection') renderConnection(body, p);
+}
+function renderSiteHead(key){
+  const p = byKey(key), box = $('#siteHead'); if (!p || !box) return;
+  const [label, cls] = stateOf(p);
+  box.innerHTML = `<span class="dot-site" style="background:${SITE_COLOR(p.key)}"></span><h1>${esc(p.title)}</h1><span class="pill ${cls}">${esc(label)}</span>
+    <div class="actions">${siteActions(p)}<a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener">${icon('ext')}Открыть сайт</a></div>`;
+}
+function renderSiteOverview(key){
+  const p = byKey(key), box = $('#siteOverview'); if (!p || !box) return;
+  const lim = p.limits || {}, why = whyText(p);
+  const bars = limitBar('Входы за сутки', lim.entries, '') + limitBar('Траты за сутки', lim.spend, p.unit);
+  const top = `<div class="stats"><div class="stat"><b>${esc(balance(p))}</b><small>баланс${p.account ? ' · ' + esc(p.account) : ''}</small></div><div class="stat"><b>${p.totals.today}</b><small>входов за сутки</small></div><div class="stat"><b>${p.totals.wins}</b><small>выигрышей всего</small></div></div>
+    ${why ? `<div class="why">⏳ ${esc(why)}</div>` : ''}${authHelp(p)}
+    <div class="block"><div class="cols small">
+      <div><span class="muted">Последний проход</span><br>${esc(ago(p.lastCycle))}</div>
+      <div><span class="muted">Всего входов</span><br>${p.totals.entered} на ${p.totals.spent} ${esc(p.unit)}</div>
+      <div><span class="muted">Часы работы</span><br>${lim.hours ? esc(lim.hours) : 'круглосуточно'}</div>
+      <div><span class="muted">Автозапуск</span><br>${p.autostart ? 'вместе с фермой' : 'выключен'}</div></div>
+      ${bars ? `<div class="bars" style="margin-top:14px">${bars}</div>` : ''}</div>`;
+  const recent = box.querySelector('#recent');
+  box.innerHTML = top + (recent ? recent.outerHTML : '<section class="block" id="recent"></section>');
+}
+async function loadRecent(key){
+  const h = await api(`/api/history?kind=entries&site=${key}&per=10`).catch(() => null);
+  const box = $('#recent'); if (!h || !box) return;
+  box.innerHTML = `<div class="block-head"><h2>Последние входы</h2><a href="#/journal/entries?site=${key}">Вся история →</a></div>` + (h.rows.length ? entriesTable(h.rows, false) : '<div class="empty">Входов пока нет.</div>');
+}
+function entriesTable(rows, withSite){
+  return `<div class="table-wrap"><table><thead><tr><th>Когда</th>${withSite ? '<th>Площадка</th>' : ''}<th>Раздача</th><th class="n">Цена</th><th><span class="sr">Действия</span></th></tr></thead><tbody>` +
+    rows.map(r => `<tr><td>${dt(r.time)}</td>${withSite ? `<td><span class="dot-site" style="display:inline-block;background:${SITE_COLOR(r.key)};margin-right:6px"></span>${esc(r.title)}</td>` : ''}<td>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a>` : esc(r.name)}</td><td class="n">${r.cost || 0} ${esc(r.unit || '')}</td><td class="act">${listButtons(r.key, r.name)}</td></tr>`).join('') + '</tbody></table></div>';
+}
+
+/* ---- settings form ---- */
+function input(f, v){
+  const id = 'f_' + f.name, help = f.help ? `<small id="${id}_h">${esc(f.help)}</small>` : '', desc = f.help ? `aria-describedby="${id}_h"` : '';
+  if (f.kind === 'bool') return `<div class="f"><div class="chk"><input type="checkbox" class="switch" role="switch" id="${id}" name="${f.name}" ${v ? 'checked' : ''} ${desc}><label for="${id}">${esc(f.label)}</label></div>${help}</div>`;
+  if (f.kind === 'secret' && v) return `<div class="f"><label for="${id}">${esc(f.label)}</label><div class="secret-set"><span class="okText">✓ Сохранено</span><button type="button" data-replace="${id}">Заменить</button></div>
+    <textarea id="${id}" name="${f.name}" hidden autocomplete="off" spellcheck="false" placeholder="Новое значение" ${desc} style="min-height:42px"></textarea>${help}</div>`;
+  let ctl;
+  if (f.kind === 'select') ctl = `<select id="${id}" name="${f.name}" ${desc}>${f.options.map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  else if (f.kind === 'secret') ctl = `<textarea id="${id}" name="${f.name}" placeholder="${v ? 'Сохранено. Оставьте пустым, чтобы не менять' : 'Не задано'}" autocomplete="off" spellcheck="false" ${desc} style="min-height:${f.name === 'cookie' ? 90 : 42}px"></textarea>`;
+  else if (f.kind === 'list') ctl = `<input id="${id}" name="${f.name}" value="${esc((v || []).join(', '))}" ${desc}>`;
+  else ctl = `<input id="${id}" name="${f.name}" ${f.kind === 'int' ? 'inputmode="numeric"' : ''} value="${esc(v ?? '')}" ${desc}>`;
+  return `<div class="f"><label for="${id}">${esc(f.label)}${f.kind === 'secret' && v ? ' <span class="muted">· сохранено</span>' : ''}</label>${ctl}${help}</div>`;
+}
+function groups(schema){
+  const out = [];
+  for (const f of schema) { const g = f.group || 'Прочее'; let last = out[out.length - 1]; if (!last || last.title !== g) out.push(last = {title: g, fields: []}); last.fields.push(f); }
+  return out;
+}
+function readFields(schema, root){
+  const values = {};
+  for (const f of schema) { const el = $('#f_' + f.name, root); if (el) values[f.name] = f.kind === 'bool' ? el.checked : el.value; }
+  return values;
+}
+async function renderSiteSettings(body, p){
+  const s = await api(`/api/platforms/${p.key}/settings`);
+  const schema = s.schema.filter(f => !s.connectFields.includes(f.name));
+  body.innerHTML = `<form class="form" id="sform">
+    ${s.presets.length ? `<section class="fieldset" aria-labelledby="hPresets"><h2 id="hPresets">Готовые наборы</h2><p>Применяет сразу несколько настроек. Потом их можно поправить по одной ниже.</p>
+      <div class="presets">${s.presets.map(pr => `<button type="button" class="preset" data-preset="${pr.name}"><b>${esc(pr.title)}</b><span>${esc(pr.description)}</span></button>`).join('')}</div></section>` : ''}
+    ${groups(schema).map(g => `<section class="fieldset"><h2>${esc(g.title)}</h2><div class="cols">${g.fields.map(f => input(f, s.values[f.name])).join('')}</div></section>`).join('')}
+    <section class="fieldset"><h2>Запуск</h2><div class="f"><div class="chk"><input type="checkbox" id="f_autostart" ${s.autostart ? 'checked' : ''}><label for="f_autostart">Запускать вместе с фермой</label></div></div></section>
+    <div class="savebar"><span class="muted small" id="dirty"></span><button class="primary" type="submit">Сохранить изменения</button></div></form>`;
+  const form = $('#sform');
+  form.addEventListener('input', () => $('#dirty').textContent = 'Есть несохранённые изменения');
+  $$('[data-preset]', form).forEach(b => b.onclick = async () => {
+    const pr = s.presets.find(x => x.name === b.dataset.preset);
+    if (!await confirmDialog(`Применить «${pr.title}»?`, pr.description + ' Остальные настройки не изменятся.', 'Применить')) return;
+    try { const r = await api(`/api/platforms/${p.key}/preset`, {name: pr.name}); toast(`Набор «${r.title}» применён${r.restarted ? ', площадка перезапущена' : ''}`); render(); }
+    catch (err) { toast(err.message, true); }
+  });
+  form.onsubmit = async e => {
+    e.preventDefault();
+    try { const r = await api(`/api/platforms/${p.key}/settings`, {values: readFields(schema, form), autostart: $('#f_autostart').checked}); toast(r.restarted ? 'Сохранено, площадка перезапущена' : 'Сохранено. Действует с ближайшего прохода'); $('#dirty').textContent = ''; }
+    catch (err) { toast(err.message, true); }
+  };
+}
+
+/* ---- dry run ---- */
+function renderPreviewTab(body, p){
+  body.innerHTML = `<div class="block"><p>Ферма посмотрит текущие раздачи и покажет, в какие вошла бы сейчас и почему пропустит остальные. Ничего не тратит и никуда не входит.</p>
+    <div class="row" style="justify-content:flex-start"><button class="primary" id="runPreview">${icon('search')}Проверить сейчас</button></div></div><div id="pvOut" style="margin-top:16px"></div>`;
+  $('#runPreview').onclick = () => runPreviewInto($('#pvOut'), p);
+}
+function openPreview(key){
+  const p = byKey(key);
+  openModal(`<h2 id="modalTitle">${esc(p.title)}: что ферма возьмёт сейчас</h2><div id="pvOut"></div><div class="row"><button data-close>Закрыть</button></div>`, true);
+  runPreviewInto($('#pvOut'), p);
+}
+async function runPreviewInto(box, p){
+  const seq = ++previewSeq;
+  box.innerHTML = '<div class="empty">Смотрю раздачи на сайте. Ничего не трачу. Это может занять до минуты…</div>';
+  let r;
+  try { r = await api(`/api/platforms/${p.key}/preview`, {}); }
+  catch (err) { if (seq === previewSeq) box.innerHTML = `<div class="err">${esc(err.message)}</div>`; return; }
+  if (seq !== previewSeq || !box.isConnected) return;
+  const take = r.items.filter(i => i.enter), cost = sum(take, i => i.cost || 0);
+  const reasons = {}; r.items.filter(i => !i.enter).forEach(i => { reasons[i.reason] = (reasons[i.reason] || 0) + 1; });
+  const skips = Object.entries(reasons).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(k)}: ${v}`).join(', ');
+  let filter = take.length ? 'enter' : 'all';
+  box.innerHTML = `<div class="pv-sum">
+      <div>Войдёт в <b>${take.length}</b> из ${r.items.length} раздач и потратит <b>${cost} ${esc(p.unit)}</b>${r.balance != null ? `. Баланс ${r.balance} → ${r.balance - cost} ${esc(p.unit)}` : ''}.</div>
+      ${skips ? `<div class="muted">Пропустит: ${skips}.</div>` : ''}${r.note ? `<div class="muted">${esc(r.note)}</div>` : ''}</div>
+    <div class="seg" id="pvFilter" role="group" aria-label="Показать" style="margin-bottom:10px"><button data-f="enter">Войдёт (${take.length})</button><button data-f="skip">Пропустит (${r.items.length - take.length})</button><button data-f="all">Все</button></div>
+    <div class="table-wrap pv-table" id="pvTable"></div>`;
+  const draw = () => {
+    const rows = r.items.filter(i => filter === 'all' || (filter === 'enter') === i.enter);
+    $('#pvTable', box).innerHTML = rows.length ? `<table><thead><tr><th>Раздача</th><th class="n">Цена</th><th class="n">Участников</th><th>Решение</th><th><span class="sr">Действия</span></th></tr></thead><tbody>` +
+      rows.map(i => `<tr><td><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.name)}</a>${i.priority ? ` ${icon('star', 'приоритетная')}` : ''}</td>
+        <td class="n">${i.cost ?? '—'}</td><td class="n">${i.entries ?? '—'}</td><td class="${i.enter ? 'ok' : 'skip'}">${i.enter ? '✓ войдёт' : esc(i.reason)}</td><td class="act">${listButtons(p.key, i.name)}</td></tr>`).join('') + '</tbody></table>'
+      : '<div class="empty">Здесь пусто.</div>';
+    $$('#pvFilter button', box).forEach(b => b.classList.toggle('on', b.dataset.f === filter));
+  };
+  $('#pvFilter', box).onclick = e => { const b = e.target.closest('[data-f]'); if (b) { filter = b.dataset.f; draw(); } };
+  draw();
+}
+
+/* ---- connection ---- */
+function renderConnection(body, p){
+  body.innerHTML = `<div class="stack"><section class="block"><h2>Подключение</h2>
+      <p class="muted" style="margin:6px 0 12px">${p.state === 'auth' ? 'Сайт больше не узнаёт сохранённые cookie — подключите площадку заново.' : 'Cookie сохранены. Если сайт выкинет из аккаунта, ферма остановит площадку и пришлёт сообщение в Telegram.'}</p>
+      <a class="btn primary" href="#/connect/${p.key}">${icon('key')}Подключить заново</a></section>
+    <section class="block"><h2>Отключить площадку</h2><p class="muted" style="margin:6px 0 12px">Ферма остановит площадку и забудет cookie. История входов и настройки останутся.</p>
+      <button class="danger" id="disconnect">Отключить ${esc(p.title)}</button></section></div>`;
+  $('#disconnect').onclick = async () => {
+    if (!await confirmDialog(`Отключить ${p.title}?`, 'Ферма остановит площадку и забудет cookie. История и настройки останутся, подключить снова можно в любой момент.', 'Отключить', true)) return;
+    try { await api(`/api/platforms/${p.key}/disconnect`, {}); await poll(); toast(`${p.title} отключена`); go('#/sites'); }
+    catch (err) { toast(err.message, true); }
+  };
+}
+
+/* ====================== connect wizard ====================== */
+async function pageConnect(view, {key}){
+  const p = byKey(key); if (!p) return go('#/sites');
+  const s = await api(`/api/platforms/${key}/settings`);
+  const fields = s.schema.filter(f => s.connectFields.includes(f.name));
+  view.innerHTML = `<a class="back" href="#/sites">← Площадки</a>
+    <div class="page-head"><h1>Подключение ${esc(p.title)}</h1><p class="lead">${esc(p.description)} Пройдите шаги по порядку — займёт пару минут.</p></div>
+    <ol class="steps">${s.guide.map(g => `<li><h3>${esc(g.title)}</h3><div><p>${esc(g.text)}</p>${g.link ? `<a class="btn" href="${esc(g.link)}" target="_blank" rel="noopener">${icon('ext')}Открыть ${esc(new URL(g.link).host)}</a>` : ''}</div></li>`).join('')}</ol>
+    <form class="form" id="cform" style="margin-top:16px">
+      <section class="fieldset" aria-labelledby="hPaste"><h2 id="hPaste">${fields.length ? 'Вставьте сюда' : 'Проверка'}</h2>${fields.length ? '' : '<p>Ферма спросит у ArchiSteamFarm список ботов. Адрес и пароль ASF — в «Настройки» → «ArchiSteamFarm».</p>'}
+        ${fields.map(f => `<div class="f"><label for="c_${f.name}">${esc(f.label)}</label><textarea id="c_${f.name}" autocomplete="off" spellcheck="false" placeholder="curl 'https://…' -H 'cookie: …'"></textarea></div>`).join('')}
+        <div class="row" style="justify-content:flex-start;margin-top:0"><button class="primary" type="submit" id="checkBtn">Проверить подключение</button></div>
+        <div id="checkOut" role="status" aria-live="polite"></div></section>
+      <section class="fieldset hidden" id="finish" aria-labelledby="hFinish"><h2 id="hFinish">Как ферме работать</h2>
+        <p>Выберите набор — его можно поменять потом в настройках площадки.</p>
+        <div class="presets">${s.presets.map((pr, i) => `<button type="button" class="preset ${i === 0 ? 'on' : ''}" data-pick="${pr.name}" aria-pressed="${i === 0}"><b>${esc(pr.title)}</b><span>${esc(pr.description)}</span></button>`).join('')}</div>
+        <div class="f"><div class="chk"><input type="checkbox" id="c_autostart" checked><label for="c_autostart">Запускать вместе с фермой</label></div></div>
+        <div class="row" style="justify-content:flex-start"><button class="primary" type="button" id="saveStart">${icon('play')}Сохранить и запустить</button></div></section>
+    </form>`;
+  let picked = s.presets[0]?.name;
+  $$('[data-pick]').forEach(b => b.onclick = () => { picked = b.dataset.pick; $$('[data-pick]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); }); });
+  const values = () => Object.fromEntries(fields.map(f => [f.name, $('#c_' + f.name).value]));
+  $('#cform').onsubmit = async e => {
+    e.preventDefault();
+    if (fields.some(f => !$('#c_' + f.name).value.trim())) { $('#checkOut').innerHTML = '<div class="err">Поле пустое. Вставьте скопированный запрос целиком.</div>'; return; }
+    $('#checkBtn').disabled = true; $('#checkOut').innerHTML = '<p class="muted" style="margin-top:10px">Проверяю на сайте…</p>';
+    try {
+      const r = await api(`/api/platforms/${key}/check`, {values: values()});
+      $('#checkOut').innerHTML = `<div class="okbox" style="margin-top:10px"><b>Подключено.</b> ${r.account ? 'Аккаунт ' + esc(r.account) + '. ' : ''}${r.balance != null ? `Баланс ${r.balance} ${esc(p.unit)}.` : ''}</div>`;
+      $('#finish').classList.remove('hidden'); $('#finish').scrollIntoView({behavior: 'smooth', block: 'start'});
+    } catch (err) {
+      $('#checkOut').innerHTML = `<div class="err" style="margin-top:10px"><b>Не получилось.</b> ${esc(err.message)}<br>Проверьте, что вы вошли на сайт в браузере, обновите страницу и скопируйте запрос заново.</div>`;
+    } finally { $('#checkBtn').disabled = false; }
+  };
+  $('#saveStart').onclick = async () => {
+    const b = $('#saveStart'); b.disabled = true;
+    try {
+      await api(`/api/platforms/${key}/settings`, {values: values(), autostart: $('#c_autostart').checked, connect: true});
+      if (picked) await api(`/api/platforms/${key}/preset`, {name: picked});
+      await api(`/api/platforms/${key}/start`, {}).catch(() => null);
+      await poll(); toast(`${p.title} подключена и запущена`); go(`#/site/${key}`);
+    } catch (err) { toast(err.message, true); b.disabled = false; }
+  };
+}
+
+/* ====================== wins ====================== */
+let winsFilter = 'new', winsRows = [];
+async function pageWins(view){
+  view.innerHTML = `<div class="page-head"><h1>Выигрыши</h1><p class="lead">Отмечайте, что ключ получен и активирован: так ни один выигрыш не потеряется. Новые выигрыши видны на обзоре и в счётчике меню.</p></div>
+    <div class="toolbar"><div class="seg" id="wf" role="group" aria-label="Показать"><button data-f="new">Новые</button><button data-f="received">Ключ получен</button><button data-f="activated">Активированы</button><button data-f="all">Все</button></div></div>
+    <div id="winsTable"></div>`;
+  $('#wf').onclick = e => { const b = e.target.closest('[data-f]'); if (b) { winsFilter = b.dataset.f; renderWinsTable(false); } };
+  await renderWinsTable();
+}
+async function renderWinsTable(reload = true){
+  if (reload) { const h = await api('/api/history?kind=wins&per=200').catch(() => null); if (h) winsRows = h.rows; }
+  const box = $('#winsTable'); if (!box) return;
+  $$('#wf button').forEach(b => b.classList.toggle('on', b.dataset.f === winsFilter));
+  const rows = winsRows.filter(w => winsFilter === 'all' || (winsFilter === 'new' ? !w.status : w.status === winsFilter));
+  if (!rows.length) { box.innerHTML = `<div class="block empty"><b>${winsRows.length ? 'Здесь пусто' : 'Выигрышей пока нет'}</b>${winsRows.length ? 'Выберите другой фильтр.' : 'Когда ферма что-нибудь выиграет, оно появится здесь, на обзоре и в Telegram.'}</div>`; return; }
+  box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Когда</th><th>Площадка</th><th>Игра</th><th>Ключ</th><th>Статус</th></tr></thead><tbody>` +
+    rows.map(w => `<tr><td>${dt(w.time)}</td><td>${esc(w.title)}</td><td>${w.url ? `<a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.name)}</a>` : esc(w.name)}</td>
+      <td>${keyCell(w)}</td>
+      <td>${winSelect(w)}</td></tr>`).join('') + '</tbody></table></div>';
+}
+const MASK = '•••••-•••••-•••••';
+function keyCell(w){
+  const attrs = `data-site="${w.key}" data-time="${w.time}" data-name="${esc(w.name)}"`;
+  if (!w.cdkey) return `<form class="keyform" ${attrs} style="display:flex;gap:6px"><label class="sr" for="k${w.time}">Ключ для ${esc(w.name)}</label>
+    <input id="k${w.time}" placeholder="Вставьте ключ, если он есть" style="min-height:32px;padding:4px 8px;font-size:12px;max-width:220px" autocomplete="off"><button style="min-height:32px">Сохранить</button></form>`;
+  return `<span class="key" data-secret="${esc(w.cdkey)}">${MASK}</span> <button class="icon" data-reveal aria-label="Показать ключ">${icon('key')}</button><button class="icon" data-copy="${esc(w.cdkey)}" aria-label="Скопировать ключ">${icon('copy')}</button>
+    ${w.status !== 'activated' ? `<button data-redeem ${attrs} style="min-height:32px">Активировать в ASF</button>` : ''}${w.redeem ? `<div class="small muted">${esc(w.redeem)}</div>` : ''}`;
+}
+document.addEventListener('submit', async e => {
+  const f = e.target.closest('.keyform'); if (!f) return; e.preventDefault();
+  try { await api(`/api/platforms/${f.dataset.site}/win`, {time: +f.dataset.time, name: f.dataset.name, key: $('input', f).value}); toast('Ключ сохранён'); }
+  catch (err) { toast(err.message, true); }
+  renderWinsTable();
+});
+document.addEventListener('click', async e => {
+  const d = e.target.closest('[data-redeem]');
+  if (d) {
+    d.disabled = true; d.textContent = 'Активирую…';
+    try { const r = await api(`/api/platforms/${d.dataset.site}/redeem`, {time: +d.dataset.time, name: d.dataset.name}); toast('ASF: ' + r.message, !r.ok); }
+    catch (err) { toast(err.message, true); }
+    await poll(); renderNav(); renderWinsTable(); return;
+  }
+  const r = e.target.closest('[data-reveal]'); if (r) { const k = r.previousElementSibling; k.textContent = k.textContent.includes('•') ? k.dataset.secret : '•••••-•••••-•••••'; return; }
+  const c = e.target.closest('[data-copy]'); if (c) { try { await navigator.clipboard.writeText(c.dataset.copy); toast('Ключ скопирован'); } catch { toast('Браузер не дал скопировать: откройте ключ и выделите его', true); } }
+});
+
+/* ====================== journal ====================== */
+let logSite = 'all', logLevel = 'all', logQuery = '', logPaused = false;
+let histSite = '', histQuery = '', histPage = 1;
+async function pageJournal(view, {key}){
+  const tab = (key || 'log').split('?')[0], params = new URLSearchParams((location.hash.split('?')[1]) || '');
+  if (params.get('site')) histSite = params.get('site');
+  view.innerHTML = `<div class="page-head"><h1>Журнал</h1></div>
+    <nav class="tabs" aria-label="Журнал"><a href="#/journal/log" class="${tab === 'log' ? 'on' : ''}">Лог работы</a><a href="#/journal/entries" class="${tab === 'entries' ? 'on' : ''}">История входов</a></nav><div id="jBody"></div>`;
+  const siteOptions = sel => `<option value="${sel === 'all' ? 'all' : ''}">Все площадки</option>` + platforms.map(p => `<option value="${p.key}" ${p.key === sel ? 'selected' : ''}>${esc(p.title)}</option>`).join('');
+  if (tab === 'log') {
+    $('#jBody').innerHTML = `<div class="toolbar">
+        <label class="sr" for="logSite">Площадка</label><select id="logSite">${siteOptions(logSite)}</select>
+        <div class="seg" id="logLevel" role="group" aria-label="Что показывать"><button data-l="all">Всё</button><button data-l="entries">Входы</button><button data-l="problems">Ошибки</button></div>
+        <label class="sr" for="logQuery">Поиск по логу</label><input type="search" id="logQuery" placeholder="Поиск по логу" value="${esc(logQuery)}">
+        <span class="sp"></span><button id="logPause" aria-pressed="${logPaused}">${logPaused ? icon('play') + 'Продолжить' : icon('stop') + 'Пауза'}</button><button id="logSave">${icon('down')}Скачать</button></div>
+      <div class="log" id="logView" role="log" aria-live="off"></div>`;
+    $('#logSite').onchange = e => { logSite = e.target.value; renderLog(true); };
+    $('#logLevel').onclick = e => { const b = e.target.closest('[data-l]'); if (b) { logLevel = b.dataset.l; renderLog(true); } };
+    $('#logQuery').oninput = e => { logQuery = e.target.value; renderLog(true); };
+    $('#logPause').onclick = () => { logPaused = !logPaused; render(); };
+    $('#logSave').onclick = () => {
+      const text = logLines().map(l => `${new Date(l.time * 1000).toLocaleString('ru-RU')} [${l.site}] ${l.level} ${l.text}`).join('\n');
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type: 'text/plain'})); a.download = 'botfarm-log.txt'; a.click(); URL.revokeObjectURL(a.href);
+    };
+    await renderLog(true);
+  } else {
+    $('#jBody').innerHTML = `<div class="toolbar">
+        <label class="sr" for="hSite">Площадка</label><select id="hSite">${siteOptions(histSite)}</select>
+        <label class="sr" for="hQuery">Поиск по названию</label><input type="search" id="hQuery" placeholder="Поиск по названию игры" value="${esc(histQuery)}">
+        <span class="sp"></span><a class="btn" id="csv" href="#">${icon('down')}Скачать CSV</a></div><div id="hTable"></div><div class="pager" id="pager"></div>`;
+    $('#hSite').onchange = e => { histSite = e.target.value === 'all' ? '' : e.target.value; histPage = 1; renderHistory(); };
+    let t; $('#hQuery').oninput = e => { clearTimeout(t); t = setTimeout(() => { histQuery = e.target.value; histPage = 1; renderHistory(); }, 250); };
+    await renderHistory();
+  }
+}
+const ENTRY_LINE = /^(Вошёл|One more game|Would enter)/;
+function logLines(){
+  const keys = logSite === 'all' ? platforms.map(p => p.key) : [logSite];
+  const words = logQuery.toLowerCase().split(/\s+/).filter(Boolean);
+  return keys.flatMap(k => (logBuf[k] || []).map(l => ({...l, site: byKey(k)?.title || k, key: k})))
+    .filter(l => logLevel === 'all' || (logLevel === 'entries' ? ENTRY_LINE.test(l.text) : l.level !== 'INFO'))
+    .filter(l => words.every(w => l.text.toLowerCase().includes(w)))
+    .sort((a, b) => a.time - b.time || a.id - b.id);
+}
+async function pullLog(key){
+  const r = await api(`/api/platforms/${key}/logs?after=${logCursor[key] || 0}`);
+  if (!r.lines.length) return false;
+  logBuf[key] = (logBuf[key] || []).concat(r.lines).slice(-800); logCursor[key] = r.lines[r.lines.length - 1].id; return true;
+}
+async function renderLog(force){
+  const lv = $('#logView'); if (!lv || (logPaused && !force)) return;
+  const keys = logSite === 'all' ? platforms.map(p => p.key) : [logSite];
+  const changed = (await Promise.all(keys.map(k => pullLog(k).catch(() => false)))).some(Boolean);
+  if (!changed && !force) return;
+  const stick = lv.scrollTop + lv.clientHeight >= lv.scrollHeight - 30, lines = logLines(), many = keys.length > 1;
+  lv.innerHTML = lines.length ? lines.map(l => `<div class="${l.level} ${ENTRY_LINE.test(l.text) ? 'hit' : ''}"><span class="t">${hm(l.time)}</span> ${many ? `<span class="s">[${esc(l.site)}]</span> ` : ''}${esc(l.text)}</div>`).join('')
+    : `<div class="empty">${logQuery || logLevel !== 'all' ? 'Ничего не нашлось. Измените фильтр или поиск.' : 'Пока пусто. Лог появится, когда площадка начнёт работать.'}</div>`;
+  if (stick || force) lv.scrollTop = lv.scrollHeight;
+  $$('#logLevel button').forEach(b => b.classList.toggle('on', b.dataset.l === logLevel));
+}
+async function renderHistory(){
+  const q = new URLSearchParams({kind: 'entries', site: histSite, q: histQuery, page: histPage, per: 50});
+  $('#csv').href = '/api/history.csv?' + new URLSearchParams({kind: 'entries', site: histSite, q: histQuery});
+  const h = await api('/api/history?' + q).catch(err => { toast(err.message, true); return null; }); if (!h) return;
+  $('#hTable').innerHTML = h.rows.length ? entriesTable(h.rows, !histSite) : `<div class="block empty"><b>${histQuery ? 'Ничего не нашлось' : 'Входов пока нет'}</b>${histQuery ? 'Попробуйте другое название.' : 'Они появятся после первого прохода.'}</div>`;
+  $('#pager').innerHTML = h.pages > 1 ? `<span class="muted">${h.total} входов · стр. ${h.page} из ${h.pages}</span><button id="prev" ${h.page <= 1 ? 'disabled' : ''}>← Назад</button><button id="next" ${h.page >= h.pages ? 'disabled' : ''}>Дальше →</button>`
+    : h.total ? `<span class="muted">${h.total} входов</span>` : '';
+  $('#prev') && ($('#prev').onclick = () => { histPage--; renderHistory(); });
+  $('#next') && ($('#next').onclick = () => { histPage++; renderHistory(); });
+}
+
+/* ====================== settings ====================== */
+const SECTIONS = {
+  'Общее': {icon: 'gear', about: 'Часовой пояс фермы: по нему работают часы работы площадок и время сводки.'},
+  'Telegram': {icon: 'send', about: 'Уведомления о выигрышах и ошибках, ежедневная сводка и управление фермой командами с телефона.'},
+  'Библиотека Steam': {icon: 'lib', about: 'Чтобы не входить в раздачи игр, которые уже есть, и брать в первую очередь игры из списка желаемого.'},
+  'ArchiSteamFarm': {icon: 'key', about: 'ASF активирует выигранные ключи и забирает бесплатные игры Steam. Нужен запущенный ASF.'},
+};
+const GUIDES = {
+  'Telegram': [
+    ['Создайте бота', 'Откройте в Telegram @BotFather, отправьте /newbot, придумайте имя и адрес бота. BotFather пришлёт токен вида 123456789:AA…'],
+    ['Вставьте токен', 'Скопируйте токен в поле «Токен бота» ниже.'],
+    ['Напишите боту', 'Найдите своего бота в Telegram по адресу и отправьте ему любое сообщение, например «привет». Для группы — добавьте бота в группу и напишите там.'],
+    ['Найдите чат', 'Нажмите «Найти мой чат» — ферма покажет чаты, где бот получал сообщения. Выберите свой и нажмите «Сохранить», затем «Отправить тест».'],
+  ],
+  'Библиотека Steam': [
+    ['Ключ Steam Web API', 'Откройте steamcommunity.com/dev/apikey, войдите, в поле домена впишите любое слово (например botfarm) и скопируйте ключ. Он нужен только для списка ваших игр.'],
+    ['Профиль', 'Вставьте ссылку на свой профиль Steam (steamcommunity.com/id/… или /profiles/7656…).'],
+    ['Откройте данные', 'В Steam: Профиль → Редактировать профиль → Приватность. «Игровые данные» и «Список желаемого» должны быть «Открытые». Потом нажмите «Проверить».'],
+  ],
+  'ArchiSteamFarm': [
+    ['ASF на этом сервере', 'Если ASF работает здесь же (адрес http://127.0.0.1:1242), поля можно не трогать: пароль ферма возьмёт из ~/asf/config/ASF.json сама.'],
+    ['ASF на другом компьютере', 'Укажите его адрес и IPCPassword из его config/ASF.json. В IPC.config того ASF должен быть разрешён адрес фермы.'],
+    ['Проверьте', 'Нажмите «Проверить ASF»: ферма покажет ботов и кто из них в сети.'],
+  ],
+};
+let settingsInfo = null, dirtyForms = new Set();
+const sectId = title => 'sec-' + title.toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-');
+function sectionOpen(id, fallback){ const v = localStorageGet('open_' + id); return v == null ? fallback : v === '1'; }
+function section(id, title, sub, body, iconName, open){
+  return `<details class="sect" id="${id}" ${sectionOpen(id, open) ? 'open' : ''}>
+    <summary><span class="sect-ico">${icon(iconName || 'gear')}</span><span class="sect-t"><b>${esc(title)}</b><span class="muted small" data-sub>${sub}</span></span><span class="sect-dirty hidden">не сохранено</span><svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg></summary>
+    <div class="sect-body">${body}</div></details>`;
+}
+function guideHTML(steps, title = 'Как настроить'){
+  return `<details class="howto"><summary>${icon('help')}${esc(title)}</summary><ol>${steps.map(([t, d]) => `<li><b>${esc(t)}.</b> ${esc(d)}</li>`).join('')}</ol></details>`;
+}
+function zoneTime(zone){ try { return new Date().toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit', timeZone: zone}); } catch { return null; } }
+function statusChips(v){
+  const tg = v.telegram_token && v.telegram_chat, steamKey = v.steam_api_key, prof = v.steam_profile;
+  const chip = (ok, text, target) => `<a class="chip ${ok === true ? 'good' : ok === false ? 'warn' : ''}" href="#${target}" data-open="${target}">${ok === true ? '●' : ok === false ? '○' : '◌'} ${text}</a>`;
+  return chip(true, `${esc(v.timezone)} · ${zoneTime(v.timezone) || '?'}`, sectId('Общее')) +
+    chip(!!tg, tg ? (v.telegram_commands ? 'Telegram: уведомления и команды' : 'Telegram: уведомления') : 'Telegram не настроен', sectId('Telegram')) +
+    chip(!!(steamKey && prof), steamKey && prof ? 'Steam: библиотека подключена' : prof ? 'Steam: нет ключа API' : 'Steam не подключён', sectId('Библиотека Steam')) +
+    chip(null, 'ASF: проверить', sectId('ArchiSteamFarm'));
+}
+function sectionSub(title, v){
+  if (title === 'Общее') return `${esc(v.timezone)}, сейчас там ${zoneTime(v.timezone) || '?'}`;
+  if (title === 'Telegram') return v.telegram_token && v.telegram_chat ? `Настроен${v.daily_report ? `, сводка в ${String(v.report_hour).padStart(2, '0')}:00` : ''}${v.telegram_commands ? ', команды включены' : ''}` : 'Не настроен';
+  if (title === 'Библиотека Steam') return v.steam_profile ? `Профиль указан${v.steam_api_key ? ', ключ API есть' : ', ключа API нет'}${v.wishlist_first ? ', wishlist первым' : ''}` : 'Не подключена';
+  if (title === 'ArchiSteamFarm') return `${esc(v.asf_url || 'http://127.0.0.1:1242')}${v.auto_redeem ? ', автоактивация ключей' : ''}`;
+  return '';
+}
+// Widgets for the farm's own fields; everything else uses the generic input().
+function farmInput(f, v){
+  const id = 'f_' + f.name, help = f.help ? `<small id="${id}_h">${esc(f.help)}</small>` : '';
+  if (f.kind === 'zone') return `<div class="f wide"><label for="${id}">${esc(f.label)}</label>
+    <div class="inline"><input id="${id}" list="zoneList" value="${esc(v)}" autocomplete="off" spellcheck="false" aria-describedby="${id}_h zoneNow">
+      <button type="button" id="zoneDetect">${icon('pin')}Как на этом устройстве</button></div>
+    <datalist id="zoneList">${(settingsInfo?.zones || []).map(z => `<option value="${esc(z)}">`).join('')}</datalist>
+    <small id="zoneNow" aria-live="polite"></small>
+    <div class="quick" role="group" aria-label="Частые пояса">${['Europe/Kyiv', 'Europe/Moscow', 'Europe/Minsk', 'Europe/Warsaw', 'Europe/Berlin', 'Asia/Almaty', 'Asia/Yekaterinburg', 'Asia/Novosibirsk'].map(z => `<button type="button" class="pillbtn" data-zone="${z}">${z.split('/')[1].replace('_', ' ')}</button>`).join('')}</div>${help}</div>`;
+  if (f.name === 'report_hour') return `<div class="f"><label for="${id}">${esc(f.label)}</label><select id="${id}">${Array.from({length: 24}, (_, h) => `<option value="${h}" ${+v === h ? 'selected' : ''}>${String(h).padStart(2, '0')}:00</option>`).join('')}</select>${help}</div>`;
+  if (f.name === 'telegram_chat') return `<div class="f span2"><label for="${id}">${esc(f.label)}</label><div class="inline"><input id="${id}" value="${esc(v ?? '')}" inputmode="numeric" aria-describedby="${id}_h"><button type="button" id="findChats">${icon('search')}Найти мой чат</button></div><div id="chatList"></div>${help}</div>`;
+  return input(f, v);
+}
+async function pageSettings(view){
+  const s = await api('/api/farm/settings'); farmConf = s; settingsInfo = s.info; dirtyForms.clear();
+  const v = s.values, gs = groups(s.schema), ORDER = ['Общее', 'Telegram', 'Библиотека Steam', 'ArchiSteamFarm'];
+  const rank = g => { const i = ORDER.indexOf(g.title); return i < 0 ? 99 : i; };
+  const ordered = gs.map((g, i) => [g, i]).sort((a, b) => rank(a[0]) - rank(b[0]));
+  const farmSections = ordered.map(([g, i]) => {
+    const meta = SECTIONS[g.title] || {}, id = sectId(g.title);
+    const extra = g.title === 'Telegram' ? `<button type="button" data-act2="notify-test">${icon('send')}Отправить тест</button><button type="button" data-act2="farm/report">Прислать сводку сейчас</button>`
+      : g.title === 'ArchiSteamFarm' ? `<button type="button" data-act2="asf/check">${icon('refresh')}Проверить ASF</button>`
+      : g.title === 'Библиотека Steam' ? `<button type="button" data-act2="steam/check">${icon('refresh')}Проверить</button>` : '';
+    const body = `${meta.about ? `<p class="muted">${esc(meta.about)}</p>` : ''}${GUIDES[g.title] ? guideHTML(GUIDES[g.title]) : ''}
+      <form class="form" data-group="${i}"><div class="cols">${g.fields.map(f => farmInput(f, v[f.name])).join('')}</div>
+      ${g.title === 'Библиотека Steam' && v.steam_status ? `<div class="note">Steam: ${esc(v.steam_status)}</div>` : ''}
+      <div class="sect-foot"><span class="result muted small" role="status"></span><span class="sp"></span>${extra}<button class="primary" type="submit" disabled>Сохранить</button></div></form>`;
+    const autostart = g.title === 'Общее' ? `<div class="sub-block"><h3>Что запускать вместе с фермой</h3><p class="muted small">Включённые площадки стартуют сами после перезагрузки сервера. Меняется сразу, без кнопки «Сохранить».</p>
+      <div class="cols">${connected().map(p => `<div class="chk"><input type="checkbox" class="switch" role="switch" id="as_${p.key}" data-autostart="${p.key}" ${p.autostart ? 'checked' : ''}><label for="as_${p.key}">${esc(p.title)}</label></div>`).join('') || '<span class="muted small">Пока ни одна площадка не подключена.</span>'}</div></div>` : '';
+    return section(id, g.title, sectionSub(g.title, v), body + autostart, meta.icon, g.title === 'Общее');
+  }).join('');
+  const urls = settingsInfo.panelURLs.length ? settingsInfo.panelURLs : [location.origin + '/'];
+  const lan = urls.find(u => /\/\/(192\.168|10\.|172\.)/.test(u)) || urls[0], ts = urls.find(u => u.includes('//100.'));
+  const security = section('sec-security', 'Безопасность', 'Пароль панели и выход на других устройствах', `
+    <form class="form" id="pform"><div class="cols"><div class="f"><label for="pcur">Текущий пароль</label><input type="password" id="pcur" autocomplete="current-password"></div>
+      <div class="f"><label for="pnew">Новый пароль</label><input type="password" id="pnew" autocomplete="new-password" aria-describedby="pnewh"><small id="pnewh">не короче 6 символов; остальные устройства выйдут из панели</small></div></div>
+      <div class="sect-foot"><span class="sp"></span><button type="button" data-act2="logout-all">${icon('out')}Выйти на всех других устройствах</button><button class="primary" type="submit">Сменить пароль</button></div></form>`, 'lock', false);
+  const phone = section('sec-phone', 'Панель на телефоне', 'Как открыть ферму с телефона и поставить её как приложение', phoneGuide(lan, ts), 'phone', false);
+  const about = section('sec-about', 'О ферме', `Работает с ${dt(settingsInfo.startedAt)}`, `<div class="cols small">
+      <div><span class="muted">Запущена</span><br>${dt(settingsInfo.startedAt)} (${esc(ago(settingsInfo.startedAt))})</div>
+      <div><span class="muted">Адреса панели</span><br>${urls.map(u => `<a href="${esc(u)}">${esc(u)}</a>`).join('<br>')}</div>
+      <div><span class="muted">Площадок подключено</span><br>${connected().length} из ${platforms.length}</div>
+      <div><span class="muted">Время фермы</span><br>${esc(settingsInfo.zone)}, ${esc(settingsInfo.now)}</div></div>`, 'info', false);
+  view.innerHTML = `<div class="page-head"><h1>Настройки</h1><div class="actions"><button class="ghost" id="expandAll">Развернуть всё</button><button class="ghost" id="collapseAll">Свернуть всё</button></div>
+      <p class="lead">Общие настройки фермы. Настройки отдельных сайтов — в разделе «Площадки».</p></div>
+    <div class="chips" id="chips">${statusChips(v)}</div>
+    <div class="stack sects">${farmSections}${security}${phone}${about}</div>`;
+  wireSettings(view, s);
+}
+function phoneGuide(lan, ts){
+  const addr = (u, label) => u ? `<div class="addr"><span class="muted small">${label}</span><code>${esc(u)}</code><button type="button" class="icon" data-copy="${esc(u)}" aria-label="Скопировать адрес">${icon('copy')}</button></div>` : '';
+  const steps = list => `<ol class="numbered">${list.map(x => `<li>${x}</li>`).join('')}</ol>`;
+  return `<p class="muted">Панель — обычный сайт: её можно открыть в браузере телефона, а потом добавить на главный экран, чтобы она открывалась как приложение — отдельным окном, с иконкой фермы.</p>
+    <div class="addrs">${addr(lan, 'Дома, в той же Wi-Fi сети')}${addr(ts, 'Вне дома, через Tailscale')}</div>
+    <div class="tabs" role="tablist" id="phoneTabs">
+      <button type="button" role="tab" data-ptab="android" class="on" aria-selected="true">Android</button>
+      <button type="button" role="tab" data-ptab="ios" aria-selected="false">iPhone и iPad</button>
+      <button type="button" role="tab" data-ptab="away" aria-selected="false">Вне дома</button>
+      <button type="button" role="tab" data-ptab="help" aria-selected="false">Если не получается</button></div>
+    <div data-ppanel="android" role="tabpanel">${steps([
+      'Подключите телефон к домашнему Wi-Fi — к той же сети, что и сервер.',
+      `Откройте Chrome и введите адрес <code>${esc(lan || location.origin)}</code>. Войдите паролем панели — телефон запомнит вход на 30 дней.`,
+      'Нажмите меню <b>⋮</b> справа вверху → <b>«Добавить на главный экран»</b> (в некоторых версиях — «Установить приложение»).',
+      'Оставьте название «Бот-ферма» и нажмите <b>«Добавить»</b>. На экране появится иконка с подарком.',
+      'В Samsung Internet: меню <b>☰</b> → «Добавить страницу на» → «Главный экран». В Яндекс Браузере: <b>⋮</b> → «Добавить ярлык».'])}</div>
+    <div data-ppanel="ios" role="tabpanel" hidden>${steps([
+      'Подключите iPhone к домашнему Wi-Fi.',
+      `Откройте <b>Safari</b> (именно Safari — другие браузеры на iPhone так не умеют) и введите <code>${esc(lan || location.origin)}</code>. Войдите паролем панели.`,
+      'Нажмите кнопку <b>«Поделиться»</b> — квадрат со стрелкой вверх внизу экрана.',
+      'Прокрутите список вниз и выберите <b>«На экран “Домой”»</b>, затем <b>«Добавить»</b>.',
+      'Запускайте ферму с иконки: она откроется без адресной строки, как приложение.'])}</div>
+    <div data-ppanel="away" role="tabpanel" hidden>${steps([
+      'Установите приложение <b>Tailscale</b> из Google Play или App Store.',
+      'Войдите в нём тем же аккаунтом, что и на сервере, и включите переключатель подключения.',
+      ts ? `Откройте адрес <code>${esc(ts)}</code> — он работает из любой сети, хоть с мобильного интернета.` : 'Откройте адрес сервера в сети Tailscale (вида http://100.x.x.x:8092).',
+      'Добавьте и этот адрес на главный экран (вкладки Android / iPhone выше). Удобно держать две иконки: «дома» и «вне дома».',
+      'Без Tailscale панель снаружи недоступна — так и задумано: её не видно из интернета.'])}</div>
+    <div data-ppanel="help" role="tabpanel" hidden><ul class="numbered">
+      <li><b>Страница не открывается дома.</b> Проверьте, что телефон в той же Wi-Fi, а не в гостевой сети и не на мобильном интернете. Адрес пишется с <code>http://</code> и портом <code>:8092</code>.</li>
+      <li><b>Не открывается через Tailscale.</b> В приложении Tailscale должно быть «Connected», а сервер — в списке устройств онлайн.</li>
+      <li><b>Нет пункта «Установить приложение».</b> По http браузер добавляет панель как ярлык — это нормально, работает так же. Полноценная установка требует https: на сервере можно выполнить <code>sudo tailscale serve --bg 8092</code> и открыть адрес вида https://имя-сервера.ts.net.</li>
+      <li><b>Просит пароль каждый раз.</b> Разрешите сайту cookie в настройках браузера; вход хранится 30 дней.</li>
+      <li><b>Потеряли телефон.</b> В разделе «Безопасность» нажмите «Выйти на всех других устройствах» или смените пароль.</li></ul></div>`;
+}
+function markDirty(form, dirty){
+  const sect = form.closest('.sect'); if (!sect) return;
+  dirty ? dirtyForms.add(form) : dirtyForms.delete(form);
+  $('.sect-dirty', sect).classList.toggle('hidden', !dirty);
+  const save = $('button[type=submit]', form); if (save && form.dataset.group) save.disabled = !dirty;
+}
+function wireSettings(view, s){
+  const gs = groups(s.schema);
+  $$('details.sect', view).forEach(d => d.addEventListener('toggle', () => localStorageSet('open_' + d.id, d.open ? '1' : '0')));
+  $('#expandAll').onclick = () => $$('details.sect', view).forEach(d => d.open = true);
+  $('#collapseAll').onclick = () => $$('details.sect', view).forEach(d => d.open = false);
+  $('#chips').onclick = e => { const a = e.target.closest('[data-open]'); if (!a) return; e.preventDefault(); const d = $('#' + a.dataset.open); d.open = true; d.scrollIntoView({behavior: 'smooth', block: 'start'}); };
+  $$('form[data-group]', view).forEach(form => {
+    form.addEventListener('input', () => markDirty(form, true));
+    form.addEventListener('change', () => markDirty(form, true));
+    form.onsubmit = async e => {
+      e.preventDefault(); const g = gs[+form.dataset.group];
+      try {
+        await api('/api/farm/settings', {values: readFields(g.fields, form)}); markDirty(form, false); toast(`${g.title}: сохранено`);
+        const fresh = await api('/api/farm/settings'); farmConf = fresh;
+        $('[data-sub]', form.closest('.sect')).innerHTML = sectionSub(g.title, fresh.values); $('#chips').innerHTML = statusChips(fresh.values);
+        $$('.secret-set', form).forEach(x => x.remove());
+      } catch (err) { $('.result', form).textContent = ''; toast(err.message, true); }
+    };
+  });
+  $$('[data-autostart]', view).forEach(sw => sw.onchange = async () => {
+    const title = byKey(sw.dataset.autostart).title;
+    try { await api(`/api/platforms/${sw.dataset.autostart}/autostart`, {value: sw.checked}); toast(sw.checked ? `${title} будет запускаться вместе с фермой` : `Автозапуск ${title} выключен`); }
+    catch (err) { sw.checked = !sw.checked; toast(err.message, true); }
+  });
+  // time zone picker
+  const zone = $('#f_timezone');
+  if (zone) {
+    const show = () => { const t = zoneTime(zone.value.trim()); $('#zoneNow').textContent = t ? `Сейчас там ${t}` : 'Такого пояса нет — начните вводить город по-английски: Kyiv, Moscow…'; };
+    zone.addEventListener('input', show); show();
+    $('#zoneDetect').onclick = () => { zone.value = Intl.DateTimeFormat().resolvedOptions().timeZone; show(); markDirty(zone.form, true); };
+    $$('[data-zone]').forEach(b => b.onclick = () => { zone.value = b.dataset.zone; show(); markDirty(zone.form, true); });
+  }
+  // Telegram chat finder
+  const find = $('#findChats');
+  if (find) find.onclick = async () => {
+    find.disabled = true; const box = $('#chatList');
+    try {
+      const r = await api('/api/telegram/chats', {token: $('#f_telegram_token')?.value || ''});
+      box.innerHTML = r.chats.length ? `<div class="picklist">${r.chats.map(c => `<button type="button" class="pillbtn" data-chat="${esc(c.id)}">${esc(c.title)} <span class="muted">${esc(c.id)}</span></button>`).join('')}</div>`
+        : '<small class="warnText">Чатов не видно. Напишите своему боту любое сообщение в Telegram и нажмите ещё раз.</small>';
+      $$('[data-chat]', box).forEach(b => b.onclick = () => { $('#f_telegram_chat').value = b.dataset.chat; markDirty(b.closest('form'), true); box.innerHTML = '<small>Чат выбран — нажмите «Сохранить».</small>'; });
+    } catch (err) { box.innerHTML = `<small class="warnText">${esc(err.message)}</small>`; }
+    find.disabled = false;
+  };
+  // phone tabs
+  $('#phoneTabs')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-ptab]'); if (!b) return;
+    $$('[data-ptab]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); });
+    $$('[data-ppanel]').forEach(p => p.hidden = p.dataset.ppanel !== b.dataset.ptab);
+  });
+  $$('[data-act2]', view).forEach(b => b.onclick = async () => {
+    const out = b.closest('form') && $('.result', b.closest('form'));
+    if (b.dataset.act2 === 'logout-all' && !await confirmDialog('Выйти на всех других устройствах?', 'Телефоны и другие браузеры попросят пароль заново. Это устройство останется в панели.', 'Выйти на других')) return;
+    b.disabled = true; if (out) out.textContent = 'Проверяю…';
+    try { const r = await api('/api/' + b.dataset.act2, {}); const msg = r.message || 'Готово'; if (out) out.textContent = msg; toast(msg); }
+    catch (err) { if (out) out.textContent = ''; toast(err.message, true); }
+    b.disabled = false;
+  });
+  $('#pform').onsubmit = async e => {
+    e.preventDefault();
+    try { await api('/api/password', {current: $('#pcur').value, new: $('#pnew').value}); $('#pcur').value = $('#pnew').value = ''; toast('Пароль изменён, остальные устройства вышли'); }
+    catch (err) { toast(err.message, true); }
+  };
+}
+// Unsaved settings are not lost by a stray click on the menu.
+window.addEventListener('beforeunload', e => { if (dirtyForms.size) { e.preventDefault(); e.returnValue = ''; } });
+
+if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
+boot().catch(() => showLogin());
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# systemd unit for the bot farm and its web panel.
+#
+#   1. Replace YOUR_USER, /opt/SteamGiftBot and the addresses below.
+#   2. sudo cp deploy/botfarm.service /etc/systemd/system/
+#   3. sudo systemctl daemon-reload && sudo systemctl enable --now botfarm
+#
+# --host takes one address or several separated by commas. Use your LAN
+# address (and your Tailscale one, if you have it) rather than 0.0.0.0: the
+# panel holds your site cookies and should not face the internet. An address
+# that is not up yet (tailscale0 at boot) is retried until it appears.
+# Set the panel password first: env/bin/python -m steamgiftbot.farm --set-password
+[Unit]
+Description=SteamGiftBot farm with web panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_USER
+WorkingDirectory=/opt/SteamGiftBot
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/SteamGiftBot/env/bin/python -m steamgiftbot.farm --host 192.168.1.10 --port 8092
+Restart=always
+RestartSec=30
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

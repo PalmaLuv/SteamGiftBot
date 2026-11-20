@@ -1,0 +1,806 @@
+"""What every site in the farm has in common: a worker thread that can be
+started, stopped and woken early, a log the web panel can tail, a short history
+of what was entered, and settings described well enough to draw a form from."""
+import copy
+import json
+import logging
+import random
+import re
+import shlex
+import threading
+import time
+import traceback
+
+from collections import deque
+from datetime import timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+import requests
+
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
+
+from steamgiftbot.farm import rules
+
+# A recent desktop Chrome. Sites behind Incapsula or Cloudflare tie their
+# cookies to the browser that earned them, so each site lets the user paste
+# their own User-Agent over this one.
+DEFAULT_USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36")
+
+TIMEOUT        = 30
+LOG_LINES      = 600
+HISTORY_LENGTH = 2000
+
+# After an unexpected failure the worker waits this long and tries again.
+ERROR_RETRY_SECONDS = 15 * 60
+
+STOPPED  = 'stopped'
+RUNNING  = 'running'
+SLEEPING = 'sleeping'
+ERROR    = 'error'
+AUTH     = 'auth'      # the cookie no longer works: only the user can fix that
+
+
+# The session is gone and retrying will not bring it back.
+class AuthError(Exception):
+    pass
+
+
+# The site said something the worker cannot carry on from (ban, bad setup).
+class PlatformError(Exception):
+    pass
+
+
+# Temporary trouble (site down, Cloudflare check): wait and try again.
+class RetryLater(Exception):
+    pass
+
+
+# One field of a settings form. kind: text, secret, int, bool, select, list,
+# hours (working hours like 08:00-23:00) or zone (a time zone name). group
+# puts a heading above the first field of each group in the form.
+def field(name, label, kind='text', default=None, help='', options=None, group=''):
+    return {'name': name, 'label': label, 'kind': kind, 'default': default,
+            'help': help, 'options': options or [], 'group': group}
+
+
+def grouped(group, fields):
+    return [{**item, 'group': group} for item in fields]
+
+
+# Working hours and daily limits: the same on every site.
+def scheduleFields():
+    return grouped('Расписание и лимиты', [
+        field('active_hours', 'Часы работы', 'hours', '',
+              'например 08:00-23:00 или 09:00-13:00, 18:00-02:00; пусто — круглосуточно. '
+              'Часовой пояс задаётся в настройках фермы'),
+        field('daily_entries', 'Макс. входов за сутки', 'int', None, 'пусто — без лимита'),
+        field('daily_spend', 'Макс. трат за сутки', 'int', None,
+              'в валюте площадки; пусто — без лимита'),
+    ])
+
+
+# Ready-made filters the sites share.
+def presetFields():
+    return grouped('Фильтры', [
+        field('skip_owned', 'Пропускать игры из моей библиотеки Steam', 'bool', False,
+              'нужны Steam API-ключ и профиль в настройках фермы'),
+        field('skip_junk', 'Пропускать DLC, саундтреки, артбуки, паки', 'bool', False),
+        field('skip_adult', 'Пропускать 18+', 'bool', False),
+    ])
+
+
+# ---- connecting a site ---------------------------------------------------------
+
+def cookieGuide(site, url, signIn='войдите в свой аккаунт', page=None, extra=()):
+    """The steps the panel shows when a site is connected with browser cookies."""
+    page = page or url
+    return [
+        {'title': f'Войдите на {site}',
+         'text': f'Откройте сайт в браузере на компьютере и {signIn}. Оставайтесь в аккаунте: '
+                 'если выйти из него в браузере, cookie перестанут работать и подключение '
+                 'придётся повторить.',
+         'link': url},
+        {'title': 'Откройте инструменты разработчика',
+         'text': f'Перейдите на страницу {page} и нажмите F12 (на Mac — ⌥⌘I). Откройте '
+                 'вкладку Network («Сеть»), затем обновите страницу клавишей F5.'},
+        {'title': 'Скопируйте запрос как cURL',
+         'text': 'Самый первый запрос в списке — сама страница. Нажмите на него правой кнопкой → '
+                 'Copy → Copy as cURL (bash). В Firefox: «Копировать» → «Копировать как cURL '
+                 '(POSIX)». В Chrome на Windows можно и «Copy as cURL (cmd)» — ферма поймёт '
+                 'оба варианта.'},
+        {'title': 'Вставьте и проверьте',
+         'text': 'Вставьте скопированное целиком в поле ниже и нажмите «Проверить». Ферма '
+                 'возьмёт из текста только cookie и User-Agent браузера; сам текст в панели '
+                 'больше не показывается. Cookie дают доступ к аккаунту — никому их не '
+                 'пересылайте.'},
+        *extra,
+    ]
+
+
+# Ready-made settings. Each site takes the values its own form has.
+PRESETS = [
+    {'name': 'balanced', 'title': 'Сбалансировано',
+     'description': 'Хороший шанс на выигрыш и разумные траты. Подходит большинству.',
+     'values': {'skip_junk': True, 'skip_adult': False, 'skip_owned': True, 'sort': 'smart',
+                'max_entries': 1000, 'reserve': 5, 'min_points': 50, 'free_only': False}},
+    {'name': 'economy', 'title': 'Экономно',
+     'description': 'Только раздачи с малым числом участников, запас баланса не трогается.',
+     'values': {'skip_junk': True, 'skip_adult': True, 'skip_owned': True, 'sort': 'smart',
+                'max_entries': 300, 'reserve': 20, 'min_points': 100, 'free_only': True}},
+    {'name': 'maximum', 'title': 'Максимум',
+     'description': 'Входить везде, где хватает баланса. Больше входов, но и больше мусора.',
+     'values': {'skip_junk': False, 'skip_adult': False, 'skip_owned': False, 'sort': 'expiry',
+                'max_entries': None, 'reserve': 0, 'min_points': 10, 'free_only': False,
+                'max_pages': 10}},
+    {'name': 'games', 'title': 'Только игры',
+     'description': 'Пропускать DLC, саундтреки, 18+ и то, что уже есть в библиотеке Steam.',
+     'values': {'skip_junk': True, 'skip_adult': True, 'skip_owned': True}},
+]
+
+
+def applySettings(schema, current, incoming):
+    """Merges a submitted form into the current values. A secret left empty
+    keeps what was there; any bad value aborts the whole save."""
+    current = dict(current)
+    for item in schema:
+        name = item['name']
+        if name not in incoming:
+            continue
+        raw = incoming[name]
+        if item['kind'] == 'secret' and (raw is None or raw == '' or raw is True):
+            continue
+        try:
+            current[name] = coerce(item['kind'], raw, item['default'])
+        except ValueError as error:
+            raise ValueError(f"{item['label']}: {error}") from error
+    return current
+
+
+def publicValues(schema, values):
+    values = dict(values)
+    for item in schema:
+        if item['kind'] == 'secret':
+            values[item['name']] = bool(values.get(item['name']))
+    return values
+
+
+def coerce(kind, value, default=None):
+    if kind == 'hours':
+        return rules.normalizeHours('' if value is None else str(value))
+    if kind == 'zone':
+        name = '' if value is None else str(value).strip()
+        if not name:
+            return default
+        try:
+            ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError) as error:
+            raise ValueError(f"нет такого часового пояса «{name}»") from error
+        return name
+    if kind == 'bool':
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in ('1', 'yes', 'true', 'on')
+    if kind == 'int':
+        if value is None or str(value).strip() == '':
+            return default
+        number = int(str(value).strip())
+        if number < 0:
+            raise ValueError("не может быть отрицательным")
+        return number
+    if kind == 'list':
+        if isinstance(value, (list, tuple)):
+            items = value
+        else:
+            items = str(value or '').replace('\n', ',').split(',')
+        return [item.strip() for item in items if item.strip()]
+    return '' if value is None else str(value).strip()
+
+
+CURL_START   = re.compile(r'\s*curl(\.exe)?\s', re.I)
+HEADER_LINE  = re.compile(r'([A-Za-z0-9-]+)\s*:\s*(.*)')
+COOKIE_LINE  = re.compile(r'cookie\s*:', re.I)
+COOKIE_LABEL = re.compile(r'cookie\s*(:\s*|\s+)', re.I)
+
+CURL_HEADER  = ('-H', '--header')
+CURL_COOKIE  = ('-b', '--cookie')
+CURL_AGENT   = ('-A', '--user-agent')
+
+
+def curlArguments(text):
+    """The arguments of a devtools 'Copy as cURL' command, bash or Windows cmd
+    flavour; None when the text is not one, [] when it is but will not split."""
+    if not CURL_START.match(text):
+        return None
+    if '^"' in text:
+        # cmd escapes every special character with ^, line breaks included.
+        text = re.sub(r'\^(.)', r'\1', text, flags=re.S)
+    text = text.replace('\\\r\n', ' ').replace('\\\n', ' ')
+    try:
+        return shlex.split(text)
+    except ValueError:
+        return []
+
+
+def curlHeaders(arguments):
+    headers, cookies = {}, []
+    pending = iter(arguments)
+    for argument in pending:
+        if argument not in CURL_HEADER + CURL_COOKIE + CURL_AGENT:
+            continue
+        value = next(pending, '')
+        # bash's $'...' quoting, which Chrome uses for unusual characters
+        if value.startswith('$'):
+            value = value[1:]
+        if argument in CURL_COOKIE:
+            cookies.append(value)
+        elif argument in CURL_AGENT:
+            headers['user-agent'] = value
+        else:
+            name, _, rest = value.partition(':')
+            headers[name.strip().lower()] = rest.strip()
+    if 'cookie' in headers:
+        cookies.append(headers['cookie'])
+    if cookies:
+        headers['cookie'] = '; '.join(cookies)
+    return headers
+
+
+def pastedHeaders(text):
+    """Lower-cased header name → value from a pasted 'Copy as cURL' command or a
+    block of request headers; None when the text is neither."""
+    text = (text or '').strip()
+    arguments = curlArguments(text)
+    if arguments is not None:
+        return curlHeaders(arguments)
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(lines) > 1 and any(COOKIE_LINE.match(line) for line in lines):
+        headers = {}
+        for line in lines:
+            match = HEADER_LINE.fullmatch(line)
+            if match:
+                headers[match.group(1).lower()] = match.group(2).strip()
+        return headers
+    return None
+
+
+def userAgentFrom(text):
+    """The browser's User-Agent when the cookie was pasted as a cURL command or
+    a headers block, so the two always come from the same browser."""
+    return (pastedHeaders(text) or {}).get('user-agent') or None
+
+
+def cookiesFromJSON(text):
+    """Cookie-Editor / EditThisCookie export: a list of {name, value, ...}."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return None
+    if isinstance(data, dict) and isinstance(data.get('cookies'), list):
+        data = data['cookies']
+    if isinstance(data, dict):
+        return {str(name): str(value) for name, value in data.items()
+                if isinstance(value, (str, int, float))}
+    if isinstance(data, list):
+        return {str(item['name']): str(item.get('value', '')) for item in data
+                if isinstance(item, dict) and item.get('name')}
+    return None
+
+
+def cookiesFromNetscape(text):
+    """cookies.txt: domain, flag, path, secure, expiry, name, value per line."""
+    jar = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith('#HttpOnly_'):
+            line = line[len('#HttpOnly_'):]
+        elif line.startswith('#'):
+            continue
+        columns = line.split('\t')
+        if len(columns) >= 7 and columns[5]:
+            jar[columns[5]] = columns[6]
+    return jar
+
+
+# Accepts what people actually paste: devtools 'Copy as cURL', the 'Cookie:'
+# header or a whole block of request headers, a Cookie-Editor export (JSON or
+# cookies.txt), a 'name=value; name=value' list, or a bare value.
+def parseCookies(text, bareName=None):
+    text = (text or '').strip()
+    if not text:
+        return {}
+    if text[0] in '[{':
+        jar = cookiesFromJSON(text)
+        if jar is not None:
+            return jar
+    headers = pastedHeaders(text)
+    if headers is not None:
+        text = headers.get('cookie', '')
+    elif '\t' in text:
+        jar = cookiesFromNetscape(text)
+        if jar:
+            return jar
+    label = COOKIE_LABEL.match(text)
+    if label:
+        text = text[label.end():].strip()
+    if not text:
+        return {}
+    if '=' not in text:
+        return {bareName: text} if bareName else {}
+    jar = {}
+    for part in text.split(';'):
+        if '=' not in part:
+            continue
+        name, value = part.split('=', 1)
+        if name.strip():
+            jar[name.strip()] = value.strip()
+    return jar
+
+
+# requests refuses .get() when a server re-sets a cookie for a narrower domain
+# and two copies end up in the jar. The newest one is the one that counts.
+def cookieValue(jar, name):
+    found = None
+    for cookie in jar:
+        if cookie.name == name:
+            found = cookie.value
+    return found
+
+
+def buildSession(userAgent, cookies, domain):
+    session = requests.Session()
+    # GET only: replaying a POST could enter a giveaway twice.
+    retry = Retry(total=4, connect=4, read=4, backoff_factor=0.5,
+                  status_forcelist=(500, 502, 503, 504), allowed_methods=('GET',))
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    session.headers.update({
+        'User-Agent': userAgent or DEFAULT_USER_AGENT,
+        'Accept-Language': 'en-US,en;q=0.9',
+    })
+    for name, value in cookies.items():
+        session.cookies.set(name, value, domain=domain, path='/')
+    return session
+
+
+class RingHandler(logging.Handler):
+    """Keeps the last lines of one site's log for the web panel."""
+
+    def __init__(self, platform):
+        super().__init__()
+        self.platform = platform
+
+    def emit(self, record):
+        try:
+            self.platform.addLine(record.levelname, self.format(record))
+        except Exception:
+            self.handleError(record)
+
+
+class Platform:
+    key         = ''
+    unit        = ''
+    title       = ''
+    siteURL     = ''
+    description = ''
+    # For the catalog: 'points' (raffles paid with site currency) or 'free'
+    # (games that are free to keep), and what connecting it takes.
+    category    = 'points'
+    needs       = 'cookie'
+    # Fields the connect wizard asks for; the rest keep their defaults.
+    connectFields = ('cookie',)
+
+    def __init__(self, manager):
+        self.manager = manager
+        self.logger  = logging.getLogger(f'botfarm.{self.key}')
+        self.lines   = deque(maxlen=LOG_LINES)
+        self.lineSeq = 0
+        self.lock    = threading.Lock()
+
+        self.thread  = None
+        self.stopFlag = threading.Event()
+        self.wakeFlag = threading.Event()
+
+        self.state     = STOPPED
+        self.lastError = ''
+        self.startedAt = None
+        self.lastCycle = None
+        self.nextCycle = None
+        self.balance   = None
+        self.account   = ''
+        self.sessionEntered = 0
+        self.sessionSpent   = 0
+        self.forced = False
+        # Why the worker is waiting, in words, for the card in the panel.
+        self.waitReason = ''
+        self.previewLock = threading.Lock()
+
+        handler = RingHandler(self)
+        handler.setFormatter(logging.Formatter('%(message)s'))
+        self.logger.addHandler(handler)
+
+    # ---- things a site fills in -------------------------------------------
+
+    # The settings form, as a list of field() dicts.
+    def schema(self):
+        return []
+
+    # Does the work until stopped. Raise AuthError / PlatformError when the
+    # site will not let it continue.
+    def run(self):
+        raise NotImplementedError
+
+    # Called from the web thread when the user presses stop.
+    def onStop(self):
+        pass
+
+    # What one pass would do right now, entering nothing: {'balance', 'items':
+    # [{name, url, cost, entries, enter, reason}], 'note'}.
+    def preview(self):
+        raise ValueError("пробный проход для этой площадки не поддерживается")
+
+    # Lists the panel may add a game to straight from the history.
+    QUICK_LISTS = ('blacklist', 'priority')
+
+    # Told when the user marks a win in the panel ('received', 'activated'
+    # or '' to take it back). SteamGifts passes it on to the site.
+    def onWinStatus(self, win, status):
+        pass
+
+    # Steps of the connect wizard: [{'title', 'text', 'link'?}].
+    def guide(self):
+        return cookieGuide(self.title, self.siteURL)
+
+    # Tries the given connection values without saving them; returns what the
+    # site said about the account ({'account', 'balance'}). Raises on failure.
+    def check(self, values):
+        raise ValueError("проверка подключения для этой площадки не поддерживается")
+
+    def presets(self):
+        names = {item['name'] for item in self.schema()}
+        found = []
+        for preset in PRESETS:
+            values = {key: value for key, value in preset['values'].items() if key in names}
+            if values:
+                found.append({**preset, 'values': values})
+        return found
+
+    def applyPreset(self, name):
+        for preset in self.presets():
+            if preset['name'] == name:
+                self.updateSettings(preset['values'])
+                return preset
+        raise ValueError("нет такого набора настроек")
+
+    # Forgets the account: stops the site and drops the connection secrets.
+    def disconnect(self):
+        self.stop(wait=10)
+        stored = self.manager.platformSettings(self.key)
+        for name in self.connectFields:
+            stored.pop(name, None)
+        self.manager.savePlatformSettings(self.key, stored)
+        self.manager.setAutostart(self.key, False)
+
+    # The connection values merged over the saved settings, for check().
+    def trialSettings(self, values):
+        conf = dict(self.settings())
+        schema = {item['name']: item for item in self.schema()}
+        for name in self.connectFields:
+            if name in (values or {}) and values[name] not in (None, ''):
+                item = schema[name]
+                conf[name] = coerce(item['kind'], values[name], item['default'])
+        return conf
+
+    # ---- settings ----------------------------------------------------------
+
+    def settings(self):
+        stored = self.manager.platformSettings(self.key)
+        values = {}
+        for item in self.schema():
+            values[item['name']] = stored.get(item['name'], item['default'])
+        return values
+
+    def publicSettings(self):
+        return publicValues(self.schema(), self.settings())
+
+    def updateSettings(self, incoming):
+        current = applySettings(self.schema(), self.settings(), incoming)
+        self.manager.savePlatformSettings(self.key, current)
+        return current
+
+    # The settings the schedule and the daily limits are read from.
+    def limitSettings(self):
+        return self.settings()
+
+    def quickLists(self):
+        names = {item['name'] for item in self.schema() if item['kind'] == 'list'}
+        return [name for name in self.QUICK_LISTS if name in names]
+
+    # Adds a game name to the blacklist or the priority list. False when it
+    # was there already.
+    def addToList(self, name, value):
+        value = ' '.join(str(value or '').split())
+        if name not in self.quickLists():
+            raise ValueError("у этой площадки нет такого списка")
+        if not value:
+            raise ValueError("пустое название")
+        current = list(self.settings().get(name) or [])
+        if any(item.lower() == value.lower() for item in current):
+            return False
+        self.updateSettings({name: current + [value]})
+        return True
+
+    # ---- log and history ---------------------------------------------------
+
+    def addLine(self, level, text):
+        with self.lock:
+            self.lineSeq += 1
+            self.lines.append({'id': self.lineSeq, 'time': time.time(),
+                               'level': level, 'text': text})
+
+    def logLines(self, after=0):
+        with self.lock:
+            return [line for line in self.lines if line['id'] > after]
+
+    def info(self, text):
+        self.logger.info(text)
+
+    def warn(self, text):
+        self.logger.warning(text)
+
+    def recordEntry(self, name, cost, url=''):
+        self.sessionEntered += 1
+        self.sessionSpent   += cost or 0
+        self.manager.state.addEntry(self.key, {'time': time.time(), 'name': name,
+                                               'cost': cost, 'url': url})
+
+    def recordWin(self, name, url=''):
+        self.manager.state.addWin(self.key, {'time': time.time(), 'name': name, 'url': url})
+
+    def notify(self, text):
+        self.manager.notify(f"[{self.title}] {text}")
+
+    # ---- rules every site shares -------------------------------------------
+
+    # The owned-games list when this site is set to skip them, else None.
+    def ownedGames(self, conf):
+        return self.manager.ownedGames() if conf.get('skip_owned') else None
+
+    def ruleReason(self, conf, name, appid=None, owned=None):
+        reason = rules.presetReason(name, conf.get('skip_junk'), conf.get('skip_adult'))
+        if reason:
+            return reason
+        if conf.get('blacklist') and rules.containsAny(name, conf['blacklist']):
+            return 'в чёрном списке'
+        if conf.get('whitelist') and not rules.containsAny(name, conf['whitelist']):
+            return 'не в белом списке'
+        if owned is not None and owned.has(appid, name):
+            return 'уже есть в Steam'
+        return None
+
+    # (entries, spend) still allowed in the last 24 hours; None = no limit.
+    def dailyLeft(self, conf):
+        count, spent, _oldest = self.manager.state.usage(self.key)
+        entries = conf.get('daily_entries')
+        spend = conf.get('daily_spend')
+        return (None if entries is None else max(0, entries - count),
+                None if spend is None else max(0, spend - spent))
+
+    def limitReached(self, conf):
+        entries, spend = self.dailyLeft(conf)
+        return entries == 0 or spend == 0
+
+    # When the oldest entry of the last 24 hours drops out of the window.
+    def limitResetIn(self):
+        oldest = self.manager.state.usage(self.key)[2]
+        if oldest is None:
+            return 15 * 60
+        return int(min(86400, max(300, oldest + 86400 - time.time())))
+
+    def closedFor(self, conf):
+        windows = rules.parseHours(conf.get('active_hours') or '')
+        return rules.secondsUntilOpen(windows, self.manager.localNow())
+
+    def gate(self):
+        """Waits out the working hours and the daily limits before a pass and
+        returns the settings to run it with; None once stopped. 'Run now'
+        lets one pass through regardless."""
+        while not self.stopped:
+            conf = self.settings()
+            if self.forced:
+                self.forced = False
+                return conf
+            closed = self.closedFor(conf)
+            if closed:
+                opens = self.manager.localNow() + timedelta(seconds=closed)
+                self.info(f"Вне часов работы, следующий проход в {opens:%H:%M}.")
+                if not self.wait(closed, reason=f"Вне часов работы, откроется в {opens:%H:%M}"):
+                    return None
+                continue
+            if self.limitReached(conf):
+                wait = self.limitResetIn()
+                resets = self.manager.localNow() + timedelta(seconds=wait)
+                self.info(f"Дневной лимит исчерпан, следующий проход через {wait // 60} мин.")
+                if not self.wait(wait, reason=f"Дневной лимит исчерпан, сброс в {resets:%H:%M}"):
+                    return None
+                continue
+            return conf
+        return None
+
+    def logSkips(self, skipped):
+        if skipped:
+            parts = ', '.join(f"{reason} — {count}" for reason, count in skipped.most_common())
+            self.info(f"Пропущено: {parts}")
+
+    # ---- the worker --------------------------------------------------------
+
+    @property
+    def running(self):
+        return self.thread is not None and self.thread.is_alive()
+
+    def start(self):
+        if self.running:
+            return False
+        self.stopFlag.clear()
+        self.wakeFlag.clear()
+        self.lastError = ''
+        self.state     = RUNNING
+        self.startedAt = time.time()
+        self.sessionEntered = 0
+        self.sessionSpent   = 0
+        self.forced = False
+        self.thread = threading.Thread(target=self.loop, name=f'farm-{self.key}', daemon=True)
+        self.thread.start()
+        return True
+
+    def stop(self, wait=0):
+        self.stopFlag.set()
+        self.wakeFlag.set()
+        try:
+            self.onStop()
+        except Exception as error:
+            self.warn(f"Ошибка при остановке: {error}")
+        if wait and self.thread is not None:
+            self.thread.join(wait)
+
+    def wakeUp(self):
+        self.forced = True
+        self.wakeFlag.set()
+
+    @property
+    def stopped(self):
+        return self.stopFlag.is_set()
+
+    # Sleeps, but returns at once on stop or 'run now'. False means stopped.
+    # The wake flag is cleared only after it has woken us: clearing it first
+    # would swallow a stop (or 'run now') pressed while a pass was running,
+    # and the worker would then sleep through the whole interval.
+    def wait(self, seconds, sleeping=True, reason=''):
+        if self.stopped:
+            return False
+        if sleeping and self.forced:
+            # 'Run now' is waiting for the next pass; gate() will take it.
+            return True
+        if sleeping:
+            self.state     = SLEEPING
+            self.nextCycle = time.time() + seconds
+            self.waitReason = reason
+        self.wakeFlag.wait(max(0, seconds))
+        self.wakeFlag.clear()
+        self.nextCycle = None
+        if sleeping:
+            self.waitReason = ''
+        if not self.stopped:
+            self.state = RUNNING
+        return not self.stopped
+
+    # A short human pause between two entries.
+    def pause(self, low=3, high=7):
+        return self.wait(random.uniform(low, high), sleeping=False)
+
+    def loop(self):
+        self.info("Запущено")
+        while not self.stopped:
+            try:
+                self.state = RUNNING
+                self.run()
+                break
+            except AuthError as error:
+                self.state = AUTH
+                self.lastError = str(error)
+                self.warn(f"Нужна новая авторизация: {error}")
+                self.notify(f"Сессия больше не действует, ферма остановила площадку.\n{error}")
+                return
+            except PlatformError as error:
+                self.state = ERROR
+                self.lastError = str(error)
+                self.warn(f"Площадка остановлена: {error}")
+                self.notify(f"Площадка остановлена: {error}")
+                return
+            except RetryLater as error:
+                self.state = ERROR
+                self.lastError = str(error)
+                self.warn(f"{error} Повтор через {ERROR_RETRY_SECONDS // 60} мин.")
+                if not self.wait(ERROR_RETRY_SECONDS):
+                    break
+                self.lastError = ''
+            except Exception as error:
+                self.state = ERROR
+                self.lastError = f"{type(error).__name__}: {error}"
+                self.logger.error(f"Неожиданная ошибка: {self.lastError}")
+                self.logger.debug(traceback.format_exc())
+                for line in traceback.format_exc().strip().splitlines()[-4:]:
+                    self.logger.error("  " + line)
+                if not self.wait(ERROR_RETRY_SECONDS):
+                    break
+                self.lastError = ''
+        self.state = STOPPED
+        self.nextCycle = None
+        self.waitReason = ''
+        self.info("Остановлено")
+
+    # A copy that shares the settings and history but not the worker: its own
+    # session and stop flag, so a dry run neither disturbs a pass in progress
+    # nor gives up because the site is stopped.
+    def sandbox(self):
+        clone = copy.copy(self)
+        clone.stopFlag = threading.Event()
+        clone.wakeFlag = threading.Event()
+        return clone
+
+    def previewNote(self, conf):
+        closed = self.closedFor(conf)
+        if not closed:
+            return ''
+        opens = self.manager.localNow() + timedelta(seconds=closed)
+        return f"Сейчас нерабочие часы: так ферма войдёт, когда они начнутся, в {opens:%H:%M}."
+
+    def runPreview(self):
+        if not self.previewLock.acquire(blocking=False):
+            raise ValueError("пробный проход уже идёт")
+        try:
+            return self.preview()
+        finally:
+            self.previewLock.release()
+
+    # Today's use of the daily limits and whether the working hours are open.
+    def limits(self):
+        try:
+            conf = self.limitSettings()
+        except Exception:
+            return None
+        count, spent, _oldest = self.manager.state.usage(self.key)
+        try:
+            closed = self.closedFor(conf)
+        except ValueError:
+            closed = 0
+        opens = None
+        if closed:
+            opens = (self.manager.localNow() + timedelta(seconds=closed)).strftime('%H:%M')
+        return {
+            'entries': {'used': count, 'max': conf.get('daily_entries')},
+            'spend': {'used': spent, 'max': conf.get('daily_spend')},
+            'hours': conf.get('active_hours') or '',
+            'opensAt': opens,
+        }
+
+    def snapshot(self):
+        return {
+            'key': self.key, 'title': self.title, 'url': self.siteURL,
+            'description': self.description,
+            'state': self.state, 'error': self.lastError,
+            'balance': self.balance, 'account': self.account,
+            'startedAt': self.startedAt, 'lastCycle': self.lastCycle,
+            'nextCycle': self.nextCycle, 'reason': self.waitReason,
+            'limits': self.limits(), 'lists': self.quickLists(),
+            'unit': self.unit, 'category': self.category, 'needs': self.needs,
+            'sessionEntered': self.sessionEntered, 'sessionSpent': self.sessionSpent,
+            'autostart': self.manager.autostart(self.key),
+            'totals': self.manager.state.totals(self.key),
+            'configured': self.configured(),
+        }
+
+    def configured(self):
+        return True
