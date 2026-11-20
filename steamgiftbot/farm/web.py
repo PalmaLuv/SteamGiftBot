@@ -28,7 +28,7 @@ STATIC_DIR      = Path(__file__).resolve().parent / 'static'
 
 log = logging.getLogger('botfarm')
 
-ROUTE = re.compile(r'^/api/platforms/(?P<key>[a-z]+)/(?P<action>[a-z-]+)$')
+ROUTE = re.compile(r'^/api/platforms/(?P<key>[a-z]+(?:-[0-9]{1,3})?)/(?P<action>[a-z-]+)$')
 
 # Files the page may load besides itself; everything else is 404.
 STATIC_FILES = {
@@ -273,11 +273,21 @@ class Handler(BaseHTTPRequestHandler):
             token = makeToken(manager.sessionSecret())
             return self.json({'ok': True, 'message': 'Все остальные устройства вышли из панели'},
                              headers={'Set-Cookie': self.sessionCookie(token, SESSION_SECONDS)})
+        if path == '/api/accounts/add':
+            try:
+                platform, found = manager.addAccount(str(data.get('kind') or ''),
+                                                     data.get('values') or {})
+            except (AuthError, PlatformError, RetryLater) as error:
+                raise ValueError(str(error)) from error
+            return self.json({'ok': True, 'key': platform.key, 'title': platform.title,
+                              'account': found.get('account') or '',
+                              'balance': found.get('balance')})
         if path == '/api/asf/check':
             found = manager.asf.check()
             online = ', '.join(found['online']) or 'ни одного'
             return self.json({'ok': True, 'message': f"ASF на связи. Ботов: {len(found['bots'])}, "
-                                                      f"в сети: {online}"})
+                                                      f"в сети: {online}",
+                              'bots': found['bots'], 'online': found['online']})
         if path == '/api/farm/report':
             problems = manager.notify(manager.report())
             if problems:
@@ -342,9 +352,20 @@ class Handler(BaseHTTPRequestHandler):
             return self.json({'ok': kind in ('ok', 'owned'), 'message': words})
         if action == 'check':
             try:
-                return self.json({'ok': True, **platform.check(data.get('values') or {})})
+                found = manager.checkAccount(platform, data.get('values') or {})
             except (AuthError, PlatformError, RetryLater) as error:
                 raise ValueError(str(error)) from error
+            manager.rememberAccount(platform, found)
+            return self.json({'ok': True, **found})
+        if action == 'remove':
+            manager.removeAccount(platform.key)
+            return self.json({'ok': True})
+        if action == 'label':
+            return self.json({'ok': True,
+                              'title': manager.renameAccount(platform.key, data.get('label'))})
+        if action == 'key-bot':
+            manager.setKeyBot(platform.key, data.get('bot'))
+            return self.json({'ok': True})
         if action == 'preset':
             preset = platform.applyPreset(str(data.get('name') or ''))
             return self.json({'ok': True, 'title': preset['title'],
@@ -363,7 +384,7 @@ class Handler(BaseHTTPRequestHandler):
     # SteamGifts reads its settings once per start; the others every pass.
     @staticmethod
     def reloadSettings(platform):
-        if platform.key == 'steamgifts' and platform.running:
+        if platform.kind == 'steamgifts' and platform.running:
             platform.stop(wait=15)
             return platform.start()
         return False

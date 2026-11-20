@@ -73,7 +73,9 @@ def main(argv=None):
         writeLog = False
     startLogFile(bool(writeLog), manager.dataDir / 'log')
     # startLogFile resets the package logger's handlers; put the panel's back.
-    manager.platforms['steamgifts'].attachLogger()
+    for platform in manager.platforms.values():
+        if platform.kind == 'steamgifts':
+            platform.attachLogger()
 
     if not manager.hasPassword():
         log.warning("Пароль панели не задан: python -m steamgiftbot.farm --set-password")

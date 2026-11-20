@@ -145,6 +145,10 @@ class SteamGift :
 
         self.xsrfToken = token['value']
         self.points    = int(points.text.replace(',', '').strip())
+        # The header's avatar links to /user/<name>; only the farm needs it, to
+        # tell accounts apart, so a changed layout just leaves it empty.
+        avatar = soup.select_one('a.nav__avatar-outer-wrap[href^="/user/"]')
+        self.username = avatar['href'].split('/user/', 1)[1].strip('/') if avatar else ''
 
     def entryGIFT(self, id, cost):
         payload = {

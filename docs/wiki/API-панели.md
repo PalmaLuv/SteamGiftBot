@@ -65,10 +65,12 @@ curl -b farm.cookie http://192.168.1.10:8092/api/status
 | `/api/notify-test` | — | тестовое сообщение в Telegram |
 | `/api/telegram/chats` | `{token?}` | чаты, где боту писали |
 | `/api/steam/check` | — | проверить библиотеку и список желаемого |
-| `/api/asf/check` | — | проверить ASF |
+| `/api/asf/check` | — | проверить ASF → `{ok, message, bots, online}` |
+| `/api/accounts/add` | `{kind, values: {cookie}}` | ещё одна учётка площадки: проверяет cookie на сайте и только тогда заводит карточку → `{ok, key, title, account, balance}` |
 
 **Одна площадка** — путь начинается с `/api/platforms/<key>/`, где `<key>` — одно из
-`steamgifts`, `indiegala`, `opiumpulses`, `steamfree`, `gog`, `itch`.
+`steamgifts`, `indiegala`, `opiumpulses`, `steamfree`, `gog`, `itch`, а у
+[добавленных учёток](Несколько-учёток.md) — с номером: `steamgifts-2`, `indiegala-3`.
 
 | Действие | Тело | Что делает |
 | --- | --- | --- |
@@ -83,6 +85,9 @@ curl -b farm.cookie http://192.168.1.10:8092/api/status
 | `list` | `{list: "blacklist" \| "priority", value}` | добавить игру в список |
 | `win` | `{time, name, status}` или `{time, name, key}` | статус выигрыша или его ключ |
 | `redeem` | `{time, name}` | активировать ключ выигрыша через ASF |
+| `label` | `{label}` | имя учётки для карточек и Telegram → `{ok, title}` |
+| `key-bot` | `{bot}` | бот ASF для ключей этой учётки; пусто — бот из настроек фермы |
+| `remove` | — | удалить добавленную учётку (у основной — только `disconnect`) |
 
 ## Пример: запустить IndieGala по расписанию
 

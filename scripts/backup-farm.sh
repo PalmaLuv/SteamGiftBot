@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Daily copy of what the bot farm cannot rebuild: panel password, site
 # cookies and settings (farm.json, config.ini) and history, seen ids and
-# daily counters (botfarm-state.json, steamgiftbot-state.json).
+# daily counters (botfarm-state.json, steamgiftbot-state.json), and the
+# added accounts' own files (accounts/).
 # The archive holds live cookies, so it is readable by the owner only.
 # cron: 27 4 * * * /opt/SteamGiftBot/scripts/backup-farm.sh
 # KEEP=N sets how many archives stay (default 14).
@@ -10,8 +11,8 @@ umask 077
 cd "$(dirname "$0")/.."
 mkdir -p backups
 files=()
-for name in farm.json botfarm-state.json config.ini steamgiftbot-state.json; do
-  [ -f "$name" ] && files+=("$name")
+for name in farm.json botfarm-state.json config.ini steamgiftbot-state.json accounts; do
+  [ -e "$name" ] && files+=("$name")
 done
 archive="backups/botfarm-$(date +%Y%m%d-%H%M%S).tar.gz"
 tar -czf "$archive" "${files[@]}"

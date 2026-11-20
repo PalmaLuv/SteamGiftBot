@@ -11,6 +11,8 @@ import threading
 import time
 import traceback
 
+from contextlib import contextmanager
+
 from collections import deque
 from datetime import timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -365,6 +367,35 @@ def buildSession(userAgent, cookies, domain):
     return session
 
 
+# Which site the current thread works for. SteamGiftBot logs through one
+# package logger however many SteamGifts accounts run, so each account's
+# panel log keeps only the lines its own threads wrote.
+ACTING = threading.local()
+
+
+@contextmanager
+def actingFor(platform):
+    previous = getattr(ACTING, 'platform', None)
+    ACTING.platform = platform
+    try:
+        yield
+    finally:
+        ACTING.platform = previous
+
+
+class OwnLines(logging.Filter):
+    """Passes a shared logger's record to one site: the one acting in that
+    thread, or the main account when no site is acting (the command line)."""
+
+    def __init__(self, platform):
+        super().__init__()
+        self.platform = platform
+
+    def filter(self, record):
+        owner = getattr(ACTING, 'platform', None)
+        return owner is self.platform or (owner is None and self.platform.primary)
+
+
 class RingHandler(logging.Handler):
     """Keeps the last lines of one site's log for the web panel."""
 
@@ -391,9 +422,18 @@ class Platform:
     needs       = 'cookie'
     # Fields the connect wizard asks for; the rest keep their defaults.
     connectFields = ('cookie',)
+    # Whether a second account of this site can be added. Each account is
+    # its own instance: key 'steamgifts-2', its own settings, limits, history.
+    multiAccount = True
 
-    def __init__(self, manager):
+    def __init__(self, manager, key=None):
         self.manager = manager
+        self.kind    = type(self).key
+        self.key     = key or self.kind
+        self.primary = self.key == self.kind
+        self.number  = 1 if self.primary else int(self.key.rsplit('-', 1)[1])
+        self.baseTitle = type(self).title
+        self.title     = self.baseTitle
         self.logger  = logging.getLogger(f'botfarm.{self.key}')
         self.lines   = deque(maxlen=LOG_LINES)
         self.lineSeq = 0
@@ -701,6 +741,7 @@ class Platform:
         return self.wait(random.uniform(low, high), sleeping=False)
 
     def loop(self):
+        ACTING.platform = self
         self.info("Запущено")
         while not self.stopped:
             try:
@@ -761,7 +802,8 @@ class Platform:
         if not self.previewLock.acquire(blocking=False):
             raise ValueError("пробный проход уже идёт")
         try:
-            return self.preview()
+            with actingFor(self):
+                return self.preview()
         finally:
             self.previewLock.release()
 
@@ -786,9 +828,17 @@ class Platform:
             'opensAt': opens,
         }
 
+    # Called when an added account is removed for good, after disconnect().
+    def forget(self):
+        pass
+
     def snapshot(self):
         return {
             'key': self.key, 'title': self.title, 'url': self.siteURL,
+            'kind': self.kind, 'baseTitle': self.baseTitle, 'primary': self.primary,
+            'multi': self.multiAccount,
+            'label': self.manager.platformEntry(self.key).get('label', ''),
+            'keyBot': self.manager.keyBotFor(self.key),
             'description': self.description,
             'state': self.state, 'error': self.lastError,
             'balance': self.balance, 'account': self.account,

@@ -121,8 +121,9 @@ class ASF:
         online = [bot['name'] for bot in bots if bot['online']]
         return {'bots': [bot['name'] for bot in bots], 'online': online}
 
-    def redeem(self, key):
-        bot = self.keyBot()
+    # bot: the account's own choice (several Steam accounts), else the farm's.
+    def redeem(self, key, bot=None):
+        bot = bot or self.keyBot()
         result = self.call('POST', f'/Api/Bot/{quote(bot, safe="")}/Redeem',
                            {'KeysToRedeem': [key]})
         answer = (result.get(bot) or {}).get(key)
@@ -130,9 +131,11 @@ class ASF:
         log.info(f"ASF: ключ для {bot}: {words}")
         return kind, words
 
-    # {('app'|'sub', id): (kind, words)} over every bot.
-    def addLicenses(self, apps=(), packages=()):
-        bot = self.conf()['bot'] or 'ASF'
+    # {('app'|'sub', id): (kind, words)} over every bot, or over the named
+    # ones: ASF takes several names joined by commas.
+    def addLicenses(self, apps=(), packages=(), bots=()):
+        names = [name.strip() for name in bots or () if name and name.strip()]
+        bot = ','.join(names) or self.conf()['bot'] or 'ASF'
         result = self.call('POST', f'/Api/Bot/{quote(bot, safe="")}/AddLicense',
                            {'Apps': list(apps), 'Packages': list(packages)})
         found = {}

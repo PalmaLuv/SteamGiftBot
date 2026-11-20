@@ -9,7 +9,8 @@ from steamgiftbot import filters
 from steamgiftbot import settings as sgSettings
 from steamgiftbot.bot import URL, SessionExpired, SteamGift, SteamGiftError
 from steamgiftbot.farm import rules
-from steamgiftbot.farm.base import (AuthError, Platform, PlatformError, RetryLater, RingHandler,
+from steamgiftbot.farm.base import (AuthError, OwnLines, Platform, PlatformError, RetryLater,
+                                    RingHandler,
                                     applySettings, coerce, cookieGuide, field, grouped,
                                     parseCookies, presetFields, scheduleFields)
 from steamgiftbot.giveaway import parseRow
@@ -75,6 +76,12 @@ class FarmSteamGift(SteamGift):
         if not self.platform.wait(self.pointsWait, reason=f"Ждёт поинты: {self.points} из "
                                                           f"{self.min_points} P"):
             self.stop()
+
+    def updateInfo(self):
+        super().updateInfo()
+        self.platform.balance = self.points
+        if getattr(self, 'username', ''):
+            self.platform.account = self.username
 
     def extraSkipReason(self, giveaway):
         return self.platform.extraReason(giveaway, self.points, self.min_points)
@@ -156,12 +163,15 @@ class SteamGiftsPlatform(Platform):
               'задокументирован'),
     ]) + scheduleFields()
 
-    def __init__(self, manager):
-        super().__init__(manager)
+    def __init__(self, manager, key=None):
+        super().__init__(manager, key)
         self.bot = None
         self.extra = {}
         self.pendingCost = {}
-        self.configPath = manager.configPath
+        # The main account shares config.ini with the command line bot; an
+        # added one gets its own, and its own state file next to it.
+        self.configPath = (manager.configPath if self.primary
+                           else manager.accountDir(self.key) / 'config.ini')
 
         self.attachLogger()
 
@@ -175,8 +185,10 @@ class SteamGiftsPlatform(Platform):
                 sgLogger.removeHandler(handler)
         ring = RingHandler(self)
         ring.setFormatter(logging.Formatter('%(message)s'))
-        sgLogger.addHandler(ring)
-        sgLogger.addHandler(EntryWatcher(self))
+        watcher = EntryWatcher(self)
+        for handler in (ring, watcher):
+            handler.addFilter(OwnLines(self))
+            sgLogger.addHandler(handler)
         sgLogger.setLevel(logging.INFO)
         sgLogger.propagate = False
 
@@ -192,9 +204,31 @@ class SteamGiftsPlatform(Platform):
 
     def loadConfig(self):
         try:
-            return sgSettings.load(self.configPath)
+            if self.primary:
+                return sgSettings.load(self.configPath)
+            # STEAMGIFTBOT_* variables describe the main account only.
+            config = sgSettings.Settings()
+            sgSettings.applyLayer(config, sgSettings.readConfigFile(self.configPath),
+                                  str(self.configPath))
+            # A new account starts from the form's defaults, not from nothing.
+            for item in self.FIELDS:
+                if item['name'] in sgSettings.REQUIRED and item['name'] != 'cookie' \
+                        and getattr(config, item['name']) in (None, ''):
+                    setattr(config, item['name'], item['default'])
+            return config
         except sgSettings.SettingsError as error:
             raise PlatformError(str(error)) from error
+
+    def saveConfig(self, config):
+        if not self.primary:
+            self.configPath.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        sgSettings.save(config, self.configPath)
+
+    def forget(self):
+        logger = logging.getLogger(LOGGER_NAME)
+        for handler in list(logger.handlers):
+            if getattr(handler, 'platform', None) is self:
+                logger.removeHandler(handler)
 
     def settings(self):
         config = self.loadConfig()
@@ -237,13 +271,13 @@ class SteamGiftsPlatform(Platform):
                             "запрос заново.") from error
         except SteamGiftError as error:
             raise RetryLater(str(error)) from error
-        return {'account': '', 'balance': bot.points}
+        return {'account': getattr(bot, 'username', ''), 'balance': bot.points}
 
     def disconnect(self):
         self.stop(wait=15)
         config = self.loadConfig()
         config.cookie = ''
-        sgSettings.save(config, self.configPath)
+        self.saveConfig(config)
         self.manager.setAutostart(self.key, False)
 
     def updateSettings(self, incoming):
@@ -275,7 +309,7 @@ class SteamGiftsPlatform(Platform):
             setattr(config, name, value)
         if config.log_info is None:
             config.log_info = True
-        sgSettings.save(config, self.configPath)
+        self.saveConfig(config)
         self.manager.savePlatformSettings(self.key, extra)
         return self.settings()
 

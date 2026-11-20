@@ -382,7 +382,11 @@ function ago(ts){
 }
 function until(ts){ if (!ts) return ''; const m = Math.max(0, Math.round((ts - Date.now() / 1000) / 60)); return m < 1 ? 'меньше минуты' : m < 120 ? m + ' мин' : Math.round(m / 60) + ' ч'; }
 const sum = (list, f) => list.reduce((a, x) => a + f(x), 0);
-const SITE_COLOR = key => `var(--s-${key}, var(--s-other))`;
+// A site's colour; its second and later accounts get lighter shades of it.
+const SITE_COLOR = key => {
+  const m = /^(.+)-(\d+)$/.exec(key || ''), base = `var(--s-${m ? m[1] : key}, var(--s-other))`;
+  return m ? `color-mix(in srgb, ${base} ${Math.max(40, 100 - (m[2] - 1) * 22)}%, #ffffff)` : base;
+};
 const UNIT = key => platforms.find(p => p.key === key)?.unit || '';
 
 /* ====================== state ====================== */
@@ -491,6 +495,7 @@ document.addEventListener('click', async e => {
     if (act === 'logout') { await api('/api/logout', {}); return showLogin(); }
     if (act === 'start-all') { const r = await api('/api/start-all', {}); toast(r.started.length ? 'Запущено: ' + r.started.length : 'Все подключённые площадки уже работают'); }
     if (act === 'stop-all') { await api('/api/stop-all', {}); toast('Все площадки останавливаются'); }
+    if (act === 'remove-account') { if (await removeAccount(byKey(key))) go('#/sites'); return; }
     if (act === 'start' || act === 'stop' || act === 'run-now') {
       b.disabled = true;
       await api(`/api/platforms/${key}/${act}`, {});
@@ -726,15 +731,26 @@ function catalogCard(p){
   return `<article class="card cat"><div><span class="tag">${esc(CATEGORY[p.category] || p.category)}</span></div>
     <div><h2>${esc(p.title)}</h2><p class="muted small" style="margin-top:4px">${esc(p.description)}</p></div>
     <p class="small">${esc(NEEDS[p.needs] || '')}</p>
-    <div class="actions"><a class="btn primary" href="#/connect/${p.key}">${icon('plus')}Подключить</a><a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener">${icon('ext')}Сайт</a></div></article>`;
+    <div class="actions"><a class="btn primary" href="#/connect/${p.key}">${icon('plus')}Подключить</a>${p.primary ? `<a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener">${icon('ext')}Сайт</a>` : `<button class="danger" data-act="remove-account" data-key="${p.key}">Удалить карточку</button>`}</div></article>`;
+}
+// One "add an account" card per connected site that allows several.
+function moreAccounts(){
+  const seen = new Set();
+  return connected().filter(p => p.multi && !seen.has(p.kind) && seen.add(p.kind)).map(p => byKey(p.kind) || p);
+}
+function moreCard(p){
+  const n = platforms.filter(x => x.kind === p.kind && x.configured).length;
+  return `<article class="card cat"><div><span class="tag">Ещё учётка</span></div>
+    <div><h2>${esc(p.baseTitle)}</h2><p class="muted small" style="margin-top:4px">Подключено учёток: ${n}. Следующая работает отдельно: свои cookie, лимиты, история и журнал.</p></div>
+    <div class="actions"><a class="btn primary" href="#/connect/${p.kind}/new">${icon('plus')}Добавить учётку</a></div></article>`;
 }
 function renderSiteCards(){
   const cards = $('#siteCards'), cat = $('#catalog'); if (!cards) return;
   if (cards.contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
   const list = connected();
   cards.innerHTML = list.length ? list.map(siteCard).join('') : `<div class="empty" style="grid-column:1/-1"><b>Пока пусто</b>Выберите площадку в каталоге ниже.</div>`;
-  const rest = catalog();
-  cat.innerHTML = rest.length ? rest.map(catalogCard).join('') : `<div class="empty" style="grid-column:1/-1">Все доступные площадки уже подключены.</div>`;
+  const html = catalog().map(catalogCard).join('') + moreAccounts().map(moreCard).join('');
+  cat.innerHTML = html || `<div class="empty" style="grid-column:1/-1">Все доступные площадки уже подключены.</div>`;
 }
 
 /* ---- one site ---- */
@@ -872,12 +888,53 @@ async function runPreviewInto(box, p){
 }
 
 /* ---- connection ---- */
+async function removeAccount(p){
+  if (!p || !await confirmDialog(`Удалить учётку ${p.title}?`, 'Ферма остановит её, забудет cookie и уберёт карточку. Остальные учётки этого сайта продолжат работать.', 'Удалить учётку', true)) return false;
+  try { await api(`/api/platforms/${p.key}/remove`, {}); await poll(); toast(`${p.title} удалена`); return true; }
+  catch (err) { toast(err.message, true); return false; }
+}
+// Name, ASF bot for keys and "one more account": only for sites that can have several.
+function accountBlocks(p){
+  if (!p.multi) return '';
+  const keys = p.category === 'points';
+  return `<section class="block"><h2>Учётка</h2>
+      <p class="muted" style="margin:6px 0 12px">${p.account ? `На сайте: <b>${esc(p.account)}</b>. ` : ''}Имя видно в карточках, журнале и Telegram — удобно, когда учёток несколько.</p>
+      <form class="inline" id="labelForm"><input id="accLabel" maxlength="40" value="${esc(p.label || '')}" placeholder="${esc(p.account || (p.primary ? 'основная' : '#' + p.key.split('-').pop()))}" aria-label="Имя учётки"><button type="submit">Сохранить имя</button></form></section>
+    ${keys ? `<section class="block"><h2>Ключи этой учётки</h2>
+      <p class="muted" style="margin:6px 0 12px">Каждая учётка Steam — свой бот в ArchiSteamFarm. Выигранные здесь ключи ASF активирует в выбранном боте.</p>
+      <div class="inline"><select id="keyBot" aria-label="Бот ASF для ключей"><option value="">Как в настройках фермы</option>${p.keyBot ? `<option value="${esc(p.keyBot)}" selected>${esc(p.keyBot)}</option>` : ''}</select><button type="button" id="keyBotSave">Сохранить</button></div>
+      <p class="small muted" id="keyBotNote" style="margin-top:6px">Спрашиваю у ASF список ботов…</p></section>` : ''}
+    <section class="block"><h2>Ещё одна учётка ${esc(p.baseTitle)}</h2>
+      <p class="muted" style="margin:6px 0 12px">Например, учётка брата или второй Steam. Она получит свою карточку, лимиты, историю и журнал.</p>
+      <a class="btn" href="#/connect/${p.kind}/new">${icon('plus')}Добавить учётку</a></section>`;
+}
+function wireAccountBlocks(p){
+  const form = $('#labelForm'); if (!form) return;
+  form.onsubmit = async e => {
+    e.preventDefault();
+    try { const r = await api(`/api/platforms/${p.key}/label`, {label: $('#accLabel').value}); await poll(); renderSiteHead(p.key); toast(`Теперь это «${r.title}»`); }
+    catch (err) { toast(err.message, true); }
+  };
+  const pick = $('#keyBot'); if (!pick) return;
+  api('/api/asf/check', {}).then(r => {
+    pick.innerHTML = `<option value="">Как в настройках фермы</option>` + [...new Set([...(r.bots || []), ...(p.keyBot ? [p.keyBot] : [])])].map(b => `<option value="${esc(b)}" ${b === p.keyBot ? 'selected' : ''}>${esc(b)}${(r.online || []).includes(b) ? '' : ' (не в сети)'}</option>`).join('');
+    $('#keyBotNote').textContent = `Ботов в ASF: ${(r.bots || []).length}.`;
+  }).catch(err => { $('#keyBotNote').textContent = 'ASF не ответил: ' + err.message; });
+  $('#keyBotSave').onclick = async () => {
+    try { await api(`/api/platforms/${p.key}/key-bot`, {bot: pick.value}); await poll(); toast(pick.value ? `Ключи пойдут в бота ${pick.value}` : 'Ключи пойдут в бота из настроек фермы'); }
+    catch (err) { toast(err.message, true); }
+  };
+}
 function renderConnection(body, p){
   body.innerHTML = `<div class="stack"><section class="block"><h2>Подключение</h2>
       <p class="muted" style="margin:6px 0 12px">${p.state === 'auth' ? 'Сайт больше не узнаёт сохранённые cookie — подключите площадку заново.' : 'Cookie сохранены. Если сайт выкинет из аккаунта, ферма остановит площадку и пришлёт сообщение в Telegram.'}</p>
       <a class="btn primary" href="#/connect/${p.key}">${icon('key')}Подключить заново</a></section>
-    <section class="block"><h2>Отключить площадку</h2><p class="muted" style="margin:6px 0 12px">Ферма остановит площадку и забудет cookie. История входов и настройки останутся.</p>
-      <button class="danger" id="disconnect">Отключить ${esc(p.title)}</button></section></div>`;
+    ${accountBlocks(p)}
+    ${p.primary ? `<section class="block"><h2>Отключить площадку</h2><p class="muted" style="margin:6px 0 12px">Ферма остановит площадку и забудет cookie. История входов и настройки останутся.</p>
+      <button class="danger" id="disconnect">Отключить ${esc(p.title)}</button></section>` : `<section class="block"><h2>Удалить учётку</h2><p class="muted" style="margin:6px 0 12px">Ферма остановит учётку, забудет cookie и уберёт карточку. Остальные учётки ${esc(p.baseTitle)} продолжат работать.</p>
+      <button class="danger" id="removeAcc">Удалить ${esc(p.title)}</button></section>`}</div>`;
+  wireAccountBlocks(p);
+  if (!p.primary) { $('#removeAcc').onclick = async () => { if (await removeAccount(p)) go('#/sites'); }; return; }
   $('#disconnect').onclick = async () => {
     if (!await confirmDialog(`Отключить ${p.title}?`, 'Ферма остановит площадку и забудет cookie. История и настройки останутся, подключить снова можно в любой момент.', 'Отключить', true)) return;
     try { await api(`/api/platforms/${p.key}/disconnect`, {}); await poll(); toast(`${p.title} отключена`); go('#/sites'); }
@@ -886,12 +943,17 @@ function renderConnection(body, p){
 }
 
 /* ====================== connect wizard ====================== */
-async function pageConnect(view, {key}){
+async function pageConnect(view, {key, tab}){
   const p = byKey(key); if (!p) return go('#/sites');
+  // A new account of a site: the form is the site's, the card appears once
+  // the site accepts the cookie.
+  const isNew = tab === 'new' && p.multi;
+  let target = isNew ? null : key;
   const s = await api(`/api/platforms/${key}/settings`);
   const fields = s.schema.filter(f => s.connectFields.includes(f.name));
   view.innerHTML = `<a class="back" href="#/sites">← Площадки</a>
-    <div class="page-head"><h1>Подключение ${esc(p.title)}</h1><p class="lead">${esc(p.description)} Пройдите шаги по порядку — займёт пару минут.</p></div>
+    <div class="page-head"><h1>${isNew ? `Ещё одна учётка ${esc(p.baseTitle)}` : `Подключение ${esc(p.title)}`}</h1><p class="lead">${esc(p.description)} Пройдите шаги по порядку — займёт пару минут.</p></div>
+    ${isNew ? `<div class="note" style="margin-bottom:12px"><b>Войдите во вторую учётку в другом профиле браузера или в окне инкогнито</b> — иначе скопируются cookie первой, и ферма скажет, что эта учётка уже подключена. После копирования окно можно закрыть, но не выходите из учётки: выход сбросит cookie.<br><span class="muted">Правила многих сайтов разрешают одну учётку на человека, и с одного IP сайт может связать учётки между собой. Подключайте учётки разных людей — например, семьи — на свой риск.</span></div>` : ''}
     <ol class="steps">${s.guide.map(g => `<li><h3>${esc(g.title)}</h3><div><p>${esc(g.text)}</p>${g.link ? `<a class="btn" href="${esc(g.link)}" target="_blank" rel="noopener">${icon('ext')}Открыть ${esc(new URL(g.link).host)}</a>` : ''}</div></li>`).join('')}</ol>
     <form class="form" id="cform" style="margin-top:16px">
       <section class="fieldset" aria-labelledby="hPaste"><h2 id="hPaste">${fields.length ? 'Вставьте сюда' : 'Проверка'}</h2>${fields.length ? '' : '<p>Ферма спросит у ArchiSteamFarm список ботов. Адрес и пароль ASF — в «Настройки» → «ArchiSteamFarm».</p>'}
@@ -912,20 +974,23 @@ async function pageConnect(view, {key}){
     if (fields.some(f => !$('#c_' + f.name).value.trim())) { $('#checkOut').innerHTML = '<div class="err">Поле пустое. Вставьте скопированный запрос целиком.</div>'; return; }
     $('#checkBtn').disabled = true; $('#checkOut').innerHTML = '<p class="muted" style="margin-top:10px">Проверяю на сайте…</p>';
     try {
-      const r = await api(`/api/platforms/${key}/check`, {values: values()});
+      let r;
+      if (!target) { r = await api('/api/accounts/add', {kind: key, values: values()}); target = r.key; await poll(); }
+      else r = await api(`/api/platforms/${target}/check`, {values: values()});
       $('#checkOut').innerHTML = `<div class="okbox" style="margin-top:10px"><b>Подключено.</b> ${r.account ? 'Аккаунт ' + esc(r.account) + '. ' : ''}${r.balance != null ? `Баланс ${r.balance} ${esc(p.unit)}.` : ''}</div>`;
       $('#finish').classList.remove('hidden'); $('#finish').scrollIntoView({behavior: 'smooth', block: 'start'});
     } catch (err) {
-      $('#checkOut').innerHTML = `<div class="err" style="margin-top:10px"><b>Не получилось.</b> ${esc(err.message)}<br>Проверьте, что вы вошли на сайт в браузере, обновите страницу и скопируйте запрос заново.</div>`;
+      const twice = /уже подключена/.test(err.message);
+      $('#checkOut').innerHTML = `<div class="err" style="margin-top:10px"><b>Не получилось.</b> ${esc(err.message)}<br>${twice ? 'Это cookie той же учётки. Войдите в другую учётку в отдельном профиле браузера или в окне инкогнито и скопируйте запрос оттуда.' : 'Проверьте, что вы вошли на сайт в браузере, обновите страницу и скопируйте запрос заново.'}</div>`;
     } finally { $('#checkBtn').disabled = false; }
   };
   $('#saveStart').onclick = async () => {
     const b = $('#saveStart'); b.disabled = true;
     try {
-      await api(`/api/platforms/${key}/settings`, {values: values(), autostart: $('#c_autostart').checked, connect: true});
-      if (picked) await api(`/api/platforms/${key}/preset`, {name: picked});
-      await api(`/api/platforms/${key}/start`, {}).catch(() => null);
-      await poll(); toast(`${p.title} подключена и запущена`); go(`#/site/${key}`);
+      await api(`/api/platforms/${target}/settings`, {values: values(), autostart: $('#c_autostart').checked, connect: true});
+      if (picked) await api(`/api/platforms/${target}/preset`, {name: picked});
+      await api(`/api/platforms/${target}/start`, {}).catch(() => null);
+      await poll(); toast(`${byKey(target)?.title || p.title} подключена и запущена`); go(`#/site/${target}`);
     } catch (err) { toast(err.message, true); b.disabled = false; }
   };
 }

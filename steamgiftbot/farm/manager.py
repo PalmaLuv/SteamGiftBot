@@ -6,7 +6,9 @@ import hmac
 import json
 import logging
 import os
+import re
 import secrets
+import shutil
 import threading
 import time
 
@@ -17,10 +19,14 @@ from zoneinfo import ZoneInfo
 from steamgiftbot import notify
 from steamgiftbot import settings as sgSettings
 from steamgiftbot.farm import rules
-from steamgiftbot.farm.base import HISTORY_LENGTH, applySettings, field, grouped, publicValues
+from steamgiftbot.farm.base import (HISTORY_LENGTH, actingFor, applySettings, field, grouped,
+                                    publicValues)
 
 FARM_FILE  = 'farm.json'
 STATE_FILE = 'botfarm-state.json'
+# Added accounts keep their own files (SteamGifts: config.ini and state) here.
+ACCOUNTS_DIR = 'accounts'
+ACCOUNT_KEY  = re.compile(r'^[a-z]+-[0-9]{1,3}$')
 
 # Remembered giveaway ids per site; old ones fall off the end.
 SEEN_LIMIT = 5000
@@ -289,6 +295,7 @@ class FarmManager:
         self.configPath = Path(configPath or sgSettings.DEFAULT_CONFIG_PATH)
         self.farmPath   = self.dataDir / FARM_FILE
         self.lock       = threading.Lock()
+        self.accountsLock = threading.Lock()
         self.farm       = readJSON(self.farmPath, {})
         self.farm.setdefault('web', {})
         self.farm.setdefault('platforms', {})
@@ -309,9 +316,20 @@ class FarmManager:
         from steamgiftbot.farm.opiumpulses import OpiumPulsesPlatform
         from steamgiftbot.farm.steamfree import SteamFreePlatform
         from steamgiftbot.farm.steamgifts import SteamGiftsPlatform
+        self.kinds = {}
         for cls in (SteamGiftsPlatform, IndieGalaPlatform, OpiumPulsesPlatform,
                     SteamFreePlatform, GOGPlatform, ItchPlatform):
+            self.kinds[cls.key] = cls
             self.platforms[cls.key] = cls(self)
+        # Added accounts: [{'key': 'steamgifts-2', 'kind': 'steamgifts'}].
+        self.farm.setdefault('accounts', [])
+        for item in self.farm['accounts']:
+            cls = self.kinds.get(item.get('kind'))
+            if cls is not None and ACCOUNT_KEY.match(item.get('key') or '') \
+                    and item['key'] not in self.platforms:
+                self.platforms[item['key']] = cls(self, key=item['key'])
+        self.sortPlatforms()
+        self.retitle()
 
     @staticmethod
     def now():
@@ -503,7 +521,7 @@ class FarmManager:
             raise ValueError("выигрыш не найден")
         if not win.get('cdkey'):
             raise ValueError("у этого выигрыша нет ключа: вставьте его в таблице")
-        kind, words = self.asf.redeem(win['cdkey'])
+        kind, words = self.asf.redeem(win['cdkey'], bot=self.keyBotFor(key))
         changes = {'redeem': words}
         if kind in ('ok', 'owned'):
             changes['status'] = 'activated'
@@ -570,6 +588,115 @@ class FarmManager:
     def saveFarm(self):
         with self.lock:
             writePrivate(self.farmPath, self.farm)
+
+    # ---- several accounts of one site ---------------------------------------
+
+    # Every account of a site next to the others, the main one first.
+    def sortPlatforms(self):
+        order = list(self.kinds)
+        self.platforms = dict(sorted(self.platforms.items(),
+                                     key=lambda item: (order.index(item[1].kind), item[1].number)))
+
+    def accountDir(self, key):
+        return self.dataDir / ACCOUNTS_DIR / key
+
+    # Titles tell accounts apart once a site has more than one:
+    # "SteamGifts · palma", the name the user gave or the account's own.
+    def retitle(self):
+        counts = {}
+        for platform in self.platforms.values():
+            counts[platform.kind] = counts.get(platform.kind, 0) + 1
+        for platform in self.platforms.values():
+            entry = self.farm['platforms'].get(platform.key, {})
+            name = entry.get('label') or ''
+            if not name and (counts[platform.kind] > 1 or not platform.primary):
+                name = entry.get('account') or ('основная' if platform.primary
+                                                else f'#{platform.number}')
+            platform.title = f"{platform.baseTitle} · {name}" if name else platform.baseTitle
+
+    # Asks the site who the cookie belongs to, and refuses an account that is
+    # already connected here under another card.
+    def checkAccount(self, platform, values):
+        with actingFor(platform):
+            found = platform.check(values) or {}
+        account = str(found.get('account') or '').strip()
+        if account:
+            for other in self.platforms.values():
+                if other is platform or other.kind != platform.kind:
+                    continue
+                known = self.farm['platforms'].get(other.key, {}).get('account') or other.account
+                if known and str(known).strip().lower() == account.lower():
+                    raise ValueError(f"учётка {account} уже подключена здесь: {other.title}")
+        return found
+
+    def rememberAccount(self, platform, found):
+        account = str((found or {}).get('account') or '').strip()
+        if account:
+            self.platformEntry(platform.key)['account'] = account
+            self.saveFarm()
+            self.retitle()
+
+    # Checks the pasted cookie on a new instance and keeps it only if the site
+    # accepted it, so a failed try leaves nothing behind.
+    def addAccount(self, kind, values):
+        cls = self.kinds.get(kind)
+        if cls is None:
+            raise ValueError("нет такой площадки")
+        if not cls.multiAccount:
+            raise ValueError(f"у {cls.title} одна карточка на все учётки")
+        with self.accountsLock:
+            used = [platform.number for platform in self.platforms.values()
+                    if platform.kind == kind]
+            number = max(used + [self.farm.setdefault('accountSeq', {}).get(kind, 1)]) + 1
+            key = f"{kind}-{number}"
+            platform = cls(self, key=key)
+            found = self.checkAccount(platform, values)
+            self.farm['accountSeq'][kind] = number
+            self.farm['accounts'].append({'key': key, 'kind': kind})
+            entry = self.platformEntry(key)
+            entry['connected'] = True
+            if found.get('account'):
+                entry['account'] = str(found['account']).strip()
+            self.platforms[key] = platform
+            self.sortPlatforms()
+            platform.updateSettings({name: values[name] for name in platform.connectFields
+                                     if name in values})
+            self.saveFarm()
+            self.retitle()
+        return platform, found
+
+    def removeAccount(self, key):
+        platform = self.platforms.get(key)
+        if platform is None:
+            raise ValueError("нет такой учётки")
+        if platform.primary:
+            raise ValueError("основную учётку можно только отключить")
+        platform.stop(wait=15)
+        platform.disconnect()
+        platform.forget()
+        with self.accountsLock:
+            self.platforms.pop(key, None)
+            self.farm['accounts'] = [item for item in self.farm['accounts']
+                                     if item.get('key') != key]
+            self.farm['platforms'].pop(key, None)
+            self.saveFarm()
+            self.retitle()
+        shutil.rmtree(self.accountDir(key), ignore_errors=True)
+
+    def renameAccount(self, key, label):
+        label = ' '.join(str(label or '').split())[:40]
+        self.platformEntry(key)['label'] = label
+        self.saveFarm()
+        self.retitle()
+        return self.platforms[key].title
+
+    # The ASF bot a site's keys go to: its own choice, else the farm's.
+    def keyBotFor(self, key):
+        return str(self.farm['platforms'].get(key, {}).get('asf_bot') or '').strip()
+
+    def setKeyBot(self, key, bot):
+        self.platformEntry(key)['asf_bot'] = str(bot or '').strip()
+        self.saveFarm()
 
     # ---- per site settings -------------------------------------------------
 
