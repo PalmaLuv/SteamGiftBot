@@ -152,7 +152,8 @@ svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .win .sp{flex:1}
 .more{color:var(--muted);font-size:12px}
 .support{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:-6px 0 16px;padding:8px 12px;border:1px dashed var(--line);border-radius:var(--radius);color:var(--muted);font-size:13px}
-.support a{color:var(--accent)}
+.support a,.support .linkish{color:var(--accent)}
+.support .linkish{background:none;border:0;padding:0;min-height:0;font:inherit;text-decoration:underline;text-underline-offset:3px;cursor:pointer;white-space:normal;display:inline}
 .support .sp{flex:1}
 .support button{min-height:30px;padding:4px 10px;font-size:12px}
 .give{display:flex;flex-wrap:wrap;gap:8px}
@@ -296,7 +297,7 @@ td select{width:auto;min-height:32px;padding:3px 6px;font-size:12px}
 .addrs{display:flex;flex-direction:column;gap:8px}
 .addr{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--panel2);border-radius:8px;padding:8px 10px}
 .addr .muted{min-width:170px}
-.addr code{font-size:14px;flex:1}
+.addr code{font-size:14px;flex:1;min-width:0;overflow-wrap:anywhere}
 .numbered{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:10px;font-size:14px}
 .numbered li::marker{color:var(--link);font-weight:700}
 code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;background:var(--panel2);border-radius:5px;padding:1px 5px}
@@ -855,10 +856,10 @@ function renderSupportLine(wins){
   const show = ui.support !== false && wins > 0;
   box.classList.toggle('hidden', !show);
   if (!show) return;
-  paint(box, `<span aria-hidden="true">💙</span><span>Выиграно игр: ${wins}.</span><span>Если ферма полезна, <a href="#/settings" data-support-open>поддержите её развитие</a>.</span><span class="sp"></span><button class="ghost" type="button" data-support-hide>Скрыть</button>`);
+  paint(box, `<span aria-hidden="true">💙</span><span>Выиграно игр: ${wins}.</span><span>Если ферма полезна, <button type="button" class="linkish" data-support-open>поддержите её развитие</button>.</span><span class="sp"></span><button class="ghost" type="button" data-support-hide>Скрыть</button>`);
   box.onclick = async e => {
     if (e.target.closest('[data-support-hide]')) { await saveUi({support: false}); box.classList.add('hidden'); toast('Строка скрыта. Вернуть: «Настройки» → «О ферме».'); }
-    else if (e.target.closest('[data-support-open]')) localStorageSet('open_sec-about', '1');
+    else if (e.target.closest('[data-support-open]')) openSupport();
   };
 }
 function renderSiteRows(){
@@ -1679,18 +1680,32 @@ function markDirty(form, dirty){
   $('.sect-dirty', sect).classList.toggle('hidden', !dirty);
   const save = $('button[type=submit]', form); if (save && form.dataset.group) save.disabled = !dirty;
 }
+function supportBody(s){
+  return `<p class="muted small">SteamGiftBot бесплатный и останется бесплатным. Ферму развивает один человек в свободное время. Если она приносит вам игры, разработку можно поддержать.</p>
+    <div class="give">${s.links.map(l => `<a class="btn" href="${esc(l.url)}" target="_blank" rel="noopener">${icon('ext')}${esc(l.title)}</a>`).join('')}</div>
+    <div class="addr"><span class="muted small">Адрес TON</span><code data-notranslate>${esc(s.ton)}</code><button type="button" class="icon" data-copy="${esc(s.ton)}" aria-label="Скопировать адрес">${icon('copy')}</button></div>`;
+}
 function supportBlock(s){
   if (!s) return '';
   return `<div class="sub-block" id="support"><h3>Поддержать проект</h3>
-    <p class="muted small">SteamGiftBot бесплатный и останется бесплатным. Ферму развивает один человек в свободное время. Если она приносит вам игры, разработку можно поддержать.</p>
-    <div class="give">${s.links.map(l => `<a class="btn" href="${esc(l.url)}" target="_blank" rel="noopener">${icon('ext')}${esc(l.title)}</a>`).join('')}</div>
-    <div class="addr"><span class="muted small">Адрес TON</span><code data-notranslate>${esc(s.ton)}</code><button type="button" class="icon" data-copy="${esc(s.ton)}" aria-label="Скопировать адрес">${icon('copy')}</button></div>
+    ${supportBody(s)}
     <div class="chk"><input type="checkbox" class="switch" role="switch" id="supportAsk" ${ui.support !== false ? 'checked' : ''}><label for="supportAsk">Напоминать о поддержке: строка под выигрышами в «Обзоре» и в Telegram не чаще раза в неделю</label></div></div>`;
+}
+// The ways to support, in a window over the page the link was on.
+let supportInfo = null;
+async function copyText(text){
+  try { await navigator.clipboard.writeText(text); toast('Скопировано'); } catch { toast('Браузер не дал скопировать: выделите текст вручную', true); }
+}
+async function openSupport(){
+  try { supportInfo = supportInfo || (await api('/api/farm/settings')).info.support; } catch (err) { toast(err.message, true); return; }
+  openModal(`<h2 id="modalTitle">Поддержать проект</h2><div class="stack">${supportBody(supportInfo)}
+    <p class="muted small">Строку под выигрышами можно скрыть кнопкой «Скрыть», а напоминания в Telegram отключаются в «Настройки» → «О ферме».</p></div>
+    <div class="row"><button data-close>Закрыть</button></div>`);
+  const c = $('#modal [data-copy]'); if (c) c.onclick = () => copyText(c.dataset.copy);
 }
 function wireSettings(view, s){
   view.addEventListener('click', async e => {
-    const c = e.target.closest('[data-copy]'); if (!c) return;
-    try { await navigator.clipboard.writeText(c.dataset.copy); toast('Скопировано'); } catch { toast('Браузер не дал скопировать: выделите текст вручную', true); }
+    const c = e.target.closest('[data-copy]'); if (c) copyText(c.dataset.copy);
   });
   const ask = $('#supportAsk', view); if (ask) ask.onchange = () => saveUi({support: ask.checked});
   const gs = groups(s.schema);
