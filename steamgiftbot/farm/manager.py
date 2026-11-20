@@ -41,6 +41,9 @@ DAILY_DAYS = 120
 # The command line bot's log lines (log/log-*.log), in the server's local time.
 CLI_LINE    = re.compile(r'^\[INFO:(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)[,.]\d+\] ?(.*)$')
 CLI_ENTERED = 'One more game '
+
+# The panel's dictionaries, also used for the Telegram messages.
+I18N_DIR = Path(__file__).resolve().parent / 'static' / 'i18n'
 CLI_WON     = re.compile(r'^You won (.+)! (https://\S+)$')
 
 # The panel's language and look: name -> (default, check).
@@ -333,6 +336,7 @@ class FarmManager:
         self.asf        = ASF(self)
         self.clock      = None
         self.panelURLs  = []
+        self.translations = {}
         self.startedAt  = time.time()
         self.clockStop  = threading.Event()
 
@@ -686,7 +690,8 @@ class FarmManager:
             changes['status'] = 'activated'
         self.state.updateWin(key, moment, name, **changes)
         title = self.platforms[key].title if key in self.platforms else key
-        self.notify(f"[{title}] ключ «{name}»: {words}")
+        icon = {'ok': '✅', 'owned': '✅', 'retry': '⏳'}.get(kind, '⚠️')
+        self.notify(f"{icon} {title}: ключ «{name}» — {words}")
         if kind in ('ok', 'owned'):
             self.platforms[key].onWinStatus(win, 'activated')
         return kind, words
@@ -695,7 +700,7 @@ class FarmManager:
 
     def report(self, now=None):
         since = (now or time.time()) - 86400
-        lines = ["сводка за сутки"]
+        lines = ["📊 Сводка за сутки"]
         winsTotal = 0
         for platform in self.platforms.values():
             count, spent, _ = self.state.usage(platform.key)
@@ -703,22 +708,28 @@ class FarmManager:
             winsTotal += len(wins)
             if not count and not wins and not platform.running:
                 continue
-            line = f"• {platform.title}: {count} вх., потрачено {spent}"
+            unit = f" {platform.unit}" if platform.unit else ''
+            line = f"• {platform.title}: {count} вх."
+            if spent:
+                line += f", потрачено {spent}{unit}"
             if platform.balance is not None:
-                line += f", баланс {platform.balance}"
+                line += f", баланс {platform.balance}{unit}"
             if wins:
-                line += f", выигрыши: {', '.join(win['name'] for win in wins)}"
+                line += f"\n  🎉 {', '.join(win['name'] for win in wins)}"
             if platform.lastError:
-                line += f"\n  ⚠ {platform.lastError}"
+                line += f"\n  ⚠️ {platform.lastError}"
             lines.append(line)
         if len(lines) == 1:
-            lines.append("за сутки ни одного входа")
+            lines.append("За сутки ни одного входа.")
         lines.append(f"Выигрышей за сутки: {winsTotal}")
         waiting = self.openWins()
         if waiting:
-            lines.append(f"Не отмечено, что ключ получен: {len(waiting)} "
+            lines.append(f"🔔 Не отмечено, что ключ получен: {len(waiting)} "
                          f"({', '.join(win['name'] for win in waiting[:5])}). SteamGifts "
                          "требует отмечать полученные выигрыши.")
+            link = self.panelLink('/wins')
+            if link:
+                lines.append(f"Отметить: {link}")
         return '\n'.join(lines)
 
     # Sends the report once a day at the chosen hour. True when it went out.
@@ -1021,6 +1032,45 @@ class FarmManager:
             if platform.thread is not None:
                 platform.thread.join(max(0.1, deadline - time.time()))
 
+    # ---- messages to Telegram ------------------------------------------------
+
+    # A panel link for a message, preferring the Tailscale address: it opens
+    # from the phone wherever it is. '' when the farm runs without a panel.
+    def panelLink(self, route=''):
+        urls = self.panelURLs or []
+        base = next((url for url in urls if '//100.' in url), urls[0] if urls else '')
+        if not base:
+            return ''
+        return base.rstrip('/') + '/' + (f'#{route}' if route else '')
+
+    # Messages follow the panel's language, from the same dictionaries the
+    # page uses (static/i18n/<lang>.json); Russian is the text as written.
+    def translate(self, text):
+        lang = self.uiSettings().get('lang', 'ru')
+        if lang == 'ru' or not text:
+            return text
+        table = self.translations.get(lang)
+        if table is None:
+            try:
+                words = json.loads((I18N_DIR / f'{lang}.json').read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                words = {}
+            keys = sorted(words, key=len, reverse=True)
+            pattern = re.compile(r'(?<![^\W\d_])(?:' + '|'.join(map(re.escape, keys)) +
+                                 r')(?![^\W\d_])') if keys else None
+            table = self.translations[lang] = (words, pattern)
+        words, pattern = table
+        if pattern is None:
+            return text
+        lines = []
+        for line in text.split('\n'):
+            whole = line.strip()
+            if whole in words:
+                lines.append(line.replace(whole, words[whole]))
+            else:
+                lines.append(pattern.sub(lambda m: words.get(m.group(0), m.group(0)), line))
+        return '\n'.join(lines)
+
     # Telegram / Discord settings are the ones SteamGiftBot already has.
     def notify(self, text):
         try:
@@ -1029,7 +1079,7 @@ class FarmManager:
             return ['config.ini не читается']
         if not notify.isConfigured(config):
             return ['уведомления не настроены']
-        problems = notify.send(config, "Bot farm " + text)
+        problems = notify.send(config, self.translate(text))
         for problem in problems:
             log.warning(f"Уведомление не доставлено: {problem}")
         return problems

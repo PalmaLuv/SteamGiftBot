@@ -265,7 +265,7 @@ class Handler(BaseHTTPRequestHandler):
                 platform.stop()
             return self.json({'ok': True})
         if path == '/api/notify-test':
-            problems = manager.notify("работает: это тестовое сообщение из веб-панели.")
+            problems = manager.notify("✅ Бот-ферма на связи: это тестовое сообщение из панели.")
             if problems:
                 raise ValueError('; '.join(problems))
             return self.json({'ok': True})

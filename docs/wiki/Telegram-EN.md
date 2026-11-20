@@ -22,14 +22,24 @@ keeps only recent messages.
 
 ## What the farm sends
 
-| Event | When |
+Every message looks the same: an icon, the site and the text, plus a link to
+the right part of the panel where it helps (the Tailscale address when there is
+one, so the link opens from your phone anywhere). The language is the one
+chosen in the panel.
+
+| Message | When |
 | --- | --- |
-| 🎉 a win | as soon as the farm notices it |
-| the session is no longer valid | the site is stopped; you need to [reconnect](Connecting-Sites-EN.md) |
-| the site is stopped | the site answered in a way that makes continuing impossible (for example, the account is banned from giveaways) |
-| claimed a free game | GOG |
-| the key activation result | after "Activate in ASF" («Активировать в ASF») or auto-activation |
-| the daily summary | every day at the chosen hour, if enabled |
+| 🎉 SteamGifts: win: game + links to the giveaway and to Wins | as soon as the farm notices a win (SteamGifts, OpiumPulses) |
+| 🔑 IndieGala: the session no longer works… + "Reconnect" | the site stopped accepting the cookie; the site is stopped |
+| ⛔ site stopped: reason | the farm cannot go on (no cookie, account banned from giveaways, a settings error) |
+| ⚠️ not working for 60 min: error | the site could not be reached for about an hour in a row; the farm keeps trying |
+| ✅ working again. | the first successful run after such an outage |
+| 🎁 free games claimed: N — names | GOG, free Steam games, itch.io; one message per run |
+| ✅ / ⏳ / ⚠️ key "game" — result | after "Activate in ASF" («Активировать в ASF») or auto-activation |
+| 📊 Daily summary | every day at the chosen hour, if enabled |
+
+A single network blip does not send anything: the farm quietly tries again in
+15 minutes and only writes when the outage lasts about an hour.
 
 The "Send notifications" («Присылать уведомления») switch turns messages off
 without erasing the token.

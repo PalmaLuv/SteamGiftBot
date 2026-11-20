@@ -522,7 +522,7 @@ def test_daily_report_goes_out_once(manager):
     assert manager.reportTick()
     assert not manager.reportTick()
     assert 'IndieGala: 1 вх., потрачено 8' in sent[0]
-    assert 'выигрыши: Oxenfree' in sent[0]
+    assert '🎉 Oxenfree' in sent[0]
 
 
 def test_steamgifts_farm_rules(manager):
@@ -878,7 +878,7 @@ def test_opiumpulses_empty_keys_table_is_not_a_win(manager):
     empty = '<table><tbody><tr><td colspan="4">No results found.</td></tr></tbody></table>'
     platform = manager.platforms['opiumpulses']
     notes = []
-    platform.notify = notes.append
+    platform.notify = lambda text, icon='': notes.append(text)
     for page in (table('Old Game'), empty, table('Old Game', 'Cool Game')):
         platform.session = FakeOpium({WON_KEYS: (200, page)})
         platform.checkWins()
@@ -991,3 +991,58 @@ def test_command_line_wins_are_imported_as_received(tmp_path):
     assert [(win['name'], win['status']) for win in wins] == [('Patrician Iii', 'received')]
     assert manager.state.totals('steamgifts')['wins'] == 1
     assert manager.openWins() == []
+
+
+def test_telegram_messages_have_one_look_and_follow_the_language(manager):
+    sent = []
+    manager.notify = lambda text: sent.append(text) or []
+    manager.panelURLs = ['http://192.168.1.10:8092/', 'http://100.64.0.5:8092/']
+    platform = manager.platforms['indiegala']
+    platform.notify("снова работает.", '✅')
+    assert sent[-1] == '✅ IndieGala: снова работает.'
+    assert manager.panelLink('/wins') == 'http://100.64.0.5:8092/#/wins'
+    manager.updateUi({'lang': 'en'})
+    assert manager.translate("📊 Сводка за сутки\nЗа сутки ни одного входа.") == \
+        "📊 Daily summary\nNo entries in the last 24 hours."
+    manager.updateUi({'lang': 'ru'})
+    assert manager.translate("📊 Сводка за сутки") == "📊 Сводка за сутки"
+
+
+def test_watchdog_speaks_once_after_an_hour_and_once_when_back(manager):
+    sent = []
+    platform = manager.platforms['indiegala']
+    platform.notify = lambda text, icon='': sent.append(icon + ' ' + text)
+    for _ in range(base.WATCH_AFTER + 2):
+        platform.watch('IndieGala недоступна')
+    assert len(sent) == 1 and sent[0].startswith('⚠️ не работает уже 60 мин')
+    platform.passStartedAt = time.time()
+    platform.finishPass("Проход окончен: вошёл в 0")
+    assert sent[-1] == '✅ снова работает.' and platform.failures == 0
+    platform.finishPass("Проход окончен: вошёл в 0")
+    assert len(sent) == 2
+
+
+def test_free_games_come_in_one_message_per_pass(manager):
+    sent = []
+    platform = manager.platforms['indiegala']
+    platform.notify = lambda text, icon='': sent.append(icon + ' ' + text)
+    for name in ('Alpha', 'Beta'):
+        platform.recordEntry(name, 0, '')
+    platform.recordEntry('Paid', 3, '')
+    platform.announceClaims()
+    platform.announceClaims()
+    assert sent == ['🎁 забрано бесплатных игр: 2 — Alpha, Beta']
+
+
+def test_steamgifts_win_goes_out_in_the_farm_format(manager):
+    from steamgiftbot.farm.steamgifts import FarmSteamGift
+    from steamgiftbot.wins import Win
+    sent = []
+    manager.notify = lambda text: sent.append(text) or []
+    manager.panelURLs = ['http://192.168.1.10:8092/']
+    bot = object.__new__(FarmSteamGift)
+    bot.platform = manager.platforms['steamgifts']
+    win = Win('8caCY', 'Patrician Iii')
+    bot.tellWin(win)
+    assert sent[0].startswith('🎉 SteamGifts: выигрыш: Patrician Iii\n')
+    assert win.url in sent[0] and sent[0].endswith('http://192.168.1.10:8092/#/wins')

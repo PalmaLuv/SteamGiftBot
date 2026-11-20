@@ -142,7 +142,7 @@ class GOGPlatform(Platform):
                 name = self.giveawayTitle() or 'Раздача GOG'
                 self.info(f"Вошёл: {name} — {words}")
                 self.recordEntry(name, 0, BASE + '/account')
-                self.notify(f"Забрал бесплатную игру: {name}")
+                self.announceClaims()
             else:
                 self.info(f"GOG: {words}")
             self.lastCycle = time.time()

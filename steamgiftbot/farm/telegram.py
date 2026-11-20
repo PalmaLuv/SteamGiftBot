@@ -37,6 +37,7 @@ class TelegramControl:
         self.thread = None
         self.offset = None
         self.token = None
+        self.lang = None
 
     # ---- the commands --------------------------------------------------------
 
@@ -57,7 +58,7 @@ class TelegramControl:
             balance = ('' if snap['balance'] is None
                        else f", баланс {snap['balance']} {platform.unit}")
             line = (f"{STATE_ICON.get(snap['state'], '•')} {platform.title}: "
-                    f"{snap['totals']['today']} вх. за сутки{balance}")
+                    f"{snap['totals']['today']} вх. за 24 ч{balance}")
             if snap['reason']:
                 line += f"\n    {snap['reason']}"
             if snap['error']:
@@ -147,7 +148,7 @@ class TelegramControl:
         message = update.get('message') or update.get('edited_message') or {}
         if str((message.get('chat') or {}).get('id')) != chat:
             return None
-        reply = self.handle(message.get('text'))
+        reply = self.manager.translate(self.handle(message.get('text')))
         if reply:
             self.call(token, 'sendMessage', chat_id=chat, text=reply[:4000])
         return reply
@@ -156,16 +157,19 @@ class TelegramControl:
     def prepare(self, token):
         pending = self.call(token, 'getUpdates', offset=-1, timeout=0) or []
         self.offset = pending[-1]['update_id'] + 1 if pending else None
-        self.call(token, 'setMyCommands', commands=[{'command': name, 'description': about}
-                                                    for name, about in COMMANDS])
+        self.call(token, 'setMyCommands',
+                  commands=[{'command': name, 'description': self.manager.translate(about)}
+                            for name, about in COMMANDS])
         self.token = token
+        self.lang = self.manager.uiSettings().get('lang')
 
     def pollOnce(self):
         token, chat = self.settings()
         if not token:
             self.token = None
             return False
-        if token != self.token:
+        # Again when the panel's language changed: the command menu follows it.
+        if token != self.token or self.manager.uiSettings().get('lang') != self.lang:
             self.prepare(token)
         updates = self.call(token, 'getUpdates', wait=POLL + 10, offset=self.offset,
                             allowed_updates=['message'], timeout=POLL) or []

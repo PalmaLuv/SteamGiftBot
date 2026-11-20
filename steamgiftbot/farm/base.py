@@ -38,6 +38,9 @@ HISTORY_LENGTH = 2000
 # After an unexpected failure the worker waits this long and tries again.
 ERROR_RETRY_SECONDS = 15 * 60
 
+# Failed tries in a row before Telegram hears about it: about an hour.
+WATCH_AFTER = 4
+
 STOPPED  = 'stopped'
 RUNNING  = 'running'
 SLEEPING = 'sleeping'
@@ -469,6 +472,9 @@ class Platform:
         # 'Подробно' view only: the file and console handlers stay at INFO.
         self.logger.setLevel(logging.DEBUG)
         self.passStartedAt = None
+        self.passClaims = []
+        # Failed tries in a row (site or network down); see watch().
+        self.failures = 0
 
     # ---- things a site fills in -------------------------------------------
 
@@ -634,6 +640,23 @@ class Platform:
                 else f" · за {seconds} с"
         self.passStartedAt = None
         self.info(text + took)
+        self.recovered()
+
+    # A pass went through: if the site had been failing long enough to be
+    # reported, say it works again.
+    def recovered(self):
+        if self.failures >= WATCH_AFTER:
+            self.notify("снова работает.", '✅')
+        self.failures = 0
+
+    # A failed try. Said once, after about an hour of them; a single blip is
+    # not worth a message.
+    def watch(self, error):
+        self.failures += 1
+        if self.failures == WATCH_AFTER:
+            minutes = WATCH_AFTER * ERROR_RETRY_SECONDS // 60
+            self.notify(f"не работает уже {minutes} мин: {error}\n"
+                        f"Ферма пробует снова каждые {ERROR_RETRY_SECONDS // 60} мин.", '⚠️')
 
     def warn(self, text):
         self.logger.warning(text)
@@ -645,6 +668,8 @@ class Platform:
         kept = {key: value for key, value in extra.items() if value not in (None, '')}
         self.manager.state.addEntry(self.key, {'time': time.time(), 'name': name,
                                                'cost': cost, 'url': url, **kept})
+        if not cost:
+            self.passClaims.append(name)
         details = {'cost': f"{cost or 0} {self.unit}" if cost else 'бесплатно',
                    'balance': None if self.balance is None else f"{self.balance} {self.unit}",
                    'today': self.manager.state.usage(self.key)[0], 'url': url, **extra}
@@ -654,8 +679,18 @@ class Platform:
     def recordWin(self, name, url=''):
         self.manager.state.addWin(self.key, {'time': time.time(), 'name': name, 'url': url})
 
-    def notify(self, text):
-        self.manager.notify(f"[{self.title}] {text}")
+    # '🔑 IndieGala: …' — one look for every message a site sends.
+    def notify(self, text, icon='ℹ️'):
+        self.manager.notify(f"{icon} {self.title}: {text}")
+
+    # Free games taken this pass, in one message rather than one per game.
+    def announceClaims(self):
+        names = self.passClaims
+        self.passClaims = []
+        if not names:
+            return
+        shown = ', '.join(names[:10]) + (f" и ещё {len(names) - 10}" if len(names) > 10 else '')
+        self.notify(f"забрано бесплатных игр: {len(names)} — {shown}", '🎁')
 
     # ---- rules every site shares -------------------------------------------
 
@@ -745,6 +780,8 @@ class Platform:
         self.lastError = ''
         self.state     = RUNNING
         self.startedAt = time.time()
+        self.failures = 0
+        self.passClaims = []
         self.sessionEntered = 0
         self.sessionSpent   = 0
         self.forced = False
@@ -809,18 +846,23 @@ class Platform:
                 self.state = AUTH
                 self.lastError = str(error)
                 self.warn(f"Нужна новая авторизация: {error}")
-                self.notify(f"Сессия больше не действует, ферма остановила площадку.\n{error}")
+                link = self.manager.panelLink(f'/connect/{self.key}')
+                self.notify(f"сессия больше не действует, площадка остановлена.\n{error}" +
+                            (f"\nПодключить заново: {link}" if link else ''), '🔑')
                 return
             except PlatformError as error:
                 self.state = ERROR
                 self.lastError = str(error)
                 self.warn(f"Площадка остановлена: {error}")
-                self.notify(f"Площадка остановлена: {error}")
+                link = self.manager.panelLink(f'/site/{self.key}')
+                self.notify(f"площадка остановлена: {error}" +
+                            (f"\nОткрыть: {link}" if link else ''), '⛔')
                 return
             except RetryLater as error:
                 self.state = ERROR
                 self.lastError = str(error)
                 self.warn(f"{error} Повтор через {ERROR_RETRY_SECONDS // 60} мин.")
+                self.watch(error)
                 if not self.wait(ERROR_RETRY_SECONDS):
                     break
                 self.lastError = ''
@@ -828,6 +870,7 @@ class Platform:
                 self.state = ERROR
                 self.lastError = f"{type(error).__name__}: {error}"
                 self.logger.error(f"Неожиданная ошибка: {self.lastError}")
+                self.watch(self.lastError)
                 self.logger.debug(traceback.format_exc())
                 for line in traceback.format_exc().strip().splitlines()[-4:]:
                     self.logger.error("  " + line)

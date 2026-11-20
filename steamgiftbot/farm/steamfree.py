@@ -175,6 +175,7 @@ class SteamFreePlatform(Platform):
             try:
                 added = self.cycle(conf)
                 self.finishPass(f"Проход окончен: добавлено {added}")
+                self.announceClaims()
             except ValueError as error:
                 self.warn(str(error))
             self.lastCycle = time.time()

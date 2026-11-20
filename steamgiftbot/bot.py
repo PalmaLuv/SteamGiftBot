@@ -320,13 +320,17 @@ class SteamGift :
         for win in fresh:
             log(f"You won {win.name}! {win.url}", "green")
             self.state.remember(win.code)
-            if notify.isConfigured(self.config):
-                for problem in notify.send(self.config, wins.announcement(win)):
-                    log(f"Could not deliver the win notification. {problem}", "yellow")
+            self.tellWin(win)
 
         self.state.save()
         self.stats.wins(len(fresh))
         return fresh
+
+    # The win message. The farm overrides it to send its own, in its format.
+    def tellWin(self, win):
+        if notify.isConfigured(self.config):
+            for problem in notify.send(self.config, wins.announcement(win)):
+                log(f"Could not deliver the win notification. {problem}", "yellow")
 
     def report(self, extra=None):
         summary = self.stats.summary()
