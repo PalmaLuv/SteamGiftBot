@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SteamGiftBot — ферма раздач игр</title>
 <meta name="description" content="Открытая ферма раздач: SteamGifts, IndieGala, OpiumPulses, бесплатные игры Steam, GOG и itch.io. Веб-панель, Telegram, ArchiSteamFarm.">
-<meta name="theme-color" content="#0C0C0E">
+<meta name="theme-color" content="#171a21">
 <meta property="og:title" content="SteamGiftBot — ферма раздач игр">
 <meta property="og:description" content="Открытая ферма раздач: SteamGifts, IndieGala, OpiumPulses, бесплатные игры Steam, GOG и itch.io. Веб-панель, Telegram, ArchiSteamFarm.">
 <meta property="og:image" content="https://palmaluv.github.io/SteamGiftBot/images/overview.png">
@@ -62,10 +62,13 @@
     </h1>
 
     <div class="mid">
+      <div class="mid-l">
       <a class="badge" href="#farm" aria-label="К описанию фермы">
         <svg class="badge-ring" viewBox="0 0 120 120" aria-hidden="true"><defs><path id="ring" d="M60,60 m-46,0 a46,46 0 1,1 92,0 a46,46 0 1,1 -92,0"/></defs><text><textPath href="#ring">без паролей · открытый код · telegram · </textPath></text></svg>
         <span class="badge-center"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></span>
       </a>
+      <span class="deal" aria-hidden="true"><span class="deal-pct">-100%</span><span class="deal-price"><s>$19.99</s>Бесплатно</span></span>
+      </div>
       <ol class="res-list">
         <li><a class="res-item" href="#farm"><span>Ферма<span class="n"> / 01</span></span><span class="dots" aria-hidden="true">•••</span><span aria-hidden="true">→</span></a></li>
         <li><a class="res-item" href="#sites"><span>Площадки<span class="n"> / 02</span></span><span class="dots" aria-hidden="true">•••</span><span aria-hidden="true">→</span></a></li>
@@ -237,10 +240,10 @@ sudo chown -R 1000:1000 /srv/steamgiftbot &amp;&amp; sudo chmod 600 /srv/steamgi
     <p class="palette-hint mono">↑↓ · Enter · Esc</p>
   </div>
 </div>
-<div class="toast" data-toast role="status" aria-live="polite" hidden></div>
+<div class="toast" data-toast role="status" aria-live="polite" hidden><span class="toast-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/></svg></span><span class="toast-body"><b class="toast-title">Достижение получено</b><span class="toast-text" data-toast-text></span></span></div>
 <canvas class="confetti" data-confetti aria-hidden="true"></canvas>
 
-<script id="i18n" type="application/json">{"copied": "Скопировано", "copyFail": "Не получилось скопировать", "dark": "Тёмная тема", "light": "Светлая тема", "konami": "Код Konami принят. Поинтов не будет, но вот конфетти.", "verdictHigh": "Ферма возьмёт такую раздачу одной из первых.", "verdictMid": "Возьмёт, если останется баланс.", "verdictLow": "Окажется в самом конце очереди.", "win": "Выпал ваш билет. Такое бывает редко — запомните этот день.", "lose": "Выпал билет №{n} из {total}. Мимо — ферма попробует в следующей.", "stars": "звёзд", "palette": {"go": "Перейти", "farm": "Ферма", "sites": "Площадки", "odds": "Шансы", "install": "Установка", "faq": "Вопросы", "theme": "Сменить тему", "lang": "Язык", "copyInstall": "Скопировать команду установки", "wiki": "Открыть вики", "github": "Открыть GitHub", "portfolio": "Портфолио автора", "roll": "Разыграть билет", "confetti": "Конфетти просто так", "empty": "Ничего не нашлось"}, "lines": ["[IndieGala] Аккаунт palma, баланс 40 iS", "[IndieGala] Вошёл: ★ Doughlings: Arcade за 4 iS (участников 31, осталось 36)", "[IndieGala] Вошёл: Tiny Farm за 1 iS (участников 40, осталось 35)", "[IndieGala] Пропущено: не хватает iS — 12, DLC / саундтрек / пак — 4, 18+ — 3", "[SteamGifts] Ждёт поинты: 21 из 30 P", "[Steam] Вошёл: Star Courier — добавлено в библиотеку Steam", "[GOG] раздачи сейчас нет", "🎉 Выигрыш на IndieGala: Hollow Pact"]}</script>
+<script id="i18n" type="application/json">{"achievement": "Достижение получено", "copied": "Скопировано", "copyFail": "Не получилось скопировать", "dark": "Тёмная тема", "light": "Светлая тема", "konami": "Код Konami принят. Поинтов не будет, но вот конфетти.", "verdictHigh": "Ферма возьмёт такую раздачу одной из первых.", "verdictMid": "Возьмёт, если останется баланс.", "verdictLow": "Окажется в самом конце очереди.", "win": "Выпал ваш билет. Такое бывает редко — запомните этот день.", "lose": "Выпал билет №{n} из {total}. Мимо — ферма попробует в следующей.", "stars": "звёзд", "palette": {"go": "Перейти", "farm": "Ферма", "sites": "Площадки", "odds": "Шансы", "install": "Установка", "faq": "Вопросы", "theme": "Сменить тему", "lang": "Язык", "copyInstall": "Скопировать команду установки", "wiki": "Открыть вики", "github": "Открыть GitHub", "portfolio": "Портфолио автора", "roll": "Разыграть билет", "confetti": "Конфетти просто так", "empty": "Ничего не нашлось"}, "lines": ["[IndieGala] Аккаунт palma, баланс 40 iS", "[IndieGala] Вошёл: ★ Doughlings: Arcade за 4 iS (участников 31, осталось 36)", "[IndieGala] Вошёл: Tiny Farm за 1 iS (участников 40, осталось 35)", "[IndieGala] Пропущено: не хватает iS — 12, DLC / саундтрек / пак — 4, 18+ — 3", "[SteamGifts] Ждёт поинты: 21 из 30 P", "[Steam] Вошёл: Star Courier — добавлено в библиотеку Steam", "[GOG] раздачи сейчас нет", "🎉 Выигрыш на IndieGala: Hollow Pact"]}</script>
 <script src="assets/site.js" defer></script>
 </body>
 </html>

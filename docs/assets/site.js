@@ -10,17 +10,20 @@
                   set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
   /* ---------- toast ---------- */
-  const toastBox = $('[data-toast]');
+  // A corner notification. achievement=true adds the cup icon and the
+  // "achievement unlocked" title, for the rare and the silly.
+  const toastBox = $('[data-toast]'), toastText = $('[data-toast-text]');
   let toastTimer;
-  function toast(text) {
-    toastBox.textContent = text; toastBox.hidden = false;
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastBox.hidden = true; }, 3200);
+  function toast(text, achievement = false) {
+    toastText.textContent = text; toastBox.classList.toggle('achievement', achievement);
+    toastBox.hidden = true; void toastBox.offsetWidth; toastBox.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastBox.hidden = true; }, achievement ? 5200 : 3200);
   }
 
   /* ---------- theme ---------- */
   function setTheme(next) {
     document.documentElement.dataset.theme = next; store.set('sgb-theme', next);
-    document.querySelector('meta[name="theme-color"]').content = next === 'light' ? '#F2F3F7' : '#0C0C0E';
+    document.querySelector('meta[name="theme-color"]').content = next === 'light' ? '#e6ecf2' : '#171a21';
   }
   function toggleTheme() {
     const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
@@ -67,7 +70,9 @@
     // 1/41 per iS is a very good giveaway, 1/20000 a hopeless one; a log scale in between.
     const score = Math.max(0, Math.min(1, (Math.log10(value) + 4.3) / 2.7));
     $('[data-meter]').style.width = Math.round(4 + score * 96) + '%';
-    $('[data-verdict]').textContent = score > .62 ? T.verdictHigh : score > .3 ? T.verdictMid : T.verdictLow;
+    const rv = score > .62 ? 'pos' : score > .3 ? 'mix' : 'neg';
+    $('[data-verdict]').textContent = {pos: T.verdictHigh, mix: T.verdictMid, neg: T.verdictLow}[rv];
+    $('.odds-out').dataset.rv = rv;
   }
   entrants.addEventListener('input', odds); price.addEventListener('input', odds);
   $$('[data-odds]').forEach(b => b.addEventListener('click', () => { const [e, p] = b.dataset.odds.split(','); entrants.value = e; price.value = p; odds(); }));
@@ -75,7 +80,7 @@
   function roll() {
     const total = +entrants.value + 1, n = 1 + Math.floor(Math.random() * total);
     const out = $('[data-roll-out]');
-    if (n === 1) { out.textContent = T.win; confetti(140); }
+    if (n === 1) { out.textContent = T.win; confetti(140); toast(T.win, true); }
     else out.textContent = T.lose.replace('{n}', fmt(n)).replace('{total}', fmt(total));
   }
   $('[data-roll]').addEventListener('click', roll);
@@ -111,7 +116,7 @@
   function confetti(count) {
     if (reduced) return;
     canvas.width = innerWidth * devicePixelRatio; canvas.height = innerHeight * devicePixelRatio;
-    const colors = ['#FF6B47', '#FF9A6C', '#FFB347', '#18C362', '#3987e5', '#F4F2EE'];
+    const colors = ['#66c0f4', '#1a9fff', '#c4f22a', '#a4d007', '#c7d5e0', '#ffffff'];
     for (let i = 0; i < count; i++) bits.push({
       x: innerWidth * (.2 + Math.random() * .6), y: innerHeight * .35, vx: (Math.random() - .5) * 9, vy: -4 - Math.random() * 8,
       r: 3 + Math.random() * 4, a: Math.random() * 6, va: (Math.random() - .5) * .3, c: colors[i % colors.length], life: 0,
@@ -179,6 +184,6 @@
     if (e.key === 'Escape' && !box.hidden) { closePalette(); return; }
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     progress = key === konami[progress] ? progress + 1 : key === konami[0] ? 1 : 0;
-    if (progress === konami.length) { progress = 0; confetti(220); toast(T.konami); }
+    if (progress === konami.length) { progress = 0; confetti(220); toast(T.konami, true); }
   });
 })();

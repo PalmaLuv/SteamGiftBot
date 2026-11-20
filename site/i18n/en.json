@@ -23,7 +23,8 @@
     "line3": "one farm.",
     "desc": "Enters giveaways on SteamGifts, IndieGala and OpiumPulses, claims free games on Steam, GOG and itch.io, and messages you on Telegram when you win.",
     "badge": "no passwords · open source · telegram · ",
-    "badgeLabel": "To the farm"
+    "badgeLabel": "To the farm",
+    "free": "Free"
   },
   "term": {
     "label": "Sample of the farm's log",
@@ -139,6 +140,7 @@
     "disclaimer": "Independent project. Not affiliated with SteamGifts, IndieGala, OpiumPulses, GOG, itch.io or Valve."
   },
   "js": {
+    "achievement": "Achievement unlocked",
     "copied": "Copied",
     "copyFail": "Could not copy",
     "dark": "Dark theme",

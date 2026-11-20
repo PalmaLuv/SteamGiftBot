@@ -23,7 +23,8 @@
     "line3": "одна ферма.",
     "desc": "Заходить у роздачі на SteamGifts, IndieGala та OpiumPulses, забирає безкоштовні ігри в Steam, GOG та itch.io і пише в Telegram, коли ви виграли.",
     "badge": "без паролів · відкритий код · telegram · ",
-    "badgeLabel": "До опису ферми"
+    "badgeLabel": "До опису ферми",
+    "free": "Безкоштовно"
   },
   "term": {
     "label": "Приклад журналу ферми",
@@ -139,6 +140,7 @@
     "disclaimer": "Незалежний проєкт. Не пов'язаний зі SteamGifts, IndieGala, OpiumPulses, GOG, itch.io та Valve."
   },
   "js": {
+    "achievement": "Досягнення отримано",
     "copied": "Скопійовано",
     "copyFail": "Не вдалося скопіювати",
     "dark": "Темна тема",
