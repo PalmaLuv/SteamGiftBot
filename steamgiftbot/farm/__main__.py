@@ -27,6 +27,10 @@ def configureLogging(dataDir):
     fileHandler.setFormatter(formatter)
     console = logging.StreamHandler(sys.stdout)
     console.setFormatter(logging.Formatter('[%(name)s] %(message)s'))
+    # The sites log DEBUG lines for the panel's 'Подробно' view; the file and
+    # the journal stay at INFO.
+    fileHandler.setLevel(logging.INFO)
+    console.setLevel(logging.INFO)
     farmLogger = logging.getLogger('botfarm')
     farmLogger.setLevel(logging.INFO)
     farmLogger.propagate = False
@@ -63,6 +67,9 @@ def main(argv=None):
         print("Пароль сохранён.")
         return 0
 
+    # Before this run writes anything: the panel's log starts with the tail of
+    # the previous runs instead of empty.
+    manager.restoreLogs()
     configureLogging(manager.dataDir)
     log = logging.getLogger('botfarm')
 

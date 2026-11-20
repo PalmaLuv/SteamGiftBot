@@ -229,6 +229,11 @@ class SteamGift :
     def extraSkipReason(self, giveaway):
         return None
 
+    # Called for every giveaway the walk leaves alone. The farm overrides it
+    # to show the reason, by name, in its log.
+    def skipped(self, giveaway, reason):
+        self.stats.skip(reason)
+
     def getGameContent(self, page=1):
         _page = page
         while self.running:
@@ -269,7 +274,7 @@ class SteamGift :
                 if reason is None:
                     reason = self.extraSkipReason(giveaway)
                 if reason is not None:
-                    self.stats.skip(reason)
+                    self.skipped(giveaway, reason)
                     if reason in (filters.NOT_ENOUGH, filters.NO_CARDS):
                         log(f"Skipping {giveaway.name}: {reason}", "red")
                     continue

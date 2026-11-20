@@ -1,3 +1,5 @@
+🇬🇧 [English version](Home-EN.md)
+
 # SteamGiftBot — вики
 
 SteamGiftBot сам входит в раздачи игр и пишет в Telegram, когда вы что-то

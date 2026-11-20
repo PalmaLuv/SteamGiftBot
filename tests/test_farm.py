@@ -902,3 +902,92 @@ def test_steamgifts_walk_stops_after_max_pages(manager, monkeypatch):
     # Other pages (the won list) are never cut.
     assert bot.GetSoupFromPage('https://www.steamgifts.com/giveaways/won') == 'soup'
     assert len(asked) == 2
+
+
+def test_command_line_history_is_imported_once(tmp_path):
+    (tmp_path / 'log').mkdir()
+    (tmp_path / 'log' / 'log-01.11.2026-10.00.00.log').write_text(
+        "[INFO:2026-11-01 10:00:05,123] One more game Alpha\n"
+        "[INFO:2026-11-01 10:01:05,123] Entry rejected: Missing Base Game\n"
+        "[INFO:2026-11-01 11:00:05,123] One more game Beta\n"
+        "[INFO:2026-11-02 09:00:05,123] One more game Gamma\n"
+        "[INFO:2026-11-03 09:00:05,123]  Entered 3 giveaways for 30 points.\n", encoding='utf-8')
+    # The farm's own entry on 2 Nov at 08:00 local server time: Gamma (09:00) is after it.
+    farmTime = time.mktime(time.strptime('2026-11-02 08:00:00', '%Y-%m-%d %H:%M:%S'))
+    (tmp_path / 'botfarm-state.json').write_text(json.dumps({'steamgifts': {
+        'entries': [{'time': farmTime, 'name': 'Farm', 'cost': 5}], 'totalEntered': 1,
+        'totalSpent': 5}}), encoding='utf-8')
+    manager = FarmManager(dataDir=tmp_path, configPath=tmp_path / 'none.ini')
+    site = manager.state.site('steamgifts')
+    assert site['totalEntered'] == 3 and site['totalSpent'] == 5
+    imported = {day: counts['cli'] for day, counts in site['daily'].items() if counts.get('cli')}
+    assert sum(imported.values()) == 2
+    again = FarmManager(dataDir=tmp_path, configPath=tmp_path / 'none.ini')
+    assert again.state.site('steamgifts')['totalEntered'] == 3
+    days = again.summary(90)
+    sg = next(item for item in days['sites'] if item['key'] == 'steamgifts')
+    assert sum(sg['importedByDay']) == 2 and sum(sg['entries']) >= 2
+
+
+def test_panel_log_survives_a_restart(manager):
+    (manager.dataDir / 'log').mkdir(exist_ok=True)
+    (manager.dataDir / 'log' / 'botfarm.log').write_text(
+        "[INFO 2026-11-20 10:00:00,001 botfarm.indiegala] Вошёл: Alpha за 2 iS\n"
+        "[WARNING 2026-11-20 10:05:00,001 botfarm.indiegala] IndieGala недоступна\n"
+        "[INFO 2026-11-20 10:06:00,001 botfarm] Веб-панель: http://x/\n"
+        "[INFO 2026-11-20 10:07:00,001 botfarm.nosuchsite] ignored\n", encoding='utf-8')
+    assert manager.restoreLogs() == 2
+    lines = manager.platforms['indiegala'].logLines()
+    assert [line['text'] for line in lines] == ['Вошёл: Alpha за 2 iS', 'IndieGala недоступна']
+    assert all(line['restored'] for line in lines) and lines[1]['level'] == 'WARNING'
+
+
+def test_log_lines_carry_entry_details_and_skip_reasons(manager):
+    import collections
+    platform = manager.platforms['indiegala']
+    platform.balance = 8
+    platform.passStartedAt = time.time() - 5
+    platform.info("Вошёл: Alpha за 2 iS")
+    platform.recordEntry('Alpha', 2, 'https://www.indiegala.com/giveaways/card/alpha/1', entries=40)
+    skipped = collections.Counter()
+    platform.skip(skipped, 'дороже лимита', 'Beta', cost='9 iS', entries=None)
+    platform.finishPass("Проход окончен: вошёл в 1")
+    lines = platform.logLines()
+    entry = next(line for line in lines if line['text'].startswith('Вошёл'))
+    assert entry['details']['cost'] == '2 iS' and entry['details']['entries'] == 40
+    assert entry['details']['balance'] == '8 iS'
+    skip = next(line for line in lines if line['level'] == 'DEBUG')
+    assert skip['text'] == 'Пропуск: Beta — дороже лимита' and 'entries' not in skip['details']
+    assert skipped['дороже лимита'] == 1
+    assert re.search(r'Проход окончен: вошёл в 1 · за \d+ с', lines[-1]['text'])
+
+
+def test_panel_look_is_checked_and_shared(panel, manager):
+    status, data, _ = call(panel + '/api/session')
+    assert status == 200 and data['ui']['lang'] == 'ru' and data['ui']['tour'] is False
+    assert call(panel + '/api/ui', {'values': {'theme': 'light'}})[0] == 401
+    _, _, headers = call(panel + '/api/login', {'password': 'secret123'})
+    cookie = headers['Set-Cookie'].split(';')[0]
+    status, data, _ = call(panel + '/api/ui', {'values': {'theme': 'light', 'lang': 'en',
+                                                         'accent': '#2ec27e', 'tour': True}},
+                           cookie=cookie)
+    assert status == 200 and data['ui']['theme'] == 'light' and data['ui']['lang'] == 'en'
+    for bad in ({'theme': 'neon'}, {'accent': 'red;}'}, {'scale': 300}, {'lang': 'xx'}):
+        assert call(panel + '/api/ui', {'values': bad}, cookie=cookie)[0] == 400
+    assert manager.uiSettings()['accent'] == '#2ec27e'
+    assert call(panel + '/api/session')[1]['ui']['theme'] == 'light'
+
+
+def test_command_line_wins_are_imported_as_received(tmp_path):
+    (tmp_path / 'log').mkdir()
+    (tmp_path / 'log' / 'log-03.09.2026-08.57.51.log').write_text(
+        "[INFO:2026-09-03 08:57:51,998] You won Patrician Iii! "
+        "https://www.steamgifts.com/giveaway/8caCY/\n"
+        "[INFO:2026-09-03 08:58:12,291]  You won 1 giveaways! Entered 4 giveaways for 13 points.\n"
+        "[INFO:2026-09-04 08:57:51,998] You won Patrician Iii! "
+        "https://www.steamgifts.com/giveaway/8caCY/\n", encoding='utf-8')
+    manager = FarmManager(dataDir=tmp_path, configPath=tmp_path / 'none.ini')
+    wins = manager.state.site('steamgifts')['wins']
+    assert [(win['name'], win['status']) for win in wins] == [('Patrician Iii', 'received')]
+    assert manager.state.totals('steamgifts')['wins'] == 1
+    assert manager.openWins() == []

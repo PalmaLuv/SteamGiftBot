@@ -38,6 +38,30 @@ RECENT_SECONDS = 86400
 # Days of per-day counters kept for the chart.
 DAILY_DAYS = 120
 
+# The command line bot's log lines (log/log-*.log), in the server's local time.
+CLI_LINE    = re.compile(r'^\[INFO:(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)[,.]\d+\] ?(.*)$')
+CLI_ENTERED = 'One more game '
+CLI_WON     = re.compile(r'^You won (.+)! (https://\S+)$')
+
+# The panel's language and look: name -> (default, check).
+UI_LANGUAGES = ('ru', 'en', 'uk')
+UI_THEMES    = ('store', 'graphite', 'midnight', 'light')
+UI_FIELDS = {
+    'lang':   ('ru', lambda v: v in UI_LANGUAGES),
+    'theme':  ('store', lambda v: v in UI_THEMES),
+    'accent': ('#1a9fff', lambda v: isinstance(v, str) and re.fullmatch(r'#[0-9a-fA-F]{6}', v)),
+    'radius': ('square', lambda v: v in ('square', 'round')),
+    'scale':  (100, lambda v: v in (90, 100, 110, 125)),
+    'glow':   (True, lambda v: isinstance(v, bool)),
+    'motion': (True, lambda v: isinstance(v, bool)),
+    # The first-run tour has been seen (or skipped) on some device.
+    'tour':   (False, lambda v: isinstance(v, bool)),
+}
+
+# A line of log/botfarm.log: '[INFO 2026-11-20 21:11:31,975 botfarm.indiegala] text'.
+FARM_LINE = re.compile(r'^\[(\w+) (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)[,.]\d+ '
+                       r'botfarm\.([\w-]+)\] (.*)$')
+
 # What the user has done with a key they won.
 WIN_STATUSES = ('', 'received', 'activated')
 
@@ -302,6 +326,7 @@ class FarmManager:
         self.farm.setdefault('platforms', {})
         self.farm.setdefault('settings', {})
         self.state      = FarmState(self.dataDir / STATE_FILE, dayOf=self.dayOf)
+        self.importCliHistory()
         self.platforms  = {}
         self.steam      = rules.SteamLibrary()
         from steamgiftbot.farm.asf import ASF
@@ -436,6 +461,129 @@ class FarmManager:
     def dayOf(self, moment):
         return datetime.fromtimestamp(moment, self.zone()).strftime('%Y-%m-%d')
 
+    # SteamGifts was entered by the command line bot long before the farm
+    # existed, and the chart started empty on the day the farm took over. Its
+    # log files still say what it entered and when: count those per day, once,
+    # up to the farm's own first entry so nothing is counted twice. The log
+    # names the games but not their prices, and its 'Entered N for P points'
+    # line is only written when a run ends (a long run never wrote one), so
+    # spending is left unknown rather than shown far too low.
+    def importCliHistory(self):
+        state = self.state
+        if state.flag('steamgifts', 'cli_imported'):
+            return None
+        logDir = self.dataDir / 'log'
+        site = state.site('steamgifts')
+        farmTimes = [entry['time'] for entry in site.get('entries', [])]
+        cutoff = min(farmTimes) if farmTimes else time.time()
+        perDay, won = {}, {}
+        for path in sorted(logDir.glob('log-*.log')) if logDir.is_dir() else []:
+            try:
+                lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
+            except OSError:
+                continue
+            for line in lines:
+                found = CLI_LINE.match(line)
+                if not found:
+                    continue
+                try:
+                    moment = time.mktime(time.strptime(found.group(1), '%Y-%m-%d %H:%M:%S'))
+                except ValueError:
+                    continue
+                if moment >= cutoff:
+                    continue
+                if found.group(2).startswith(CLI_ENTERED):
+                    day = self.dayOf(moment)
+                    perDay[day] = perDay.get(day, 0) + 1
+                    continue
+                win = CLI_WON.match(found.group(2))
+                if win:
+                    # Announced once per win, but keep the first if it repeats.
+                    won.setdefault(win.group(2), (moment, win.group(1)))
+        with state.lock:
+            daily = site.setdefault('daily', {})
+            for day, count in perDay.items():
+                target = daily.setdefault(day, {'e': 0, 's': 0, 'w': 0})
+                target['e'] += count
+                # Marks the day's spending as unknown for the chart.
+                target['cli'] = target.get('cli', 0) + count
+            for old in sorted(daily)[:-DAILY_DAYS]:
+                del daily[old]
+            entered = sum(perDay.values())
+            site['totalEntered'] = site.get('totalEntered', 0) + entered
+            # Its wins too: the user was told in Telegram back then, so they
+            # come in as 'key received' rather than as new wins to act on.
+            known = {win.get('url') for win in site.get('wins', [])}
+            imported = [{'time': moment, 'name': name, 'url': url, 'status': 'received',
+                         'cli': True}
+                        for url, (moment, name) in sorted(won.items(), key=lambda item: item[1])
+                        if url not in known]
+            for win in imported:
+                target = daily.setdefault(self.dayOf(win['time']), {'e': 0, 's': 0, 'w': 0})
+                target['w'] += 1
+            site['wins'] = sorted(site.get('wins', []) + imported,
+                                  key=lambda win: win['time'])[-HISTORY_LENGTH:]
+            site.setdefault('flags', {})['cli_imported'] = {
+                'entries': entered, 'wins': len(imported), 'from': min(perDay, default=None),
+                'to': max(perDay, default=None)}
+            state.save()
+        if entered:
+            log.info(f"История бота командной строки: {entered} входов за {len(perDay)} дн. "
+                     f"и {len(imported)} выигрышей добавлены в статистику SteamGifts "
+                     "(без трат: в логе их нет).")
+        return entered
+
+    # The panel's log lives in memory, so it used to start empty after every
+    # restart. Refill it from the tail of log/botfarm.log; those lines are
+    # marked as restored.
+    def restoreLogs(self, perSite=200, tailBytes=2_000_000):
+        path = self.dataDir / 'log' / 'botfarm.log'
+        try:
+            with path.open('rb') as handle:
+                handle.seek(0, 2)
+                handle.seek(max(0, handle.tell() - tailBytes))
+                text = handle.read().decode('utf-8', errors='replace')
+        except OSError:
+            return 0
+        found = {}
+        for line in text.splitlines():
+            match = FARM_LINE.match(line)
+            if not match or match.group(3) not in self.platforms:
+                continue
+            level, stamp, key, message = match.groups()
+            try:
+                moment = time.mktime(time.strptime(stamp, '%Y-%m-%d %H:%M:%S'))
+            except ValueError:
+                continue
+            found.setdefault(key, []).append((level, moment, message))
+        restored = 0
+        for key, lines in found.items():
+            for level, moment, message in lines[-perSite:]:
+                self.platforms[key].addLine(level, message, moment=moment, restored=True)
+                restored += 1
+        return restored
+
+    # ---- how the panel looks ------------------------------------------------
+
+    # Language and look of the panel, the same on every device. Not secret:
+    # the sign-in page reads it too, so it is in the language chosen.
+    def uiSettings(self):
+        stored = self.farm.get('ui') or {}
+        return {name: stored.get(name, default) for name, (default, _check) in UI_FIELDS.items()}
+
+    def updateUi(self, incoming):
+        values = self.uiSettings()
+        for name, raw in (incoming or {}).items():
+            if name not in UI_FIELDS:
+                continue
+            _default, check = UI_FIELDS[name]
+            if not check(raw):
+                raise ValueError(f"оформление: недопустимое значение {name}")
+            values[name] = raw
+        self.farm['ui'] = values
+        self.saveFarm()
+        return values
+
     # ---- the panel's overview ------------------------------------------------
 
     def summary(self, days=30):
@@ -450,12 +598,17 @@ class FarmManager:
             series = [self.state.daily(platform.key, day) for day in dates]
             sites.append({
                 'key': platform.key, 'title': platform.title, 'unit': platform.unit,
-                'today': count, 'spentToday': spent,
+                # The tiles count today from midnight, like the chart's last
+                # bar; the 24-hour window stays on the cards and the limits.
+                'today': series[-1]['e'], 'spentToday': series[-1]['s'],
+                'last24': count, 'spent24': spent,
                 'entered': totals['entered'], 'spent': totals['spent'], 'wins': totals['wins'],
                 'winsWeek': len(self.state.winsSince(platform.key, week)),
                 'entries': [day['e'] for day in series],
                 'spentByDay': [day['s'] for day in series],
                 'winsByDay': [day['w'] for day in series],
+                # Entries the command line bot made that day: their cost is unknown.
+                'importedByDay': [day.get('cli', 0) for day in series],
             })
         return {'days': dates, 'sites': sites}
 

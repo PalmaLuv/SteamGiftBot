@@ -337,16 +337,17 @@ class IndieGalaPlatform(Platform):
         for ticket in self.collect(conf, seen):
             if self.stopped:
                 break
+            facts = {'cost': f"{ticket.price} iS", 'entries': ticket.entries, 'url': ticket.url}
             reason = self.skipReason(conf, ticket, seen, owned)
             if reason:
-                skipped[reason] += 1
+                self.skip(skipped, reason, ticket.name, **facts)
                 continue
             entriesLeft, spendLeft = self.dailyLeft(conf)
             if entriesLeft == 0:
                 self.info("Дневной лимит входов исчерпан.")
                 break
             if spendLeft is not None and ticket.price > spendLeft:
-                skipped['дневной лимит трат'] += 1
+                self.skip(skipped, 'дневной лимит трат', ticket.name, **facts)
                 continue
             if self.closedFor(conf):
                 self.info("Часы работы закончились.")
@@ -357,7 +358,7 @@ class IndieGalaPlatform(Platform):
                 if self.balance <= 0:
                     break
                 if self.balance - ticket.price < reserve:
-                    skipped['не хватает iS'] += 1
+                    self.skip(skipped, 'не хватает iS', ticket.name, **facts)
                     continue
             status, data = self.join(ticket)
             if status == 'ok':
@@ -371,7 +372,8 @@ class IndieGalaPlatform(Platform):
                 self.info(f"Вошёл: {'★ ' if priority else ''}{ticket.name} за {ticket.price} iS "
                           f"(участников {ticket.entries if ticket.entries is not None else '?'}, "
                           f"осталось {self.balance})")
-                self.recordEntry(ticket.name, ticket.price, ticket.url)
+                self.recordEntry(ticket.name, ticket.price, ticket.url, entries=ticket.entries,
+                                 priority='да' if priority else None)
                 if not self.pause():
                     break
             elif status == 'silver':
@@ -449,7 +451,7 @@ class IndieGalaPlatform(Platform):
             self.connect(conf)
             entered = self.cycle(conf)
             self.lastCycle = time.time()
-            self.info(f"Проход окончен: вошёл в {entered}, баланс {self.balance} iS")
+            self.finishPass(f"Проход окончен: вошёл в {entered}, баланс {self.balance} iS")
             reason = ''
             if self.balance is not None and self.balance <= (conf['reserve'] or 0):
                 reason = f"Закончился iS ({self.balance}), ждёт пополнения"

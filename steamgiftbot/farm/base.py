@@ -32,6 +32,7 @@ DEFAULT_USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537
 
 TIMEOUT        = 30
 LOG_LINES      = 600
+DEBUG_LINES    = 1500
 HISTORY_LENGTH = 2000
 
 # After an unexpected failure the worker waits this long and tries again.
@@ -405,7 +406,8 @@ class RingHandler(logging.Handler):
 
     def emit(self, record):
         try:
-            self.platform.addLine(record.levelname, self.format(record))
+            self.platform.addLine(record.levelname, self.format(record),
+                                  getattr(record, 'details', None))
         except Exception:
             self.handleError(record)
 
@@ -436,6 +438,9 @@ class Platform:
         self.title     = self.baseTitle
         self.logger  = logging.getLogger(f'botfarm.{self.key}')
         self.lines   = deque(maxlen=LOG_LINES)
+        # Per-giveaway 'why skipped' lines come by the hundred; kept apart so
+        # they never push the ordinary log out.
+        self.debugLines = deque(maxlen=DEBUG_LINES)
         self.lineSeq = 0
         self.lock    = threading.Lock()
 
@@ -460,6 +465,10 @@ class Platform:
         handler = RingHandler(self)
         handler.setFormatter(logging.Formatter('%(message)s'))
         self.logger.addHandler(handler)
+        # DEBUG lines (why each giveaway was skipped) reach the panel's
+        # 'Подробно' view only: the file and console handlers stay at INFO.
+        self.logger.setLevel(logging.DEBUG)
+        self.passStartedAt = None
 
     # ---- things a site fills in -------------------------------------------
 
@@ -574,27 +583,73 @@ class Platform:
 
     # ---- log and history ---------------------------------------------------
 
-    def addLine(self, level, text):
+    def addLine(self, level, text, details=None, moment=None, restored=False):
         with self.lock:
             self.lineSeq += 1
-            self.lines.append({'id': self.lineSeq, 'time': time.time(),
-                               'level': level, 'text': text})
+            line = {'id': self.lineSeq, 'time': moment or time.time(), 'level': level,
+                    'text': text}
+            if details:
+                line['details'] = details
+            if restored:
+                line['restored'] = True
+            (self.debugLines if level == 'DEBUG' else self.lines).append(line)
+
+    # Adds facts to the newest line that mentions `name` (the entry line a
+    # site has just written), so the panel can show them under it. Falls back
+    # to a line of its own when there is none.
+    def attachDetails(self, name, details):
+        with self.lock:
+            for line in list(self.lines)[-6:][::-1]:
+                if name and name in line['text'] and 'details' not in line:
+                    line['details'] = details
+                    return
+        self.logger.debug(f"Подробности: {name}", extra={'details': details})
 
     def logLines(self, after=0):
         with self.lock:
-            return [line for line in self.lines if line['id'] > after]
+            lines = [line for line in self.lines if line['id'] > after]
+            lines += [line for line in self.debugLines if line['id'] > after]
+        return sorted(lines, key=lambda line: line['id'])
 
-    def info(self, text):
-        self.logger.info(text)
+    def info(self, text, **details):
+        self.logger.info(text, extra={'details': details} if details else None)
+
+    # Only for the panel's 'Подробно' view: one line per skipped giveaway.
+    def debug(self, text, **details):
+        self.logger.debug(text, extra={'details': details} if details else None)
+
+    # Counts a skipped giveaway for the pass summary and says why, by name,
+    # in the 'Подробно' view.
+    def skip(self, counter, reason, name, **details):
+        counter[reason] += 1
+        self.debug(f"Пропуск: {name} — {reason}",
+                   **{key: value for key, value in details.items() if value not in (None, '')})
+
+    # 'Проход окончен …' with how long the pass took.
+    def finishPass(self, text):
+        took = ''
+        if self.passStartedAt:
+            seconds = int(time.time() - self.passStartedAt)
+            took = f" · за {seconds // 60} мин {seconds % 60} с" if seconds >= 60 \
+                else f" · за {seconds} с"
+        self.passStartedAt = None
+        self.info(text + took)
 
     def warn(self, text):
         self.logger.warning(text)
 
-    def recordEntry(self, name, cost, url=''):
+    def recordEntry(self, name, cost, url='', **extra):
         self.sessionEntered += 1
         self.sessionSpent   += cost or 0
+        # What else the site knew (participants, priority) stays in the history.
+        kept = {key: value for key, value in extra.items() if value not in (None, '')}
         self.manager.state.addEntry(self.key, {'time': time.time(), 'name': name,
-                                               'cost': cost, 'url': url})
+                                               'cost': cost, 'url': url, **kept})
+        details = {'cost': f"{cost or 0} {self.unit}" if cost else 'бесплатно',
+                   'balance': None if self.balance is None else f"{self.balance} {self.unit}",
+                   'today': self.manager.state.usage(self.key)[0], 'url': url, **extra}
+        self.attachDetails(name, {key: value for key, value in details.items()
+                                  if value not in (None, '')})
 
     def recordWin(self, name, url=''):
         self.manager.state.addWin(self.key, {'time': time.time(), 'name': name, 'url': url})
@@ -651,6 +706,7 @@ class Platform:
             conf = self.settings()
             if self.forced:
                 self.forced = False
+                self.passStartedAt = time.time()
                 return conf
             closed = self.closedFor(conf)
             if closed:
@@ -666,6 +722,7 @@ class Platform:
                 if not self.wait(wait, reason=f"Дневной лимит исчерпан, сброс в {resets:%H:%M}"):
                     return None
                 continue
+            self.passStartedAt = time.time()
             return conf
         return None
 

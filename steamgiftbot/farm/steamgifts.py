@@ -10,7 +10,6 @@ from steamgiftbot import settings as sgSettings
 from steamgiftbot.bot import URL, SessionExpired, SteamGift, SteamGiftError
 from steamgiftbot.farm import rules
 from steamgiftbot.farm.base import (AuthError, OwnLines, Platform, PlatformError, RetryLater,
-                                    RingHandler,
                                     applySettings, coerce, cookieGuide, field, grouped,
                                     parseCookies, presetFields, scheduleFields)
 from steamgiftbot.giveaway import parseRow
@@ -70,6 +69,7 @@ class FarmSteamGift(SteamGift):
 
     def waitForPoints(self):
         self.waitedForPoints = True
+        self.platform.endPass(self)
         self.platform.info(f"Мало поинтов: {self.points}, нужно минимум {self.min_points}. "
                            f"Жду {self.pointsWait // 60} мин.")
         self.platform.balance = self.points
@@ -84,7 +84,16 @@ class FarmSteamGift(SteamGift):
             self.platform.account = self.username
 
     def extraSkipReason(self, giveaway):
+        # Kept so the entry, announced later by name only, can say how many
+        # people were in and link to the giveaway itself.
+        self.platform.lastGiveaways[giveaway.code] = giveaway
         return self.platform.extraReason(giveaway, self.points, self.min_points)
+
+    def skipped(self, giveaway, reason):
+        super().skipped(giveaway, reason)
+        self.platform.debug(f"Пропуск: {giveaway.name} — {REASONS.get(reason, reason)}",
+                            cost=f"{giveaway.cost} P", entries=giveaway.entries,
+                            url=f"{URL}/giveaway/{giveaway.code}/")
 
     # The bot walks the listing until an empty page. With a balance just over
     # the minimum only the cheapest giveaways fit, and that walk covered the
@@ -107,6 +116,26 @@ class FarmSteamGift(SteamGift):
         elif self.lastRejection and FINAL_REFUSAL.search(self.lastRejection):
             self.platform.manager.state.markSeen(self.platform.key, REFUSED + id)
         return done
+
+
+# The bot's per-page chatter: only in the panel's 'Подробно' view.
+NOISY = ('Getting games from page',)
+
+
+class ForwardHandler(logging.Handler):
+    """Re-logs the command line bot's lines as this site's own."""
+
+    def __init__(self, platform):
+        super().__init__()
+        self.platform = platform
+
+    def emit(self, record):
+        try:
+            text = record.getMessage()
+            level = logging.DEBUG if text.startswith(NOISY) else record.levelno
+            self.platform.logger.log(level, text)
+        except Exception:
+            self.handleError(record)
 
 
 class EntryWatcher(logging.Handler):
@@ -168,6 +197,8 @@ class SteamGiftsPlatform(Platform):
         self.bot = None
         self.extra = {}
         self.pendingCost = {}
+        self.lastGiveaways = {}
+        self.passEntered = 0
         # The main account shares config.ini with the command line bot; an
         # added one gets its own, and its own state file next to it.
         self.configPath = (manager.configPath if self.primary
@@ -183,10 +214,11 @@ class SteamGiftsPlatform(Platform):
         for handler in list(sgLogger.handlers):
             if getattr(handler, 'platform', None) is self:
                 sgLogger.removeHandler(handler)
-        ring = RingHandler(self)
-        ring.setFormatter(logging.Formatter('%(message)s'))
+        # Forwarded into this site's own logger: from there a line reaches the
+        # panel and log/botfarm.log, so it is still there after a restart.
+        forward = ForwardHandler(self)
         watcher = EntryWatcher(self)
-        for handler in (ring, watcher):
+        for handler in (forward, watcher):
             handler.addFilter(OwnLines(self))
             sgLogger.addHandler(handler)
         sgLogger.setLevel(logging.INFO)
@@ -320,11 +352,21 @@ class SteamGiftsPlatform(Platform):
             return False
 
     def enteredByName(self, name):
-        cost = 0
+        cost, code = 0, None
         if self.pendingCost:
             # Entries are made one at a time, so the newest pending one is it.
-            _code, cost = self.pendingCost.popitem()
-        self.recordEntry(name, cost, self.siteURL)
+            code, cost = self.pendingCost.popitem()
+        giveaway = self.lastGiveaways.get(code)
+        self.recordEntry(name, cost, f"{URL}/giveaway/{code}/" if code else self.siteURL,
+                         entries=giveaway.entries if giveaway else None)
+        self.lastGiveaways.clear()
+
+    # 'Проход окончен' once per walk, whether it ended out of points or
+    # with nothing left to enter.
+    def endPass(self, bot):
+        if self.passStartedAt:
+            self.finishPass(f"Проход окончен: вошёл в {self.sessionEntered - self.passEntered}, "
+                            f"баланс {bot.points} P")
 
     # The bot sends the Telegram message itself; the farm only keeps a record.
     def announce(self, bot):
@@ -498,6 +540,7 @@ class SteamGiftsPlatform(Platform):
                 if conf is None:
                     break
                 self.extra = conf
+                self.passEntered = self.sessionEntered
                 bot.waitedForPoints = False
                 try:
                     self.wishlistPass(bot, config)
@@ -511,6 +554,7 @@ class SteamGiftsPlatform(Platform):
                     # spare: nothing suits right now. Without this pause the
                     # bot would start over from page one at once, for ever.
                     if not bot.waitedForPoints and not self.stopped and bot.running:
+                        self.endPass(bot)
                         minutes = max(1, bot.pointsWait // 60)
                         self.info(f"Подходящих раздач нет, баланс {bot.points}P. "
                                   f"Следующий проход через {minutes} мин.")

@@ -318,9 +318,11 @@ class OpiumPulsesPlatform(Platform):
             for giveaway in giveaways:
                 if self.stopped:
                     break
+                facts = {'cost': f"{giveaway.cost} OP" if giveaway.cost else 'бесплатно',
+                         'url': giveaway.url}
                 reason = self.skipReason(conf, giveaway, seen, owned)
                 if reason:
-                    skipped[reason] += 1
+                    self.skip(skipped, reason, giveaway.name, **facts)
                     continue
                 entriesLeft, spendLeft = self.dailyLeft(conf)
                 if entriesLeft == 0 or self.closedFor(conf):
@@ -328,7 +330,7 @@ class OpiumPulsesPlatform(Platform):
                     self.logSkips(skipped)
                     return entered
                 if spendLeft is not None and giveaway.cost > spendLeft:
-                    skipped['дневной лимит трат'] += 1
+                    self.skip(skipped, 'дневной лимит трат', giveaway.name, **facts)
                     continue
                 ok, reason = self.enter(giveaway)
                 # Short of points is the one refusal worth another try later.
@@ -444,6 +446,6 @@ class OpiumPulsesPlatform(Platform):
                 except RetryLater as error:
                     self.warn(f"Выигрыши не проверены: {error}")
             self.lastCycle = time.time()
-            self.info(f"Проход окончен: вошёл в {entered}")
+            self.finishPass(f"Проход окончен: вошёл в {entered}")
             if not self.wait(max(5, conf['interval'] or 120) * 60):
                 return

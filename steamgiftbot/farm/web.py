@@ -38,6 +38,9 @@ STATIC_FILES = {
     'icon.svg': 'image/svg+xml',
     'icon-192.png': 'image/png',
     'icon-512.png': 'image/png',
+    # The panel's translations (scripts/i18n.py); Russian is the page itself.
+    'i18n/en.json': 'application/json; charset=utf-8',
+    'i18n/uk.json': 'application/json; charset=utf-8',
 }
 
 
@@ -130,7 +133,8 @@ class Handler(BaseHTTPRequestHandler):
                              {'Cache-Control': 'no-cache'} if name == 'sw.js' else None)
         if url.path == '/api/session':
             return self.json({'signedIn': self.signedIn(),
-                              'hasPassword': self.manager.hasPassword()})
+                              'hasPassword': self.manager.hasPassword(),
+                              'ui': self.manager.uiSettings()})
         if not url.path.startswith('/api/'):
             return self.error('не найдено', HTTPStatus.NOT_FOUND)
         if not self.signedIn():
@@ -250,6 +254,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def action(self, path, data):
         manager = self.manager
+        if path == '/api/ui':
+            return self.json({'ui': manager.updateUi(data.get('values') or {})})
         if path == '/api/start-all':
             started = [key for key, platform in manager.platforms.items()
                        if platform.configured() and platform.start()]

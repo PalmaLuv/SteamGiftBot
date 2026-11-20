@@ -1,0 +1,83 @@
+# Telegram
+
+Through Telegram the farm reports wins and problems, and if you turn on
+commands, you can control it from your phone.
+
+## Setup in 4 steps
+
+1. **Create a bot.** Open [@BotFather](https://t.me/BotFather) in Telegram,
+   send `/newbot`, and choose a name and a username (the username must end in
+   `bot`). BotFather sends you a token like `123456789:AAH…`.
+2. **Paste the token** into **Settings → Telegram → Bot token (Настройки →
+   Telegram → Токен бота)**.
+3. **Write to the bot.** Find it in Telegram by its username and send it any
+   message. For the farm to write to a group, add the bot to the group and
+   write there.
+4. **Find the chat.** Press **Find my chat (Найти мой чат)** and pick your
+   chat from the list. Then press **Save (Сохранить)** and **Send test
+   (Отправить тест)**.
+
+If "Find my chat" finds nothing, write to the bot again and retry: Telegram
+keeps only recent messages.
+
+## What the farm sends
+
+| Event | When |
+| --- | --- |
+| 🎉 a win | as soon as the farm notices it |
+| the session is no longer valid | the site is stopped; you need to [reconnect](Connecting-Sites-EN.md) |
+| the site is stopped | the site answered in a way that makes continuing impossible (for example, the account is banned from giveaways) |
+| claimed a free game | GOG |
+| the key activation result | after "Activate in ASF" («Активировать в ASF») or auto-activation |
+| the daily summary | every day at the chosen hour, if enabled |
+
+The "Send notifications" («Присылать уведомления») switch turns messages off
+without erasing the token.
+
+### Daily summary
+
+For each site: entries and spending in 24 hours, balance, wins and the last
+error, and at the end the total number of wins. If there are unmarked wins,
+the summary includes a reminder: SteamGifts requires you to mark received
+ones. The sending time is chosen in the "Summary hour" («Час отправки
+сводки») list and follows the farm's time zone. The "Send summary now"
+(«Прислать сводку сейчас») button sends it right away.
+
+## Commands
+
+Turn on **"Control the farm with commands" («Управлять фермой командами»)**
+and save. Within a minute the bot starts replying, and the commands appear in
+the Telegram menu (the `/` button next to the input field).
+
+| Command | What it does |
+| --- | --- |
+| `/status` | the state of every connected site: entries in 24 hours, balance, reason for waiting, error |
+| `/start indiegala` | starts a site; `/start all` starts every connected one |
+| `/pause steamgifts` | stops a site; `/pause all` stops all of them |
+| `/run indiegala` | starts a run now, without waiting for the pause to end (the site must be running) |
+| `/preview indiegala` | a trial run: what the farm would enter right now and how much it would spend |
+| `/wins` | wins that are not marked yet |
+| `/report` | the daily summary |
+| `/help` | the list of commands |
+
+A site can be named by the start of its name: `/start ind`, `/preview op`,
+`/pause itch`. If the prefix matches several sites, the command applies to all
+of them. For example, `steam` matches both `steamgifts` and `steamfree` (free
+Steam games). Site names: `steamgifts`, `indiegala`, `opiumpulses`,
+`steamfree`, `gog`, `itch`. `/stop` works the same as `/pause`.
+
+**Command security.**
+
+- The bot replies only in the chat given in the settings. It ignores messages
+  from other chats.
+- Commands sent while the farm was off are skipped at startup rather than
+  executed after the fact.
+
+## If it does not work
+
+| Problem | What to check |
+| --- | --- |
+| "Send test" shows an error from Telegram | `Unauthorized`: wrong token; `chat not found`: wrong chat ID, or you have not written to the bot |
+| The bot is silent in a group | is the bot added to the group? A group ID starts with `-100…` |
+| Commands get no reply | is "Control the farm with commands" on and saved? Is the farm running? Is the same token used somewhere else (for example, in another program with a webhook)? Telegram delivers messages to only one receiver |
+| Messages arrive, but no summary | is "Send daily summary" («Присылать сводку за сутки») on? The hour is in the farm's time zone |

@@ -213,7 +213,7 @@ class ItchPlatform(Platform):
             self.whoami()
             claimed = self.cycle(conf)
             self.lastCycle = time.time()
-            self.info(f"Проход окончен: забрано {claimed}")
+            self.finishPass(f"Проход окончен: забрано {claimed}")
             if not self.wait(max(30, conf['interval'] or 120) * 60):
                 return
 
