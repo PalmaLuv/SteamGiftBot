@@ -313,6 +313,30 @@ input[type=range] { width: 100%; margin: 12px 0 4px; accent-color: #1a9fff; heig
 .faq details[open] summary::after { transform: rotate(45deg); color: var(--brand); }
 .faq details p { margin: 0 16px 18px; color: var(--text2); max-width: 760px; }
 
+/* support: one calm card before the footer, no nagging */
+.support-card { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px 40px; padding: clamp(20px, 3vw, 32px); position: relative; overflow: hidden; }
+.support-card::before { content: ''; position: absolute; right: -120px; top: -140px; width: 360px; height: 360px; border-radius: 50%; background: var(--glow-a); filter: blur(60px); pointer-events: none; }
+.support-l, .support-r { position: relative; }
+.support-l p:not(.sec-n):not(.fine) { margin: 0; color: var(--text2); max-width: 520px; }
+.support-l .fine { margin-top: 14px; }
+.heart { color: #e0794c; margin-left: 4px; }
+.support-h { font-size: clamp(26px, 3.4vw, 40px); margin-bottom: 14px; }
+.support-r { display: flex; flex-direction: column; gap: 14px; justify-content: center; }
+.give { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.give-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 14px; border-radius: var(--r); background: var(--btn); color: #fff; font-weight: 700; font-size: 14.5px; box-shadow: inset 0 1px 0 rgba(255,255,255,.15); transition: background var(--ease), transform .2s; }
+.give-btn:hover { background: var(--btn-hi); }
+.give-btn:active { transform: translateY(1px); }
+.give-btn svg { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.ton { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: var(--r); background: var(--term); border: 1px solid rgba(102,192,244,.12); }
+.ton-label { font: 700 11.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--term-dim); }
+.ton-addr { background: none; border: 0; padding: 0; font-size: 13px; line-height: 1.5; color: var(--term-ink); word-break: break-all; user-select: all; }
+.ton-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.ton .copy { position: static; }
+.ton-open { font: 12.5px var(--mono); color: #66c0f4; text-decoration: underline; text-underline-offset: 3px; }
+.ton-open:hover { color: #fff; }
+@media (max-width: 860px) { .support-card { grid-template-columns: 1fr; } }
+@media (max-width: 420px) { .give { grid-template-columns: 1fr; } }
+
 /* footer */
 .footer { position: relative; z-index: 5; margin-top: clamp(64px, 9vw, 120px); padding-top: 22px; border-top: 1px solid var(--brd2); }
 .footer-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px; }

@@ -38,7 +38,7 @@
       "[IndieGala] Account palma, balance 40 iS",
       "[IndieGala] Entered: ★ Doughlings: Arcade for 4 iS (31 entrants, 36 left)",
       "[IndieGala] Entered: Tiny Farm for 1 iS (40 entrants, 35 left)",
-      "[IndieGala] Skipped: not enough iS — 12, DLC / soundtrack / pack — 4, 18+ — 3",
+      "[IndieGala] Skipped: not enough iS — 12, DLC / soundtrack / pack — 4",
       "[SteamGifts] Waiting for points: 21 of 30 P",
       "[Steam] Entered: Star Courier — added to the Steam library",
       "[GOG] no giveaway right now",
@@ -151,6 +151,14 @@
     "q8": "How much does it cost?",
     "a8": "Nothing. The code is open under MPL-2.0, with no subscriptions or paid features. All you need is a computer that stays on."
   },
+  "support": {
+    "eyebrow": "Support the project",
+    "title": "Free. For good.",
+    "lead": "SteamGiftBot is built by one person in their spare time. If the farm has already brought you a game or two, you can buy the author a coffee: it pays for new sites, and for fixing old ones when they change their pages.",
+    "note": "Support is voluntary: the farm hides no features behind a payment and shows no ads.",
+    "tonLabel": "TON wallet",
+    "open": "Open in wallet"
+  },
   "footer": {
     "made": "PalmaLuv, 2026 · <a href=\"https://github.com/PalmaLuv/SteamGiftBot\">source</a> · <a href=\"https://github.com/PalmaLuv/SteamGiftBot/wiki\">wiki (Russian)</a>",
     "disclaimer": "Independent project. Not affiliated with SteamGifts, IndieGala, OpiumPulses, GOG, itch.io or Valve."
@@ -183,6 +191,7 @@
       "portfolio": "Author's portfolio",
       "roll": "Draw a ticket",
       "confetti": "Confetti, just because",
+      "support": "Support the project",
       "empty": "Nothing found"
     }
   }

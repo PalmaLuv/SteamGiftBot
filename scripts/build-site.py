@@ -25,6 +25,8 @@ URL = 'https://palmaluv.github.io/SteamGiftBot/'
 WIKI = 'https://github.com/PalmaLuv/SteamGiftBot/wiki/'
 
 REPO = 'https://github.com/PalmaLuv/SteamGiftBot'
+# The same wallet as steamgiftbot/farm/support.py on the farm's branch.
+TON = 'UQBhyAtIaZxHiiLsLjmJtnG8sFmNiG77k2xkWfgr0xka7X2J'
 
 LANGS = [('ru', '', 'RU'), ('uk', 'uk/', 'UK'), ('en', 'en/', 'EN')]
 PLACEHOLDER = re.compile(r'\{\{([a-zA-Z0-9_.]+)\}\}')
@@ -119,7 +121,7 @@ def page(template, lang, folder, strings):
     values = flatten(strings)
     values.update({
         'lang': lang, 'base': base, 'canonical': URL + folder, 'alternates': alternates,
-        'langLinks': ''.join(links), 'wiki': WIKI,
+        'langLinks': ''.join(links), 'wiki': WIKI, 'ton': TON,
         'term.static': html.escape('\n'.join(strings['term']['lines'])),
         # </script> inside the JSON would end the tag early.
         'js': json.dumps(script, ensure_ascii=False).replace('</', '<\\/'),

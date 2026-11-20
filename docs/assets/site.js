@@ -157,7 +157,7 @@
   async function copy(text) {
     try { await navigator.clipboard.writeText(text); toast(T.copied); } catch { toast(T.copyFail); }
   }
-  $$('.copy').forEach(b => b.addEventListener('click', () => copy($('pre', b.parentElement).textContent)));
+  $$('.copy').forEach(b => b.addEventListener('click', () => copy(b.dataset.copyText || $('pre', b.parentElement).textContent)));
 
   /* ---------- GitHub stars ---------- */
   fetch('https://api.github.com/repos/PalmaLuv/SteamGiftBot').then(r => r.ok ? r.json() : null).then(d => {
@@ -200,6 +200,7 @@
     ...langs.filter(a => !a.hasAttribute('aria-current')).map(a => ({label: `${P.lang}: ${a.textContent}`, hint: a.hreflang, run: () => { store.set('sgb-lang', a.hreflang); location.href = a.href; }})),
     {label: P.copyInstall, hint: 'git clone', run: () => copy($('#pane-farm pre').textContent)},
     {label: P.roll, hint: '🎟', run: () => { location.hash = 'odds'; roll(); }},
+    {label: P.support, hint: '♥', run: () => location.hash = 'support'},
     {label: P.wiki, hint: '↗', run: () => open('https://github.com/PalmaLuv/SteamGiftBot/wiki', '_blank', 'noopener')},
     {label: P.github, hint: '↗', run: () => open('https://github.com/PalmaLuv/SteamGiftBot', '_blank', 'noopener')},
     {label: P.portfolio, hint: '↗', run: () => open('https://palmaluv.github.io/palma.github.io/', '_blank', 'noopener')},
