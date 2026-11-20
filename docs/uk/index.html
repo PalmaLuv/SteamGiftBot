@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="uk" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SteamGiftBot — ферма роздач ігор</title>
+<meta name="description" content="Відкрита ферма роздач: SteamGifts, IndieGala, OpiumPulses, безкоштовні ігри Steam, GOG та itch.io. Веб-панель, Telegram, ArchiSteamFarm.">
+<meta name="theme-color" content="#0C0C0E">
+<meta property="og:title" content="SteamGiftBot — ферма роздач ігор">
+<meta property="og:description" content="Відкрита ферма роздач: SteamGifts, IndieGala, OpiumPulses, безкоштовні ігри Steam, GOG та itch.io. Веб-панель, Telegram, ArchiSteamFarm.">
+<meta property="og:image" content="https://palmaluv.github.io/SteamGiftBot/images/overview.png">
+<link rel="canonical" href="https://palmaluv.github.io/SteamGiftBot/uk/">
+<link rel="alternate" hreflang="ru" href="https://palmaluv.github.io/SteamGiftBot/">
+<link rel="alternate" hreflang="uk" href="https://palmaluv.github.io/SteamGiftBot/uk/">
+<link rel="alternate" hreflang="en" href="https://palmaluv.github.io/SteamGiftBot/en/">
+<link rel="alternate" hreflang="x-default" href="https://palmaluv.github.io/SteamGiftBot/">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{var t=localStorage.getItem('sgb-theme');if(t)document.documentElement.dataset.theme=t;else if(matchMedia('(prefers-color-scheme: light)').matches)document.documentElement.dataset.theme='light'}catch(e){}</script>
+</head>
+<body>
+<a class="skip" href="#main">До вмісту</a>
+<div class="glow glow-a" aria-hidden="true"></div>
+<div class="glow glow-b" aria-hidden="true"></div>
+<div class="glow glow-c" aria-hidden="true"></div>
+<div class="bg-text" aria-hidden="true">GIFTBOT</div>
+
+<div class="page">
+  <header class="header" role="banner">
+    <a class="logo" href="./" aria-label="SteamGiftBot">
+      <span class="logo-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM3 7h18v4H3zM12 7v14M12 7c-1.5-3-5-3.5-5-1.2C7 7 9.5 7 12 7zm0 0c1.5-3 5-3.5 5-1.2C17 7 14.5 7 12 7z"/></svg></span>
+      <span class="logo-text"><b>SteamGiftBot</b><small>by PalmaLuv</small></span>
+    </a>
+    <nav class="nav-pills" aria-label="Розділи">
+      <a class="nav-pill" href="#farm">Ферма</a>
+      <a class="nav-pill" href="#sites">Майданчики</a>
+      <a class="nav-pill" href="#odds">Шанси</a>
+      <a class="nav-pill" href="#install">Встановлення</a>
+      <a class="nav-pill" href="#faq">Питання</a>
+    </nav>
+    <div class="header-r">
+      <button class="kbd" type="button" data-palette aria-label="Відкрити меню команд"><kbd>Ctrl</kbd><kbd>K</kbd></button>
+      <div class="langs" role="group" aria-label="Мова"><a href="../" hreflang="ru" lang="ru">RU</a><a href="../uk/" hreflang="uk" lang="uk" aria-current="true">UK</a><a href="../en/" hreflang="en" lang="en">EN</a></div>
+      <button class="theme" type="button" data-theme-toggle aria-label="Змінити тему"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+      <a class="header-cta" href="https://github.com/PalmaLuv/SteamGiftBot" rel="noopener">
+        <span class="cta-text">GitHub <span class="stars" data-stars hidden></span></span>
+        <span class="cta-dot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></svg></span>
+      </a>
+    </div>
+  </header>
+
+  <main id="main">
+  <section class="hero" aria-labelledby="title">
+    <p class="eyebrow">— відкритий код · MPL-2.0 · Python 3.10+ <span class="sdot" aria-hidden="true"></span></p>
+    <h1 class="title" id="title">
+      <span class="title-line"><span class="line-mask"><span class="word" style="--i:0">Роздачі ігор</span></span><span class="paren-group" aria-hidden="true"><span class="paren">(</span><span class="tiles"><span class="tile t-sg">SG</span><span class="tile t-ig">IG</span><span class="tile t-op">OP</span><span class="tile t-gog">GOG</span></span><span class="paren">)</span></span></span>
+      <span class="title-line"><span class="line-mask"><span class="word" style="--i:1">на шести сайтах,</span></span></span>
+      <span class="title-line"><span class="line-mask"><span class="word" style="--i:2">одна ферма.</span></span><span class="title-desc">Заходить у роздачі на SteamGifts, IndieGala та OpiumPulses, забирає безкоштовні ігри в Steam, GOG та itch.io і пише в Telegram, коли ви виграли.</span></span>
+    </h1>
+
+    <div class="mid">
+      <a class="badge" href="#farm" aria-label="До опису ферми">
+        <svg class="badge-ring" viewBox="0 0 120 120" aria-hidden="true"><defs><path id="ring" d="M60,60 m-46,0 a46,46 0 1,1 92,0 a46,46 0 1,1 -92,0"/></defs><text><textPath href="#ring">без паролів · відкритий код · telegram · </textPath></text></svg>
+        <span class="badge-center"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></span>
+      </a>
+      <ol class="res-list">
+        <li><a class="res-item" href="#farm"><span>Ферма<span class="n"> / 01</span></span><span class="dots" aria-hidden="true">•••</span><span aria-hidden="true">→</span></a></li>
+        <li><a class="res-item" href="#sites"><span>Майданчики<span class="n"> / 02</span></span><span class="dots" aria-hidden="true">•••</span><span aria-hidden="true">→</span></a></li>
+        <li><a class="res-item" href="#odds"><span>Шанси<span class="n"> / 03</span></span><span class="dots" aria-hidden="true">•••</span><span aria-hidden="true">→</span></a></li>
+        <li><a class="res-item" href="#install"><span>Встановлення<span class="n"> / 04</span></span><span class="dots" aria-hidden="true">•••</span><span aria-hidden="true">→</span></a></li>
+        <li><a class="res-item" href="#faq"><span>Питання<span class="n"> / 05</span></span><span class="dots" aria-hidden="true">•••</span><span aria-hidden="true">→</span></a></li>
+      </ol>
+    </div>
+
+    <div class="bottom">
+      <div class="clay term" aria-label="Приклад журналу ферми">
+        <div class="term-top"><span class="tdots" aria-hidden="true"><i></i><i></i><i></i></span><span class="mono">botfarm — журнал</span><button class="link-btn" type="button" data-replay>ще раз</button></div>
+        <pre class="term-body" data-term aria-live="off">[IndieGala] Акаунт palma, баланс 40 iS
+[IndieGala] Увійшов: ★ Doughlings: Arcade за 4 iS (учасників 31, лишилось 36)
+[IndieGala] Увійшов: Tiny Farm за 1 iS (учасників 40, лишилось 35)
+[IndieGala] Пропущено: бракує iS — 12, DLC / саундтрек / пак — 4, 18+ — 3
+[SteamGifts] Чекає поінти: 21 з 30 P
+[Steam] Увійшов: Star Courier — додано до бібліотеки Steam
+[GOG] роздачі зараз немає
+🎉 Виграш на IndieGala: Hollow Pact</pre>
+        <p class="term-note">Формат рядків справжній, ігри вигадані. Сама ферма пише журнал російською.</p>
+      </div>
+      <div class="cluster">
+        <div class="info-grid">
+          <div class="clay info"><span class="ic-head">Майданчики</span><b class="big">6</b><p>три з роздачами за внутрішню валюту і три з безкоштовними іграми</p></div>
+          <div class="clay info"><span class="ic-head">Паролі</span><b class="big">0</b><p>ферма входить за cookie з браузера і не знає жодного вашого пароля</p></div>
+        </div>
+        <div class="clay xp">
+          <span class="ic-head">Під капотом</span>
+          <div class="tag-row"><span class="tag">python 3.10+</span><span class="tag">stdlib http</span><span class="tag">requests</span><span class="tag">beautifulsoup</span><span class="tag">systemd</span><span class="tag">docker</span><span class="tag">telegram bot api</span><span class="tag">archisteamfarm ipc</span><span class="tag">pytest</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="farm" aria-labelledby="farm-h">
+    <div class="sec-head"><div><p class="sec-n">Ферма / 01</p><h2 id="farm-h">Панель замість термінала.</h2></div><p class="sec-lead">Кожен майданчик працює у своєму потоці, а панель показує, хто зараз зайнятий, чому хтось чекає і скільки пішло за добу.</p></div>
+    <figure class="clay shot">
+      <img src="../images/overview.png" width="1280" height="820" loading="lazy" alt="Огляд ферми: нові виграші, графік входів за днями і стан майданчиків">
+      <figcaption>Огляд: виграші, входи за днями, причина очікування в кожного майданчика.</figcaption>
+    </figure>
+    <div class="feat-grid">
+      <article class="clay feat"><span class="fnum">01</span><h3>Підключення за хвилину</h3><p>Скопіюйте запит сайту як cURL і вставте. Ферма перевірить вхід, нічого не зберігаючи, і покаже баланс.</p></article>
+      <article class="clay feat"><span class="fnum">02</span><h3>Пробний прохід</h3><p>Усі поточні роздачі й рішення щодо кожної: увійде чи чому пропустить. Без жодного витраченого бала.</p></article>
+      <article class="clay feat"><span class="fnum">03</span><h3>Telegram</h3><p>Виграші, злетілі cookie і зведення за добу. З телефона: /status, /pause, /run, /preview.</p></article>
+      <article class="clay feat"><span class="fnum">04</span><h3>ArchiSteamFarm</h3><p>Виграний ключ активується в Steam однією кнопкою, безкоштовні ігри Steam потрапляють до бібліотеки самі.</p></article>
+      <article class="clay feat"><span class="fnum">05</span><h3>Правила</h3><p>Години роботи, ліміти на добу, без DLC і 18+, без ігор, які вже є. Спершу — те, що в списку бажаного.</p></article>
+      <article class="clay feat"><span class="fnum">06</span><h3>Ваш сервер</h3><p>Будь-який комп'ютер, що не вимикається. Панель видно лише у вашій мережі або через Tailscale.</p></article>
+    </div>
+    <div class="shots-row">
+      <figure class="clay shot small"><img src="../images/preview.png" width="1280" height="820" loading="lazy" alt="Пробний прохід IndieGala: у дві роздачі увійде, дві пропущено з причиною"><figcaption>«Що візьме»: рішення щодо кожної роздачі.</figcaption></figure>
+      <figure class="clay shot small"><img src="../images/connect.png" width="1280" height="820" loading="lazy" alt="Майстер підключення GOG: покрокова інструкція і поле для запиту"><figcaption>Майстер підключення: кроки для кожного сайту.</figcaption></figure>
+      <figure class="clay shot phone"><img src="../images/mobile.png" width="780" height="1688" loading="lazy" alt="Огляд ферми на телефоні"><figcaption>На телефоні.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="section" id="sites" aria-labelledby="sites-h">
+    <div class="sec-head"><div><p class="sec-n">Майданчики / 02</p><h2 id="sites-h">Шість майданчиків.</h2></div><p class="sec-lead">Три сайти з роздачами за внутрішню валюту і три джерела безкоштовних ігор. Рядок веде на сторінку вікі.</p></div>
+    <div class="site-list" role="table" aria-label="Шість майданчиків.">
+      <div class="site-row head" role="row"><span role="columnheader">Майданчик</span><span role="columnheader">Що робить</span><span role="columnheader">Підключення</span><span role="columnheader">Де працює</span></div>
+      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/SteamGifts"><span role="cell"><i class="sw t-sg"></i>SteamGifts</span><span role="cell">роздачі за поінти (P)</span><span role="cell" class="mono">cookie</span><span role="cell">бот і ферма</span></a>
+      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/IndieGala"><span role="cell"><i class="sw t-ig"></i>IndieGala</span><span role="cell">роздачі за Galasilver (iS)</span><span role="cell" class="mono">cookie</span><span role="cell">ферма</span></a>
+      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/OpiumPulses"><span role="cell"><i class="sw t-op"></i>OpiumPulses</span><span role="cell">безкоштовні роздачі та за OP</span><span role="cell" class="mono">cookie</span><span role="cell">ферма</span></a>
+      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/Бесплатные-игры-Steam"><span role="cell"><i class="sw t-st"></i>Steam</span><span role="cell">ігри, які Steam роздає назавжди</span><span role="cell" class="mono">ArchiSteamFarm</span><span role="cell">ферма</span></a>
+      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/GOG"><span role="cell"><i class="sw t-gog"></i>GOG</span><span role="cell">роздача з головної сторінки</span><span role="cell" class="mono">cookie</span><span role="cell">ферма</span></a>
+      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/itch-io"><span role="cell"><i class="sw t-itch"></i>itch.io</span><span role="cell">ігри зі знижкою 100%</span><span role="cell" class="mono">cookie</span><span role="cell">ферма</span></a>
+    </div>
+    <p class="fine">Бот для командного рядка ще й повідомляє про безкоштовні ігри Epic, GOG та інших крамниць за даними GamerPower.</p>
+  </section>
+
+  <section class="section" id="odds" aria-labelledby="odds-h">
+    <div class="sec-head"><div><p class="sec-n">Шанси / 03</p><h2 id="odds-h">Де шанс вищий.</h2></div><p class="sec-lead">На IndieGala ферма ставить першими роздачі з найкращим шансом на один витрачений iS: 1 / ((учасників + 1) × ціна). Посуньте повзунки.</p></div>
+    <div class="odds">
+      <div class="clay odds-form">
+        <label for="entrants">Учасників <output id="entrantsOut">40</output></label>
+        <input id="entrants" type="range" min="0" max="3000" step="1" value="40">
+        <label for="price">Ціна квитка, iS <output id="priceOut">1</output></label>
+        <input id="price" type="range" min="1" max="50" step="1" value="1">
+        <div class="presets-row" role="group" aria-label="Приклади">
+          <button type="button" class="chip" data-odds="40,1">40 · 1 iS</button>
+          <button type="button" class="chip" data-odds="480,2">480 · 2 iS</button>
+          <button type="button" class="chip" data-odds="2530,8">2530 · 8 iS</button>
+        </div>
+      </div>
+      <div class="clay odds-out" aria-live="polite">
+        <p class="mono small">шанс виграти</p>
+        <p class="odds-big" data-chance>1 / 41</p>
+        <p class="mono small">шанс на 1 iS: <b data-value>0.0244</b></p>
+        <div class="meter" aria-hidden="true"><span data-meter></span></div>
+        <p class="odds-verdict" data-verdict></p>
+        <button class="btn-grad" type="button" data-roll>Розіграти квиток</button>
+        <p class="roll-out mono" data-roll-out></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="install" aria-labelledby="install-h">
+    <div class="sec-head"><div><p class="sec-n">Встановлення / 04</p><h2 id="install-h">Встановлення.</h2></div><p class="sec-lead">Ферма — для сервера або домашнього комп'ютера. Бот для командного рядка — якщо потрібна лише SteamGifts.</p></div>
+    <div class="tabs" role="tablist" aria-label="Встановлення.">
+      <button role="tab" type="button" id="tab-farm" aria-controls="pane-farm" aria-selected="true">Ферма</button>
+      <button role="tab" type="button" id="tab-exe" aria-controls="pane-exe" aria-selected="false" tabindex="-1">Бот для Windows</button>
+      <button role="tab" type="button" id="tab-docker" aria-controls="pane-docker" aria-selected="false" tabindex="-1">Docker</button>
+    </div>
+    <div class="clay pane" role="tabpanel" id="pane-farm" aria-labelledby="tab-farm">
+      <ol class="steps">
+        <li><p>Завантажте код і встановіть залежності. Потрібен Python 3.10 або новіший.</p><div class="code"><button class="copy" type="button" aria-label="Скопіювати">Скопіювати</button><pre>git clone -b botfarm https://github.com/PalmaLuv/SteamGiftBot.git
+cd SteamGiftBot
+python3 -m venv env
+env/bin/pip install -r requirements.txt</pre></div></li>
+        <li><p>Задайте пароль панелі й запустіть ферму на адресі комп'ютера у вашій мережі.</p><div class="code"><button class="copy" type="button" aria-label="Скопіювати">Скопіювати</button><pre>env/bin/python -m steamgiftbot.farm --set-password
+env/bin/python -m steamgiftbot.farm --host 192.168.1.10</pre></div></li>
+        <li><p>Відкрийте <code>http://192.168.1.10:8092</code>, увійдіть і підключіть майданчик. Служба systemd, фаєрвол і телефон — у <a href="https://github.com/PalmaLuv/SteamGiftBot/wiki/Сервер-и-служба">вікі</a> (російською).</p></li>
+      </ol>
+      <p class="fine">Поки ферма в гілці botfarm, тому клонується з <code>-b botfarm</code>. Після злиття в main прапорець не знадобиться.</p>
+    </div>
+    <div class="clay pane" role="tabpanel" id="pane-exe" aria-labelledby="tab-exe" hidden>
+      <ol class="steps">
+        <li><p>Завантажте <code>SteamGiftBot.exe</code> і <code>.sha256</code> зі сторінки <a href="https://github.com/PalmaLuv/SteamGiftBot/releases/latest">релізів</a>. Python не потрібен.</p></li>
+        <li><p>Звірте контрольну суму з рядком у файлі <code>.sha256</code>.</p><div class="code"><button class="copy" type="button" aria-label="Скопіювати">Скопіювати</button><pre>certutil -hashfile SteamGiftBot.exe SHA256</pre></div></li>
+        <li><p>Запустіть: бот спитає cookie і налаштування. Пробний прохід покаже, куди б він увійшов, нічого не витрачаючи.</p><div class="code"><button class="copy" type="button" aria-label="Скопіювати">Скопіювати</button><pre>SteamGiftBot.exe --once --dry-run</pre></div></li>
+      </ol>
+    </div>
+    <div class="clay pane" role="tabpanel" id="pane-docker" aria-labelledby="tab-docker" hidden>
+      <ol class="steps">
+        <li><p>Покладіть cookie SteamGifts (значення PHPSESSID) у файл-секрет: так його не видно в <code>docker inspect</code>.</p><div class="code"><button class="copy" type="button" aria-label="Скопіювати">Скопіювати</button><pre>sudo mkdir -p /srv/steamgiftbot
+printf '%s' 'PHPSESSID' | sudo tee /srv/steamgiftbot/cookie >/dev/null
+sudo chown -R 1000:1000 /srv/steamgiftbot &amp;&amp; sudo chmod 600 /srv/steamgiftbot/cookie</pre></div></li>
+        <li><p>Запустіть контейнер. Він працює не від root, образ зібрано для amd64 і arm64.</p><div class="code"><button class="copy" type="button" aria-label="Скопіювати">Скопіювати</button><pre>docker run -d --name steamgiftbot --restart unless-stopped \
+  -v /srv/steamgiftbot:/app/data \
+  -e STEAMGIFTBOT_COOKIE_FILE=/app/data/cookie \
+  -e STEAMGIFTBOT_GIFT_TYPE=All -e STEAMGIFTBOT_MIN_POINTS=0 -e STEAMGIFTBOT_PINNED=no \
+  ghcr.io/palmaluv/steamgiftbot:latest --config /app/data/config.ini</pre></div></li>
+      </ol>
+      <p class="fine">Це бот для командного рядка, лише SteamGifts. Ферму в Docker запускають з параметром <code>--data</code> — див. <a href="https://github.com/PalmaLuv/SteamGiftBot/wiki/Установка">вікі</a>.</p>
+    </div>
+  </section>
+
+  <section class="section" id="faq" aria-labelledby="faq-h">
+    <div class="sec-head"><div><p class="sec-n">Питання / 05</p><h2 id="faq-h">Питання.</h2></div><p class="sec-lead">Коротко про головне. Подробиці — у вікі.</p></div>
+    <div class="faq">
+      <details><summary>Акаунт можуть заблокувати?</summary><p>Можуть. SteamGifts забороняє скрипти автовходу, в інших майданчиків свої правила. Ферма робить паузи, відступає, коли сайт просить, і не обходить Cloudflare та капчі, але рішення і ризик — ваші.</p></details>
+      <details><summary>Ферма знає мої паролі?</summary><p>Ні. Вона входить за cookie, скопійованими з браузера, і зберігає їх лише на вашому комп'ютері. Панель не віддає їх назад навіть вам.</p></details>
+      <details><summary>Потрібен сервер?</summary><p>Підійде будь-який комп'ютер, що не вимикається: міні-ПК, старий ноутбук, Raspberry Pi. Ферма майже весь час чекає.</p></details>
+      <details><summary>Панель відкривається з телефона?</summary><p>Так. Удома — за адресою комп'ютера в мережі, поза домом — через Tailscale. Її можна додати на головний екран.</p></details>
+      <details><summary>Чому ферма нікуди не входить?</summary><p>Відкрийте в майданчика вкладку «Що візьме»: у кожної роздачі там написана причина. Найчастіше скінчився баланс або вказано не той рівень акаунта.</p></details>
+      <details><summary>Це офіційний проєкт SteamGifts?</summary><p>Ні. SteamGiftBot — незалежний проєкт з відкритим кодом під MPL-2.0, не пов'язаний зі SteamGifts, IndieGala, GOG, itch.io та Valve.</p></details>
+    </div>
+  </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-row">
+      <div class="social">
+        <a class="social-btn" href="https://github.com/PalmaLuv/SteamGiftBot" aria-label="GitHub" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.4-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5a3.9 3.9 0 0 1 1-2.7 3.6 3.6 0 0 1 .1-2.7s.8-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7a3.9 3.9 0 0 1 1 2.7c0 3.9-2.3 4.7-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></svg></a>
+        <a class="social-btn" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/" aria-label="Вікі" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2zM8 7h6M8 11h6"/></svg></a>
+        <a class="social-btn" href="https://palmaluv.github.io/palma.github.io/" aria-label="Портфоліо автора" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></a>
+      </div>
+      <p class="foot-mid">PalmaLuv, 2026 · <a href="https://github.com/PalmaLuv/SteamGiftBot">вихідний код</a> · <a href="https://github.com/PalmaLuv/SteamGiftBot/wiki">вікі</a></p>
+      <code class="foot-code">const bot = { status: <span>"farming"</span> };</code>
+    </div>
+    <p class="fine center">Незалежний проєкт. Не пов'язаний зі SteamGifts, IndieGala, OpiumPulses, GOG, itch.io та Valve.</p>
+  </footer>
+</div>
+
+<div class="palette" data-palette-box hidden>
+  <div class="palette-card" role="dialog" aria-modal="true" aria-label="Меню команд">
+    <input type="text" data-palette-input placeholder="Що зробити?" aria-label="Що зробити?" autocomplete="off">
+    <ul data-palette-list role="listbox"></ul>
+    <p class="palette-hint mono">↑↓ · Enter · Esc</p>
+  </div>
+</div>
+<div class="toast" data-toast role="status" aria-live="polite" hidden></div>
+<canvas class="confetti" data-confetti aria-hidden="true"></canvas>
+
+<script id="i18n" type="application/json">{"copied": "Скопійовано", "copyFail": "Не вдалося скопіювати", "dark": "Темна тема", "light": "Світла тема", "konami": "Код Konami прийнято. Поінтів не буде, але ось конфеті.", "verdictHigh": "Ферма візьме таку роздачу однією з перших.", "verdictMid": "Візьме, якщо лишиться баланс.", "verdictLow": "Опиниться в самому кінці черги.", "win": "Випав ваш квиток. Таке трапляється рідко — запам'ятайте цей день.", "lose": "Випав квиток №{n} з {total}. Повз — ферма спробує в наступній.", "stars": "зірок", "palette": {"go": "Перейти", "farm": "Ферма", "sites": "Майданчики", "odds": "Шанси", "install": "Встановлення", "faq": "Питання", "theme": "Змінити тему", "lang": "Мова", "copyInstall": "Скопіювати команду встановлення", "wiki": "Відкрити вікі", "github": "Відкрити GitHub", "portfolio": "Портфоліо автора", "roll": "Розіграти квиток", "confetti": "Конфеті просто так", "empty": "Нічого не знайшлося"}, "lines": ["[IndieGala] Акаунт palma, баланс 40 iS", "[IndieGala] Увійшов: ★ Doughlings: Arcade за 4 iS (учасників 31, лишилось 36)", "[IndieGala] Увійшов: Tiny Farm за 1 iS (учасників 40, лишилось 35)", "[IndieGala] Пропущено: бракує iS — 12, DLC / саундтрек / пак — 4, 18+ — 3", "[SteamGifts] Чекає поінти: 21 з 30 P", "[Steam] Увійшов: Star Courier — додано до бібліотеки Steam", "[GOG] роздачі зараз немає", "🎉 Виграш на IndieGala: Hollow Pact"]}</script>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

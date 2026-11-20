@@ -1,625 +1,246 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="SteamGiftBot сам входит в раздачи SteamGifts, копит очки и пишет в Telegram, когда вы выиграли. Установка, настройки, риски.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23C4304E'/%3E%3Crect x='13' width='6' height='32' fill='%23fff'/%3E%3Crect y='13' width='32' height='6' fill='%23fff'/%3E%3C/svg%3E">
-<title>SteamGiftBot</title>
+<title>SteamGiftBot — ферма раздач игр</title>
+<meta name="description" content="Открытая ферма раздач: SteamGifts, IndieGala, OpiumPulses, бесплатные игры Steam, GOG и itch.io. Веб-панель, Telegram, ArchiSteamFarm.">
+<meta name="theme-color" content="#0C0C0E">
+<meta property="og:title" content="SteamGiftBot — ферма раздач игр">
+<meta property="og:description" content="Открытая ферма раздач: SteamGifts, IndieGala, OpiumPulses, бесплатные игры Steam, GOG и itch.io. Веб-панель, Telegram, ArchiSteamFarm.">
+<meta property="og:image" content="https://palmaluv.github.io/SteamGiftBot/images/overview.png">
+<link rel="canonical" href="https://palmaluv.github.io/SteamGiftBot/">
+<link rel="alternate" hreflang="ru" href="https://palmaluv.github.io/SteamGiftBot/">
+<link rel="alternate" hreflang="uk" href="https://palmaluv.github.io/SteamGiftBot/uk/">
+<link rel="alternate" hreflang="en" href="https://palmaluv.github.io/SteamGiftBot/en/">
+<link rel="alternate" hreflang="x-default" href="https://palmaluv.github.io/SteamGiftBot/">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Onest:wght@400;500;600;700&family=Unbounded:wght@400;600;800&display=swap">
-<style>
-body{margin:0}[hidden]{display:none!important}img{max-width:100%}
-:root{
-  --ground:#F1F2F8; --surface:#FFFFFF; --sunk:#E6E8F1; --ink:#151A2E; --muted:#5A6180;
-  --line:#D5D8E6; --ribbon:#C4304E; --ribbon-soft:#F7DCE2; --gold:#B97F0E; --gold-soft:#F8EBCB;
-  --ok:#1D7A5A; --ok-soft:#DDF0E7; --term-bg:#12162A; --term-ink:#D9DDEE; --term-dim:#7A82A3;
-  --term-green:#7FD6A6; --term-gold:#F2C35A; --term-red:#F08A9C; --term-cyan:#8CC8F0; --term-mag:#D6A2F0;
-  --display:"Unbounded","Onest",system-ui,sans-serif;
-  --body:"Onest",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    color-scheme:dark;
-    --ground:#0E1120; --surface:#161A2C; --sunk:#1D2236; --ink:#E8EAF3; --muted:#9CA3BD;
-    --line:#2A3048; --ribbon:#FF6F8E; --ribbon-soft:#3A1826; --gold:#F4C04E; --gold-soft:#34290F;
-    --ok:#62CFA0; --ok-soft:#12302A; --term-bg:#0A0D18;
-  }
-}
-:root[data-theme="dark"]{
-  color-scheme:dark;
-  --ground:#0E1120; --surface:#161A2C; --sunk:#1D2236; --ink:#E8EAF3; --muted:#9CA3BD;
-  --line:#2A3048; --ribbon:#FF6F8E; --ribbon-soft:#3A1826; --gold:#F4C04E; --gold-soft:#34290F;
-  --ok:#62CFA0; --ok-soft:#12302A; --term-bg:#0A0D18;
-}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{background:var(--ground);color:var(--ink);font:16px/1.65 var(--body);padding-inline:16px;padding-block:0}
-a{color:var(--ribbon);text-underline-offset:3px}
-:focus-visible{outline:2px solid var(--ribbon);outline-offset:3px;border-radius:4px}
-.shell{max-width:1140px;margin:0 auto}
-code{font:.86em/1.4 var(--mono);background:var(--sunk);padding:1px 6px;border-radius:4px}
-p{max-width:66ch}
-
-/* nav */
-.nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,var(--ground) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);margin-inline:-16px;padding-inline:16px}
-.nav .shell{display:flex;align-items:center;gap:20px;min-height:56px}
-.brand{font:800 15px/1 var(--display);letter-spacing:.01em;color:var(--ink);text-decoration:none;display:flex;align-items:center;gap:9px;white-space:nowrap}
-.brand i{width:22px;height:22px;border-radius:5px;background:var(--ribbon);position:relative;display:inline-block}
-.brand i::before,.brand i::after{content:"";position:absolute;background:var(--surface)}
-.brand i::before{left:9px;top:0;bottom:0;width:4px}
-.brand i::after{top:9px;left:0;right:0;height:4px}
-.nav ul{list-style:none;display:flex;gap:4px;margin:0 0 0 auto;padding:0;overflow-x:auto;scrollbar-width:none}
-.nav ul::-webkit-scrollbar{display:none}
-.nav a.l{display:block;padding:7px 10px;border-radius:6px;color:var(--muted);text-decoration:none;font-size:14px;white-space:nowrap}
-.nav a.l:hover{color:var(--ink);background:var(--sunk)}
-@media (max-width:760px){.nav ul{display:none}}
-
-/* hero */
-.hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:48px;align-items:center;padding-block:64px 56px}
-@media (max-width:920px){.hero{grid-template-columns:minmax(0,1fr);gap:32px;padding-block:40px}}
-.kicker{font:500 12px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.kicker b{color:var(--ribbon);font-weight:500}
-h1{font:800 clamp(34px,5.6vw,64px)/1.02 var(--display);letter-spacing:-.025em;margin:18px 0 20px;text-wrap:balance}
-h1 .p{color:var(--gold)}
-.lead{font-size:clamp(17px,1.7vw,19px);color:var(--muted);margin:0 0 28px;max-width:34em}
-.cta{display:flex;flex-wrap:wrap;gap:10px}
-.btn{font:600 15px/1 var(--body);text-decoration:none;padding:14px 18px;border-radius:10px;display:inline-flex;align-items:center;gap:8px;border:1px solid transparent}
-.btn.main{background:var(--ribbon);color:#fff}
-.btn.main:hover{filter:brightness(1.07)}
-.btn.ghost{border-color:var(--line);color:var(--ink);background:var(--surface)}
-.btn.ghost:hover{border-color:var(--muted)}
-.facts{display:flex;flex-wrap:wrap;gap:22px;margin-top:30px;font-size:14px;color:var(--muted)}
-.facts b{display:block;font:600 20px/1.1 var(--display);color:var(--ink);font-variant-numeric:tabular-nums}
-
-/* terminal */
-.term{background:var(--term-bg);color:var(--term-ink);border-radius:14px;box-shadow:0 24px 60px -28px rgba(20,24,48,.55);overflow:hidden;min-width:0}
-.term .bar{display:flex;align-items:center;gap:7px;padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.07);font:500 12px/1 var(--mono);color:var(--term-dim)}
-.term .bar span{width:10px;height:10px;border-radius:50%;background:#2B3150}
-.term .bar em{font-style:normal;margin-left:8px;flex:1}
-.term .bar button{font:500 11px/1 var(--mono);color:var(--term-dim);background:transparent;border:1px solid #2B3150;border-radius:5px;padding:5px 8px;cursor:pointer}
-.term .bar button:hover{color:var(--term-ink)}
-.term pre{margin:0;padding:16px 18px 18px;font:12.5px/1.7 var(--mono);overflow-x:auto;white-space:pre}
-.term .g{color:var(--term-green)} .term .y{color:var(--term-gold)} .term .r{color:var(--term-red)}
-.term .c{color:var(--term-cyan)} .term .m{color:var(--term-mag)} .term .d{color:var(--term-dim)} .term .w{color:#fff}
-.term .caption{padding:0 18px 14px;font:500 11px/1.4 var(--mono);color:var(--term-dim)}
-.cursor{display:inline-block;width:.6em;height:1.1em;background:var(--term-green);vertical-align:-2px;animation:blink 1.1s steps(1) infinite}
-@keyframes blink{50%{opacity:0}}
-
-/* sections */
-section{padding-block:72px 8px;scroll-margin-top:64px}
-.sec-head{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:40px;margin-bottom:28px}
-@media (max-width:820px){.sec-head{grid-template-columns:minmax(0,1fr);gap:8px}}
-.sec-head .tag{font:500 12px/1.4 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ribbon);padding-top:10px}
-h2{font:600 clamp(26px,3.4vw,38px)/1.12 var(--display);letter-spacing:-.02em;margin:0 0 12px;text-wrap:balance}
-.sec-head p{color:var(--muted);margin:0;font-size:17px}
-h3{font:600 19px/1.3 var(--body);margin:0 0 8px}
-
-/* story */
-.story{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px 48px}
-@media (max-width:820px){.story{grid-template-columns:minmax(0,1fr)}}
-.story p{margin:0 0 14px}
-.pull{border-left:3px solid var(--gold);padding:4px 0 4px 18px;font:500 20px/1.45 var(--body);margin:6px 0 18px;max-width:30em}
-.pull small{display:block;font:400 13px/1.4 var(--mono);color:var(--muted);margin-top:8px}
-
-/* tickets — the one loud element */
-.tickets{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0;margin-top:8px;filter:drop-shadow(0 12px 22px rgba(20,24,48,.10))}
-@media (max-width:1000px){.tickets{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:14px}}
-@media (max-width:560px){.tickets{grid-template-columns:minmax(0,1fr)}}
-.ticket{--notch:10px;position:relative;background:var(--surface);padding:22px 20px 20px;min-height:220px;display:flex;flex-direction:column;
-  -webkit-mask:radial-gradient(circle var(--notch) at 0 50%,#0000 98%,#000) left/51% 100% no-repeat,radial-gradient(circle var(--notch) at 100% 50%,#0000 98%,#000) right/51% 100% no-repeat;
-          mask:radial-gradient(circle var(--notch) at 0 50%,#0000 98%,#000) left/51% 100% no-repeat,radial-gradient(circle var(--notch) at 100% 50%,#0000 98%,#000) right/51% 100% no-repeat;
-  border-right:2px dashed var(--line)}
-.ticket:last-child{border-right:0}
-@media (max-width:1000px){.ticket{border-right:0}}
-.ticket .no{font:500 11px/1 var(--mono);letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
-.ticket .big{font:800 30px/1 var(--display);color:var(--ribbon);margin:14px 0 10px;font-variant-numeric:tabular-nums}
-.ticket .big.gold{color:var(--gold)}
-.ticket h3{font-size:16px;margin-bottom:6px}
-.ticket p{font-size:14px;color:var(--muted);margin:0}
-.ticket .unit{font:500 12px/1.3 var(--mono);color:var(--muted);margin-top:auto;padding-top:14px}
-
-/* features */
-.features{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:36px 40px}
-@media (max-width:900px){.features{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:560px){.features{grid-template-columns:minmax(0,1fr)}}
-.feat{border-top:2px solid var(--ink);padding-top:14px}
-.feat p{margin:0;color:var(--muted);font-size:15px}
-.feat .k{font:500 12px/1 var(--mono);color:var(--ribbon);display:block;margin-bottom:10px}
-
-/* install tabs */
-.tabs{display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--line);margin-bottom:0}
-.tabs button{font:600 14px/1 var(--body);color:var(--muted);background:transparent;border:0;border-bottom:2px solid transparent;padding:12px 14px;cursor:pointer;margin-bottom:-1px}
-.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ribbon)}
-.panel{background:var(--surface);border:1px solid var(--line);border-top:0;border-radius:0 0 12px 12px;padding:22px 24px 12px}
-.steps{list-style:none;counter-reset:s;padding:0;margin:0;display:grid;gap:18px}
-.steps>li{counter-increment:s;display:grid;grid-template-columns:34px minmax(0,1fr);gap:14px}
-.steps>li::before{content:counter(s);font:600 14px/34px var(--display);text-align:center;width:34px;height:34px;border-radius:50%;background:var(--ribbon-soft);color:var(--ribbon)}
-.steps h3{font-size:16px;margin:5px 0 4px}
-.steps p{margin:0 0 6px;color:var(--muted);font-size:15px}
-
-.cmd{position:relative;margin:8px 0 12px;background:var(--term-bg);color:var(--term-ink);border-radius:9px;overflow:hidden;max-width:100%}
-.cmd .lbl{display:flex;justify-content:space-between;align-items:center;padding:8px 10px 0 14px;font:500 10.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--term-dim)}
-.cmd pre{margin:0;padding:8px 14px 12px;overflow-x:auto;font:13px/1.6 var(--mono);white-space:pre}
-.cmd .d{color:var(--term-dim)}
-.copy{font:500 11px/1 var(--mono);color:var(--term-dim);background:transparent;border:1px solid #2B3150;border-radius:5px;padding:5px 8px;cursor:pointer}
-.copy:hover{color:var(--term-ink)}
-
-.note{border-radius:10px;padding:14px 16px;margin:16px 0;font-size:15px}
-.note p{margin:0;max-width:none}
-.note.gold{background:var(--gold-soft)}
-.note.red{background:var(--ribbon-soft)}
-.note.ok{background:var(--ok-soft)}
-
-/* settings table */
-.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
-table{border-collapse:collapse;width:100%;font-size:14.5px}
-th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
-tr:last-child td{border-bottom:0}
-th{font:500 11.5px/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--sunk)}
-td code{white-space:nowrap}
-td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
-
-/* two col */
-.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px}
-@media (max-width:820px){.two{grid-template-columns:minmax(0,1fr)}}
-.risk{display:grid;gap:14px}
-.risk div{display:grid;grid-template-columns:10px minmax(0,1fr);gap:14px}
-.risk i{width:10px;border-radius:3px}
-.risk .hi{background:var(--ribbon)} .risk .md{background:var(--gold)} .risk .lo{background:var(--ok)}
-.risk p{margin:0;font-size:15px;color:var(--muted)}
-.risk b{color:var(--ink);font-weight:600;display:block}
-
-/* architecture */
-.arch{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px}
-.arch svg{display:block;min-width:640px;width:100%;height:auto}
-.arch text{font-family:var(--mono);font-size:12px;fill:var(--ink)}
-.arch .sub{fill:var(--muted);font-size:10.5px}
-.arch .box{fill:var(--sunk);stroke:var(--line)}
-.arch .hot{fill:var(--ribbon-soft);stroke:var(--ribbon)}
-.arch .gld{fill:var(--gold-soft);stroke:var(--gold)}
-.arch .edge{stroke:var(--muted);stroke-width:1.4;fill:none}
-.arch .dash{stroke-dasharray:4 4}
-
-/* timeline */
-.timeline{list-style:none;margin:0;padding:0;position:relative}
-.timeline::before{content:"";position:absolute;left:7px;top:6px;bottom:6px;width:2px;background:var(--line)}
-.timeline li{position:relative;padding:0 0 22px 34px}
-.timeline li::before{content:"";position:absolute;left:0;top:6px;width:16px;height:16px;border-radius:50%;background:var(--surface);border:2px solid var(--muted)}
-.timeline li.now::before{border-color:var(--ribbon);background:var(--ribbon)}
-.timeline h3{font-size:16px;margin:0 0 3px}
-.timeline p{margin:0;color:var(--muted);font-size:15px}
-
-/* faq */
-details{border-bottom:1px solid var(--line)}
-details summary{cursor:pointer;list-style:none;padding:18px 0;font:600 17px/1.35 var(--body);display:flex;justify-content:space-between;gap:16px}
-details summary::-webkit-details-marker{display:none}
-details summary::after{content:"+";font:400 22px/1 var(--mono);color:var(--ribbon);transition:transform .2s}
-details[open] summary::after{transform:rotate(45deg)}
-details .a{padding:0 0 18px;color:var(--muted)}
-details .a p{margin:0 0 8px}
-
-footer{margin-top:80px;border-top:1px solid var(--line);padding-block:28px 40px;font-size:14px;color:var(--muted)}
-footer .shell{display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.cursor{animation:none}*{transition:none!important}}
-</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script>try{var t=localStorage.getItem('sgb-theme');if(t)document.documentElement.dataset.theme=t;else if(matchMedia('(prefers-color-scheme: light)').matches)document.documentElement.dataset.theme='light'}catch(e){}</script>
 </head>
 <body>
-<nav class="nav" aria-label="Разделы">
-  <div class="shell">
-    <a class="brand" href="#top"><i aria-hidden="true"></i>SteamGiftBot</a>
-    <ul>
-      <li><a class="l" href="#story">О SteamGifts</a></li>
-      <li><a class="l" href="#cycle">Как работает</a></li>
-      <li><a class="l" href="#install">Установка</a></li>
-      <li><a class="l" href="#settings">Настройки</a></li>
-      <li><a class="l" href="#free">Бесплатные игры</a></li>
-      <li><a class="l" href="#risks">Риски</a></li>
-      <li><a class="l" href="#dev">Разработчикам</a></li>
-      <li><a class="l" href="#faq">Вопросы</a></li>
-    </ul>
-  </div>
-</nav>
+<a class="skip" href="#main">К содержимому</a>
+<div class="glow glow-a" aria-hidden="true"></div>
+<div class="glow glow-b" aria-hidden="true"></div>
+<div class="glow glow-c" aria-hidden="true"></div>
+<div class="bg-text" aria-hidden="true">GIFTBOT</div>
 
-<div class="shell" id="top">
-
-<header class="hero">
-  <div>
-    <div class="kicker"><b>Открытый код · MPL-2.0</b><span>Python 3.10+</span><span>Windows · Linux · Docker</span></div>
-    <h1>Тратит ваши <span class="p">P</span> на&nbsp;раздачи, пока вы&nbsp;спите</h1>
-    <p class="lead">SteamGiftBot сам заходит в раздачи игр на SteamGifts, выбирает те, где шанс выше, копит очки, когда они кончаются, и пишет вам в Telegram в тот момент, когда вы выиграли.</p>
-    <div class="cta">
-      <a class="btn main" href="#install">Установить за 5 минут</a>
-      <a class="btn ghost" href="https://github.com/PalmaLuv/SteamGiftBot">Код на GitHub</a>
+<div class="page">
+  <header class="header" role="banner">
+    <a class="logo" href="./" aria-label="SteamGiftBot">
+      <span class="logo-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM3 7h18v4H3zM12 7v14M12 7c-1.5-3-5-3.5-5-1.2C7 7 9.5 7 12 7zm0 0c1.5-3 5-3.5 5-1.2C17 7 14.5 7 12 7z"/></svg></span>
+      <span class="logo-text"><b>SteamGiftBot</b><small>by PalmaLuv</small></span>
+    </a>
+    <nav class="nav-pills" aria-label="Разделы">
+      <a class="nav-pill" href="#farm">Ферма</a>
+      <a class="nav-pill" href="#sites">Площадки</a>
+      <a class="nav-pill" href="#odds">Шансы</a>
+      <a class="nav-pill" href="#install">Установка</a>
+      <a class="nav-pill" href="#faq">Вопросы</a>
+    </nav>
+    <div class="header-r">
+      <button class="kbd" type="button" data-palette aria-label="Открыть меню команд"><kbd>Ctrl</kbd><kbd>K</kbd></button>
+      <div class="langs" role="group" aria-label="Язык"><a href="./" hreflang="ru" lang="ru" aria-current="true">RU</a><a href="uk/" hreflang="uk" lang="uk">UK</a><a href="en/" hreflang="en" lang="en">EN</a></div>
+      <button class="theme" type="button" data-theme-toggle aria-label="Сменить тему"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+      <a class="header-cta" href="https://github.com/PalmaLuv/SteamGiftBot" rel="noopener">
+        <span class="cta-text">GitHub <span class="stars" data-stars hidden></span></span>
+        <span class="cta-dot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></svg></span>
+      </a>
     </div>
-    <div class="facts">
-      <div><b>500</b>участников — порог, после которого раздача пропускается</div>
-      <div><b>15 мин</b>пауза, пока копятся очки</div>
-      <div><b>338</b>автотестов</div>
+  </header>
+
+  <main id="main">
+  <section class="hero" aria-labelledby="title">
+    <p class="eyebrow">— открытый код · MPL-2.0 · Python 3.10+ <span class="sdot" aria-hidden="true"></span></p>
+    <h1 class="title" id="title">
+      <span class="title-line"><span class="line-mask"><span class="word" style="--i:0">Раздачи игр</span></span><span class="paren-group" aria-hidden="true"><span class="paren">(</span><span class="tiles"><span class="tile t-sg">SG</span><span class="tile t-ig">IG</span><span class="tile t-op">OP</span><span class="tile t-gog">GOG</span></span><span class="paren">)</span></span></span>
+      <span class="title-line"><span class="line-mask"><span class="word" style="--i:1">на шести сайтах,</span></span></span>
+      <span class="title-line"><span class="line-mask"><span class="word" style="--i:2">одна ферма.</span></span><span class="title-desc">Входит в раздачи на SteamGifts, IndieGala и OpiumPulses, забирает бесплатные игры в Steam, GOG и itch.io и пишет в Telegram, когда вы выиграли.</span></span>
+    </h1>
+
+    <div class="mid">
+      <a class="badge" href="#farm" aria-label="К описанию фермы">
+        <svg class="badge-ring" viewBox="0 0 120 120" aria-hidden="true"><defs><path id="ring" d="M60,60 m-46,0 a46,46 0 1,1 92,0 a46,46 0 1,1 -92,0"/></defs><text><textPath href="#ring">без паролей · открытый код · telegram · </textPath></text></svg>
+        <span class="badge-center"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></span>
+      </a>
+      <ol class="res-list">
+        <li><a class="res-item" href="#farm"><span>Ферма<span class="n"> / 01</span></span><span class="dots" aria-hidden="true">•••</span><span aria-hidden="true">→</span></a></li>
+        <li><a class="res-item" href="#sites"><span>Площадки<span class="n"> / 02</span></span><span class="dots" aria-hidden="true">•••</span><span aria-hidden="true">→</span></a></li>
+        <li><a class="res-item" href="#odds"><span>Шансы<span class="n"> / 03</span></span><span class="dots" aria-hidden="true">•••</span><span aria-hidden="true">→</span></a></li>
+        <li><a class="res-item" href="#install"><span>Установка<span class="n"> / 04</span></span><span class="dots" aria-hidden="true">•••</span><span aria-hidden="true">→</span></a></li>
+        <li><a class="res-item" href="#faq"><span>Вопросы<span class="n"> / 05</span></span><span class="dots" aria-hidden="true">•••</span><span aria-hidden="true">→</span></a></li>
+      </ol>
     </div>
-  </div>
 
-  <figure class="term" aria-label="Пример вывода бота" style="margin:0">
-    <div class="bar"><span></span><span></span><span></span><em>steamgiftbot — пробный проход</em><button type="button" id="replay">повторить</button></div>
-<pre id="termOut"><span class="d">$</span> <span class="w">steamgiftbot --once --dry-run --free-games "steam, epic"</span>
-<span class="w">You currently have balance 312 points</span>
-<span class="g">Script running</span>
-<span class="g">Free to keep: Shogun Showdown (Epic Games)</span>
-<span class="m">Getting games from page 1</span>
-<span class="c">Would enter Portal 2 for 30P</span>
-<span class="c">Would enter Hollow Knight for 15P</span>
-<span class="r">Skipping Elden Ring: not enough points</span>
-<span class="c">Would enter Celeste for 20P</span>
-<span class="m">Getting games from page 2</span>
-<span class="c">Would enter Stardew Valley for 15P</span>
-
-<span class="w">Dry run: nothing was actually entered.</span>
-<span class="y">Entered 7 giveaways for 244 points.</span>
-<span class="d">Skipped 12: already entered</span>
-<span class="d">Skipped 5: asks for a higher contributor level</span>
-<span class="d">Skipped 3: too many entries already</span>
-<span class="d">$</span> <span class="cursor"></span></pre>
-    <figcaption class="caption">Пример: сообщения и формат — настоящие, игры и числа — для иллюстрации.</figcaption>
-  </figure>
-</header>
-
-<section id="story">
-  <div class="sec-head">
-    <div class="tag">О SteamGifts</div>
-    <div>
-      <h2>Сайт, где игры дарят незнакомцам</h2>
-      <p>Чтобы понять бота, нужно понять правила площадки, на которой он работает.</p>
+    <div class="bottom">
+      <div class="clay term" aria-label="Пример журнала фермы">
+        <div class="term-top"><span class="tdots" aria-hidden="true"><i></i><i></i><i></i></span><span class="mono">botfarm — журнал</span><button class="link-btn" type="button" data-replay>ещё раз</button></div>
+        <pre class="term-body" data-term aria-live="off">[IndieGala] Аккаунт palma, баланс 40 iS
+[IndieGala] Вошёл: ★ Doughlings: Arcade за 4 iS (участников 31, осталось 36)
+[IndieGala] Вошёл: Tiny Farm за 1 iS (участников 40, осталось 35)
+[IndieGala] Пропущено: не хватает iS — 12, DLC / саундтрек / пак — 4, 18+ — 3
+[SteamGifts] Ждёт поинты: 21 из 30 P
+[Steam] Вошёл: Star Courier — добавлено в библиотеку Steam
+[GOG] раздачи сейчас нет
+🎉 Выигрыш на IndieGala: Hollow Pact</pre>
+        <p class="term-note">Формат строк настоящий, игры выдуманные.</p>
+      </div>
+      <div class="cluster">
+        <div class="info-grid">
+          <div class="clay info"><span class="ic-head">Площадки</span><b class="big">6</b><p>три с раздачами за внутреннюю валюту и три с бесплатными играми</p></div>
+          <div class="clay info"><span class="ic-head">Пароли</span><b class="big">0</b><p>ферма входит по cookie из браузера и не знает ни одного вашего пароля</p></div>
+        </div>
+        <div class="clay xp">
+          <span class="ic-head">Под капотом</span>
+          <div class="tag-row"><span class="tag">python 3.10+</span><span class="tag">stdlib http</span><span class="tag">requests</span><span class="tag">beautifulsoup</span><span class="tag">systemd</span><span class="tag">docker</span><span class="tag">telegram bot api</span><span class="tag">archisteamfarm ipc</span><span class="tag">pytest</span></div>
+        </div>
+      </div>
     </div>
-  </div>
-  <div class="story">
-    <div>
-      <p><b>SteamGifts</b> — сообщество, где владельцы аккаунтов Steam разыгрывают игры среди других участников. Кто-то купил бандл и раздаёт лишние ключи, кто-то просто дарит любимую игру. Вход в раздачу бесплатный — но не безлимитный.</p>
-      <p>Валюта сайта — <b>очки, P</b>. Они понемногу начисляются, пока вы пользуетесь аккаунтом, а каждая раздача стоит столько очков, сколько указано рядом с её названием: 5P, 15P, 50P. Потратили — ждите, пока накопятся снова.</p>
-      <p>Кто сам дарит игры, получает <b>уровень вкладчика</b>. Часть раздач открыта только с определённого уровня, часть — только для отдельных регионов.</p>
+  </section>
+
+  <section class="section" id="farm" aria-labelledby="farm-h">
+    <div class="sec-head"><div><p class="sec-n">Ферма / 01</p><h2 id="farm-h">Панель вместо терминала.</h2></div><p class="sec-lead">Каждая площадка работает в своём потоке, а панель показывает, кто сейчас занят, почему кто-то ждёт и сколько ушло за сутки.</p></div>
+    <figure class="clay shot">
+      <img src="images/overview.png" width="1280" height="820" loading="lazy" alt="Обзор фермы: новые выигрыши, график входов по дням и состояние площадок">
+      <figcaption>Обзор: выигрыши, входы по дням, причина ожидания у каждой площадки.</figcaption>
+    </figure>
+    <div class="feat-grid">
+      <article class="clay feat"><span class="fnum">01</span><h3>Подключение за минуту</h3><p>Скопируйте запрос сайта как cURL и вставьте. Ферма проверит вход, ничего не сохраняя, и покажет баланс.</p></article>
+      <article class="clay feat"><span class="fnum">02</span><h3>Пробный проход</h3><p>Все текущие раздачи и решение по каждой: войдёт или почему пропустит. Без единого потраченного очка.</p></article>
+      <article class="clay feat"><span class="fnum">03</span><h3>Telegram</h3><p>Выигрыши, слетевшие cookie и сводка за сутки. С телефона: /status, /pause, /run, /preview.</p></article>
+      <article class="clay feat"><span class="fnum">04</span><h3>ArchiSteamFarm</h3><p>Выигранный ключ активируется в Steam одной кнопкой, бесплатные игры Steam попадают в библиотеку сами.</p></article>
+      <article class="clay feat"><span class="fnum">05</span><h3>Правила</h3><p>Часы работы, лимиты на сутки, без DLC и 18+, без игр, которые уже есть. Сначала — то, что в списке желаемого.</p></article>
+      <article class="clay feat"><span class="fnum">06</span><h3>Ваш сервер</h3><p>Любой компьютер, который не выключается. Панель видна только в вашей сети или через Tailscale.</p></article>
     </div>
-    <div>
-      <div class="pull">Много раздач, мало очков и постоянное ожидание. Выигрывает тот, кто тратит очки вовремя и туда, где меньше соперников.<small>— вот что автоматизирует бот</small></div>
-      <p>Вручную это выглядит так: каждые полчаса открывать сайт, листать страницы, пропускать уже введённые и переполненные раздачи и следить, не выиграли ли вы что-нибудь. Бот делает то же самое, только не устаёт и не забывает.</p>
-      <p class="note gold" style="max-width:none">SteamGiftBot — независимый проект сообщества. Он не связан ни со SteamGifts, ни с Valve.</p>
+    <div class="shots-row">
+      <figure class="clay shot small"><img src="images/preview.png" width="1280" height="820" loading="lazy" alt="Пробный проход IndieGala: две раздачи войдут, две пропущены с причиной"><figcaption>«Что возьмёт»: решение по каждой раздаче.</figcaption></figure>
+      <figure class="clay shot small"><img src="images/connect.png" width="1280" height="820" loading="lazy" alt="Мастер подключения GOG: пошаговая инструкция и поле для запроса"><figcaption>Мастер подключения: шаги для каждого сайта.</figcaption></figure>
+      <figure class="clay shot phone"><img src="images/mobile.png" width="780" height="1688" loading="lazy" alt="Обзор фермы на телефоне"><figcaption>На телефоне.</figcaption></figure>
     </div>
-  </div>
-</section>
+  </section>
 
-<section id="cycle">
-  <div class="sec-head">
-    <div class="tag">Как работает</div>
-    <div>
-      <h2>Один цикл — шесть билетов</h2>
-      <p>Бот повторяет этот круг, пока вы его не остановите. С флагом <code>--once</code> делает его один раз и выходит — так удобно для планировщика.</p>
+  <section class="section" id="sites" aria-labelledby="sites-h">
+    <div class="sec-head"><div><p class="sec-n">Площадки / 02</p><h2 id="sites-h">Шесть площадок.</h2></div><p class="sec-lead">Три сайта с раздачами за внутреннюю валюту и три источника бесплатных игр. Строка ведёт на страницу вики.</p></div>
+    <div class="site-list" role="table" aria-label="Шесть площадок.">
+      <div class="site-row head" role="row"><span role="columnheader">Площадка</span><span role="columnheader">Что делает</span><span role="columnheader">Подключение</span><span role="columnheader">Где работает</span></div>
+      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/SteamGifts"><span role="cell"><i class="sw t-sg"></i>SteamGifts</span><span role="cell">раздачи за поинты (P)</span><span role="cell" class="mono">cookie</span><span role="cell">бот и ферма</span></a>
+      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/IndieGala"><span role="cell"><i class="sw t-ig"></i>IndieGala</span><span role="cell">раздачи за Galasilver (iS)</span><span role="cell" class="mono">cookie</span><span role="cell">ферма</span></a>
+      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/OpiumPulses"><span role="cell"><i class="sw t-op"></i>OpiumPulses</span><span role="cell">бесплатные раздачи и за OP</span><span role="cell" class="mono">cookie</span><span role="cell">ферма</span></a>
+      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/Бесплатные-игры-Steam"><span role="cell"><i class="sw t-st"></i>Steam</span><span role="cell">игры, которые Steam раздаёт навсегда</span><span role="cell" class="mono">ArchiSteamFarm</span><span role="cell">ферма</span></a>
+      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/GOG"><span role="cell"><i class="sw t-gog"></i>GOG</span><span role="cell">раздача с главной страницы</span><span role="cell" class="mono">cookie</span><span role="cell">ферма</span></a>
+      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/itch-io"><span role="cell"><i class="sw t-itch"></i>itch.io</span><span role="cell">игры со скидкой 100%</span><span role="cell" class="mono">cookie</span><span role="cell">ферма</span></a>
     </div>
-  </div>
-  <div class="tickets">
-    <article class="ticket"><span class="no">билет 1</span><div class="big gold">312P</div><h3>Проверяет баланс</h3><p>Заходит на сайт с вашим cookie, читает очки и защитный токен формы.</p><span class="unit">сессия умерла → сообщение вам</span></article>
-    <article class="ticket"><span class="no">билет 2</span><div class="big">стр. 1</div><h3>Листает раздачи</h3><p>Все, из списка желаемого, рекомендованные, DLC, новые — как выберете.</p><span class="unit">6 типов списка</span></article>
-    <article class="ticket"><span class="no">билет 3</span><div class="big">12</div><h3>Отбирает</h3><p>Уже введено, закреплено, выше вашего уровня, чужой регион, дороже лимита, больше 500 участников, нет карточек — мимо.</p><span class="unit">12 причин пропустить</span></article>
-    <article class="ticket"><span class="no">билет 4</span><div class="big">−30P</div><h3>Входит</h3><p>Отправляет заявку и верит балансу, который вернул сайт. Заявку никогда не повторяет вслепую — очки не спишутся дважды.</p><span class="unit">пауза 3–7 с между входами</span></article>
-    <article class="ticket"><span class="no">билет 5</span><div class="big">900 с</div><h3>Ждёт очки</h3><p>Баланс ниже минимума — спит 15 минут. Сайт просит притормозить — ждёт столько, сколько сказано в ответе.</p><span class="unit">429 → Retry-After или 60 с</span></article>
-    <article class="ticket"><span class="no">билет 6</span><div class="big gold">1×</div><h3>Сообщает</h3><p>Проверяет страницу выигрышей и бесплатные игры. Каждую новость — один раз, в Telegram или Discord.</p><span class="unit">история в steamgiftbot-state.json</span></article>
-  </div>
-</section>
+    <p class="fine">Бот для командной строки вдобавок сообщает о бесплатных играх Epic, GOG и других магазинов по данным GamerPower.</p>
+  </section>
 
-<section id="features">
-  <div class="sec-head">
-    <div class="tag">Возможности</div>
-    <div><h2>Что умеет</h2><p>Всё включается в <code>config.ini</code>, переменными окружения или флагами — без правки кода.</p></div>
-  </div>
-  <div class="features">
-    <div class="feat"><span class="k">max_entries</span><h3>Выбирает, где меньше соперников</h3><p>По замеру 126 живых раздач медиана — 554 участника. Порог 500 оставляет почти половину раздач и вдвое снижает конкуренцию.</p></div>
-    <div class="feat"><span class="k">contributor_level</span><h3>Не стучится в закрытые двери</h3><p>Три раздачи из пяти требуют уровень. Бот знает ваш и не тратит на них запросы.</p></div>
-    <div class="feat"><span class="k">cards_only</span><h3>Только игры с карточками</h3><p>Спрашивает магазин Steam. Если магазин не ответил — пропускает, но не запоминает ошибку и спросит снова.</p></div>
-    <div class="feat"><span class="k">--dry-run</span><h3>Пробный проход</h3><p>Проходит все страницы, считает, сколько бы потратил, и не тратит ни одного очка.</p></div>
-    <div class="feat"><span class="k">telegram · discord</span><h3>Пишет, когда вы выиграли</h3><p>А ещё — когда кончилась сессия, и итог каждого запуска. Проверка: <code>--notify-test</code>.</p></div>
-    <div class="feat"><span class="k">free_games</span><h3>Бесплатные игры навсегда</h3><p>Раздачи Steam, Epic, GOG и других магазинов по данным GamerPower. Одним сообщением, каждая — один раз.</p></div>
-  </div>
-</section>
+  <section class="section" id="odds" aria-labelledby="odds-h">
+    <div class="sec-head"><div><p class="sec-n">Шансы / 03</p><h2 id="odds-h">Где шанс выше.</h2></div><p class="sec-lead">На IndieGala ферма ставит первыми раздачи с лучшим шансом на один потраченный iS: 1 / ((участников + 1) × цена). Подвигайте ползунки.</p></div>
+    <div class="odds">
+      <div class="clay odds-form">
+        <label for="entrants">Участников <output id="entrantsOut">40</output></label>
+        <input id="entrants" type="range" min="0" max="3000" step="1" value="40">
+        <label for="price">Цена билета, iS <output id="priceOut">1</output></label>
+        <input id="price" type="range" min="1" max="50" step="1" value="1">
+        <div class="presets-row" role="group" aria-label="Примеры">
+          <button type="button" class="chip" data-odds="40,1">40 · 1 iS</button>
+          <button type="button" class="chip" data-odds="480,2">480 · 2 iS</button>
+          <button type="button" class="chip" data-odds="2530,8">2530 · 8 iS</button>
+        </div>
+      </div>
+      <div class="clay odds-out" aria-live="polite">
+        <p class="mono small">шанс выиграть</p>
+        <p class="odds-big" data-chance>1 / 41</p>
+        <p class="mono small">шанс на 1 iS: <b data-value>0.0244</b></p>
+        <div class="meter" aria-hidden="true"><span data-meter></span></div>
+        <p class="odds-verdict" data-verdict></p>
+        <button class="btn-grad" type="button" data-roll>Разыграть билет</button>
+        <p class="roll-out mono" data-roll-out></p>
+      </div>
+    </div>
+  </section>
 
-<section id="install">
-  <div class="sec-head">
-    <div class="tag">Установка</div>
-    <div><h2>Выберите свой путь</h2><p>Это одна программа в четырёх упаковках. Выберите вкладку — ниже только нужные шаги.</p></div>
-  </div>
-  <div class="note gold"><p><b>Версия 2.2 готовится к релизу.</b> Бесплатные игры, файлы-секреты, контрольная сумма .exe и контейнер без root появятся в готовом .exe, pip и образе <code>:latest</code> после выхода релиза. До этого их можно попробовать из исходников, ветка <code>fix/audit</code>.</p></div>
-
-  <div class="tabs" role="tablist" aria-label="Способ установки">
-    <button role="tab" id="t-exe" aria-controls="p-exe" aria-selected="true" type="button">Windows .exe</button>
-    <button role="tab" id="t-src" aria-controls="p-src" aria-selected="false" type="button">Из исходников</button>
-    <button role="tab" id="t-pip" aria-controls="p-pip" aria-selected="false" type="button">pip</button>
-    <button role="tab" id="t-docker" aria-controls="p-docker" aria-selected="false" type="button">Docker</button>
-  </div>
-
-  <div class="panel" role="tabpanel" id="p-exe" aria-labelledby="t-exe">
-    <ol class="steps">
-      <li><div><h3>Скачайте</h3><p><code>SteamGiftBot.exe</code> и <code>SteamGiftBot.exe.sha256</code> со страницы <a href="https://github.com/PalmaLuv/SteamGiftBot/releases/latest">Releases</a>. Python не нужен.</p></div></li>
-      <li><div><h3>Сверьте контрольную сумму</h3><p>Число должно совпасть со строкой в файле <code>.sha256</code>.</p>
-        <div class="cmd"><div class="lbl">cmd<button class="copy" type="button">копировать</button></div><pre>certutil -hashfile SteamGiftBot.exe SHA256</pre></div></div></li>
-      <li><div><h3>Дайте ему свою папку</h3><p>Например <code>C:\SteamGiftBot</code>. Рядом с собой он создаст <code>config.ini</code>, файл состояния и логи.</p></div></li>
-      <li><div><h3>Запустите</h3><p>Двойной клик — и бот задаст вопросы. Дальше — <a href="#first">первый запуск</a>.</p></div></li>
-    </ol>
-  </div>
-
-  <div class="panel" role="tabpanel" id="p-src" aria-labelledby="t-src" hidden>
-    <ol class="steps">
-      <li><div><h3>Скачайте код и окружение</h3>
-        <div class="cmd"><div class="lbl">терминал<button class="copy" type="button">копировать</button></div><pre>git clone https://github.com/PalmaLuv/SteamGiftBot.git
+  <section class="section" id="install" aria-labelledby="install-h">
+    <div class="sec-head"><div><p class="sec-n">Установка / 04</p><h2 id="install-h">Установка.</h2></div><p class="sec-lead">Ферма — для сервера или домашнего компьютера. Бот для командной строки — если нужна только SteamGifts.</p></div>
+    <div class="tabs" role="tablist" aria-label="Установка.">
+      <button role="tab" type="button" id="tab-farm" aria-controls="pane-farm" aria-selected="true">Ферма</button>
+      <button role="tab" type="button" id="tab-exe" aria-controls="pane-exe" aria-selected="false" tabindex="-1">Бот для Windows</button>
+      <button role="tab" type="button" id="tab-docker" aria-controls="pane-docker" aria-selected="false" tabindex="-1">Docker</button>
+    </div>
+    <div class="clay pane" role="tabpanel" id="pane-farm" aria-labelledby="tab-farm">
+      <ol class="steps">
+        <li><p>Скачайте код и поставьте зависимости. Нужен Python 3.10 или новее.</p><div class="code"><button class="copy" type="button" aria-label="Скопировать">Скопировать</button><pre>git clone -b botfarm https://github.com/PalmaLuv/SteamGiftBot.git
 cd SteamGiftBot
-python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt</pre></div>
-        <p>На Linux и macOS вместо <code>.venv\Scripts\python</code> — <code>.venv/bin/python</code>.</p></div></li>
-      <li><div><h3>Запустите</h3>
-        <div class="cmd"><div class="lbl">терминал<button class="copy" type="button">копировать</button></div><pre>.venv\Scripts\python main.py</pre></div>
-        <p>То же самое делает <code>python -m steamgiftbot</code>.</p></div></li>
-    </ol>
-  </div>
-
-  <div class="panel" role="tabpanel" id="p-pip" aria-labelledby="t-pip" hidden>
-    <ol class="steps">
-      <li><div><h3>Установите командой</h3>
-        <div class="cmd"><div class="lbl">терминал<button class="copy" type="button">копировать</button></div><pre>pip install git+https://github.com/PalmaLuv/SteamGiftBot.git</pre></div></div></li>
-      <li><div><h3>Запускайте из папки с настройками</h3><p>Настройки, состояние и логи живут там, откуда вы запускаете.</p>
-        <div class="cmd"><div class="lbl">терминал<button class="copy" type="button">копировать</button></div><pre>mkdir steamgiftbot-data
-cd steamgiftbot-data
-steamgiftbot --setup</pre></div></div></li>
-    </ol>
-  </div>
-
-  <div class="panel" role="tabpanel" id="p-docker" aria-labelledby="t-docker" hidden>
-    <ol class="steps">
-      <li><div><h3>Отдайте папку пользователю контейнера</h3><p>Бот в контейнере работает не от root, а от пользователя с uid 1000.</p>
-        <div class="cmd"><div class="lbl">linux<button class="copy" type="button">копировать</button></div><pre>sudo mkdir -p /srv/steamgiftbot
-sudo chown -R 1000:1000 /srv/steamgiftbot</pre></div></div></li>
-      <li><div><h3>Положите cookie в файл-секрет</h3><p>Так он не виден в <code>docker inspect</code>, в отличие от <code>-e</code>.</p>
-        <div class="cmd"><div class="lbl">linux<button class="copy" type="button">копировать</button></div><pre>printf '%s' 'ВАШ_PHPSESSID' | sudo tee /srv/steamgiftbot/cookie &gt;/dev/null
-sudo chmod 600 /srv/steamgiftbot/cookie
-sudo chown 1000:1000 /srv/steamgiftbot/cookie</pre></div></div></li>
-      <li><div><h3>Запустите</h3>
-        <div class="cmd"><div class="lbl">linux<button class="copy" type="button">копировать</button></div><pre>docker run -d --name steamgiftbot --restart unless-stopped \
+python3 -m venv env
+env/bin/pip install -r requirements.txt</pre></div></li>
+        <li><p>Задайте пароль панели и запустите ферму на адресе компьютера в вашей сети.</p><div class="code"><button class="copy" type="button" aria-label="Скопировать">Скопировать</button><pre>env/bin/python -m steamgiftbot.farm --set-password
+env/bin/python -m steamgiftbot.farm --host 192.168.1.10</pre></div></li>
+        <li><p>Откройте <code>http://192.168.1.10:8092</code>, войдите и подключите площадку. Служба systemd, фаервол и телефон — в <a href="https://github.com/PalmaLuv/SteamGiftBot/wiki/Сервер-и-служба">вики</a>.</p></li>
+      </ol>
+      <p class="fine">Пока ферма в ветке botfarm, поэтому клонируется с <code>-b botfarm</code>. После слияния в main флаг не понадобится.</p>
+    </div>
+    <div class="clay pane" role="tabpanel" id="pane-exe" aria-labelledby="tab-exe" hidden>
+      <ol class="steps">
+        <li><p>Скачайте <code>SteamGiftBot.exe</code> и <code>.sha256</code> со страницы <a href="https://github.com/PalmaLuv/SteamGiftBot/releases/latest">релизов</a>. Python не нужен.</p></li>
+        <li><p>Сверьте контрольную сумму со строкой в файле <code>.sha256</code>.</p><div class="code"><button class="copy" type="button" aria-label="Скопировать">Скопировать</button><pre>certutil -hashfile SteamGiftBot.exe SHA256</pre></div></li>
+        <li><p>Запустите: бот спросит cookie и настройки. Пробный проход покажет, куда он вошёл бы, ничего не тратя.</p><div class="code"><button class="copy" type="button" aria-label="Скопировать">Скопировать</button><pre>SteamGiftBot.exe --once --dry-run</pre></div></li>
+      </ol>
+    </div>
+    <div class="clay pane" role="tabpanel" id="pane-docker" aria-labelledby="tab-docker" hidden>
+      <ol class="steps">
+        <li><p>Положите cookie SteamGifts (значение PHPSESSID) в файл-секрет: так его не видно в <code>docker inspect</code>.</p><div class="code"><button class="copy" type="button" aria-label="Скопировать">Скопировать</button><pre>sudo mkdir -p /srv/steamgiftbot
+printf '%s' 'PHPSESSID' | sudo tee /srv/steamgiftbot/cookie >/dev/null
+sudo chown -R 1000:1000 /srv/steamgiftbot &amp;&amp; sudo chmod 600 /srv/steamgiftbot/cookie</pre></div></li>
+        <li><p>Запустите контейнер. Он работает не от root, образ собран для amd64 и arm64.</p><div class="code"><button class="copy" type="button" aria-label="Скопировать">Скопировать</button><pre>docker run -d --name steamgiftbot --restart unless-stopped \
   -v /srv/steamgiftbot:/app/data \
   -e STEAMGIFTBOT_COOKIE_FILE=/app/data/cookie \
-  -e STEAMGIFTBOT_GIFT_TYPE=All \
-  -e STEAMGIFTBOT_MIN_POINTS=0 \
-  -e STEAMGIFTBOT_PINNED=no \
-  ghcr.io/palmaluv/steamgiftbot:latest --config /app/data/config.ini</pre></div>
-        <p><code>docker stop steamgiftbot</code> останавливает бота аккуратно: он допишет итог и отправит его вам.</p></div></li>
-    </ol>
-  </div>
-
-  <div id="first" style="scroll-margin-top:64px">
-    <h3 style="margin-top:44px;font:600 22px/1.2 var(--display)">Первый запуск</h3>
-    <div class="two" style="margin-top:14px">
-      <ol class="steps">
-        <li><div><h3>Возьмите cookie</h3><p>Войдите на steamgifts.com → F12 → Application (или Storage) → Cookies → скопируйте значение <code>PHPSESSID</code>. Никому его не показывайте: это вход в ваш аккаунт.</p></div></li>
-        <li><div><h3>Ответьте на вопросы</h3><p>Cookie, тип раздач, брать ли закреплённые, сколько очков оставлять. Ответы сохранятся в <code>config.ini</code>, закрытый от других пользователей компьютера.</p>
-          <div class="cmd"><div class="lbl">терминал<button class="copy" type="button">копировать</button></div><pre>steamgiftbot --setup</pre></div></div></li>
+  -e STEAMGIFTBOT_GIFT_TYPE=All -e STEAMGIFTBOT_MIN_POINTS=0 -e STEAMGIFTBOT_PINNED=no \
+  ghcr.io/palmaluv/steamgiftbot:latest --config /app/data/config.ini</pre></div></li>
       </ol>
-      <ol class="steps" start="3" style="counter-reset:s 2">
-        <li><div><h3>Сделайте пробный проход</h3><p>Ни одного очка не потратится. В конце — сводка: куда бы вошёл и почему пропустил остальное.</p>
-          <div class="cmd"><div class="lbl">терминал<button class="copy" type="button">копировать</button></div><pre>steamgiftbot --once --dry-run</pre></div></div></li>
-        <li><div><h3>Запустите по-настоящему</h3><p>Постоянно — просто <code>steamgiftbot</code>. По расписанию — через Планировщик задач:</p>
-          <div class="cmd"><div class="lbl">cmd<button class="copy" type="button">копировать</button></div><pre>schtasks /create /tn SteamGiftBot /sc hourly /mo 12 /tr "C:\SteamGiftBot\SteamGiftBot.exe --once --no-input"</pre></div></div></li>
-      </ol>
+      <p class="fine">Это бот для командной строки, только SteamGifts. Ферму в Docker запускают с параметром <code>--data</code> — см. <a href="https://github.com/PalmaLuv/SteamGiftBot/wiki/Установка">вики</a>.</p>
     </div>
-    <p style="color:var(--muted);font-size:14px">Команда зависит от способа установки: <code>SteamGiftBot.exe</code>, <code>steamgiftbot</code> или <code>python main.py</code>. Подсказки самого бота всегда называют ту, которой вы его запустили.</p>
-  </div>
-</section>
+  </section>
 
-<section id="settings">
-  <div class="sec-head">
-    <div class="tag">Настройки</div>
-    <div><h2>Всё в одном файле</h2><p>Каждую строку <code>config.ini</code> можно задать и переменной <code>STEAMGIFTBOT_ИМЯ</code>, и флагом. Секрет — файлом через <code>STEAMGIFTBOT_ИМЯ_FILE</code>. Позднее перекрывает раннее: файл → окружение → флаг.</p></div>
-  </div>
-  <div class="tbl"><table>
-    <thead><tr><th>config.ini</th><th>Флаг</th><th>Пример</th><th>Что делает</th></tr></thead>
-    <tbody>
-      <tr><td><code>cookie</code></td><td><code>--cookie</code></td><td class="num">—</td><td>Сессия SteamGifts. Обязательна.</td></tr>
-      <tr><td><code>gift_type</code></td><td><code>--type</code></td><td class="num">WishList</td><td>All, WishList, Recommended, Copies, DLC, New.</td></tr>
-      <tr><td><code>min_points</code></td><td><code>--min-points</code></td><td class="num">50</td><td>Не опускать баланс ниже этого.</td></tr>
-      <tr><td><code>pinned</code></td><td><code>--pinned</code></td><td class="num">no</td><td>Брать ли закреплённые раздачи.</td></tr>
-      <tr><td><code>max_entries</code></td><td><code>--max-entries</code></td><td class="num">500</td><td>Пропускать переполненные.</td></tr>
-      <tr><td><code>contributor_level</code></td><td><code>--level</code></td><td class="num">2</td><td>Ваш уровень вкладчика.</td></tr>
-      <tr><td><code>max_cost</code></td><td><code>--max-cost</code></td><td class="num">60</td><td>Потолок цены в очках.</td></tr>
-      <tr><td><code>cards_only</code></td><td><code>--cards-only</code></td><td class="num">yes</td><td>Только игры с карточками Steam.</td></tr>
-      <tr><td><code>blacklist</code> / <code>whitelist</code></td><td><code>--blacklist</code></td><td class="num">simulator</td><td>Слова в названии: исключить / оставить только их.</td></tr>
-      <tr><td><code>skip_region_locked</code></td><td><code>--skip-region-locked</code></td><td class="num">yes</td><td>Пропускать раздачи для чужих регионов.</td></tr>
-      <tr><td><code>telegram_token</code>, <code>telegram_chat</code></td><td><code>--telegram-chat-id</code></td><td class="num">—</td><td>Куда писать. Флаг покажет ваш chat id.</td></tr>
-      <tr><td><code>discord_webhook</code></td><td><code>--discord-webhook</code></td><td class="num">—</td><td>Только адрес discord.com/api/webhooks.</td></tr>
-      <tr><td><code>free_games</code></td><td><code>--free-games</code></td><td class="num">steam, epic</td><td>Сообщать о бесплатных играх.</td></tr>
-      <tr><td><code>points_wait</code></td><td><code>--points-wait</code></td><td class="num">900</td><td>Секунд ждать, когда кончились очки.</td></tr>
-    </tbody>
-  </table></div>
-</section>
-
-<section id="free">
-  <div class="sec-head">
-    <div class="tag">Бесплатные игры</div>
-    <div><h2>Не только SteamGifts</h2><p>Магазины регулярно отдают игры навсегда. Бот узнаёт о них из открытого списка GamerPower и присылает одним сообщением.</p></div>
-  </div>
-  <div class="two">
-    <div>
-      <div class="cmd"><div class="lbl">config.ini<button class="copy" type="button">копировать</button></div><pre>free_games = steam, epic, gog</pre></div>
-      <p>Платформы: <code>pc</code>, <code>steam</code>, <code>epic</code>, <code>gog</code>, <code>ubisoft</code>, <code>itchio</code>, <code>origin</code>, <code>battlenet</code>, <code>drm-free</code>, <code>ps4</code>, <code>ps5</code>, <code>xbox-one</code>, <code>xbox-series-xs</code>, <code>xbox-360</code>, <code>switch</code>, <code>android</code>, <code>ios</code>, <code>vr</code>.</p>
+  <section class="section" id="faq" aria-labelledby="faq-h">
+    <div class="sec-head"><div><p class="sec-n">Вопросы / 05</p><h2 id="faq-h">Вопросы.</h2></div><p class="sec-lead">Коротко о главном. Подробности — в вики.</p></div>
+    <div class="faq">
+      <details><summary>Аккаунт могут заблокировать?</summary><p>Могут. SteamGifts запрещает скрипты автовхода, у других площадок свои правила. Ферма делает паузы, отступает, когда сайт просит, и не обходит Cloudflare и капчи, но решение и риск — ваши.</p></details>
+      <details><summary>Ферма знает мои пароли?</summary><p>Нет. Она входит по cookie, скопированным из браузера, и хранит их только на вашем компьютере. Панель не отдаёт их обратно даже вам.</p></details>
+      <details><summary>Нужен сервер?</summary><p>Подойдёт любой компьютер, который не выключается: мини-ПК, старый ноутбук, Raspberry Pi. Ферма почти всё время ждёт.</p></details>
+      <details><summary>Панель открывается с телефона?</summary><p>Да. Дома — по адресу компьютера в сети, вне дома — через Tailscale. Её можно добавить на главный экран.</p></details>
+      <details><summary>Почему ферма ни во что не входит?</summary><p>Откройте у площадки вкладку «Что возьмёт»: у каждой раздачи там написана причина. Чаще всего кончился баланс или указан не тот уровень аккаунта.</p></details>
+      <details><summary>Это официальный проект SteamGifts?</summary><p>Нет. SteamGiftBot — независимый проект с открытым кодом под MPL-2.0, не связанный со SteamGifts, IndieGala, GOG, itch.io и Valve.</p></details>
     </div>
-    <div>
-      <div class="term" style="border-radius:12px"><div class="bar"><span></span><span></span><span></span><em>Telegram — сообщение от бота</em></div>
-<pre style="white-space:pre-wrap">Free to keep right now (via GamerPower):
+  </section>
+  </main>
 
-<span class="w">Shogun Showdown (Epic Games)</span> <span class="d">($14.99, PC, Epic Games Store), until 2026-09-24 23:59:00</span>
-<span class="c">https://www.gamerpower.com/open/shogun-showdown-epic-games-giveaway</span></pre></div>
-      <p style="font-size:14px;color:var(--muted);margin-top:12px">Забираете игру вы сами, одним кликом по ссылке. Автоматически забрать её не выйдет: магазины вроде Epic ставят капчу, и обходить её проект не будет.</p>
+  <footer class="footer">
+    <div class="footer-row">
+      <div class="social">
+        <a class="social-btn" href="https://github.com/PalmaLuv/SteamGiftBot" aria-label="GitHub" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.4-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5a3.9 3.9 0 0 1 1-2.7 3.6 3.6 0 0 1 .1-2.7s.8-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7a3.9 3.9 0 0 1 1 2.7c0 3.9-2.3 4.7-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></svg></a>
+        <a class="social-btn" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/" aria-label="Вики" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2zM8 7h6M8 11h6"/></svg></a>
+        <a class="social-btn" href="https://palmaluv.github.io/palma.github.io/" aria-label="Портфолио автора" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></a>
+      </div>
+      <p class="foot-mid">PalmaLuv, 2026 · <a href="https://github.com/PalmaLuv/SteamGiftBot">исходный код</a> · <a href="https://github.com/PalmaLuv/SteamGiftBot/wiki">вики</a></p>
+      <code class="foot-code">const bot = { status: <span>"farming"</span> };</code>
     </div>
-  </div>
-</section>
-
-<section id="risks">
-  <div class="sec-head">
-    <div class="tag">Честно о рисках</div>
-    <div><h2>Прежде чем запускать</h2><p>Бот работает от вашего имени. Вот что стоит знать.</p></div>
-  </div>
-  <div class="two">
-    <div class="risk">
-      <div><i class="hi"></i><p><b>Аккаунт могут заблокировать</b>Правила SteamGifts давно запрещают скрипты автовхода, раньше за это банили массово. Бот держит паузы и не обходит защиту Cloudflare, но решение и риск — ваши.</p></div>
-      <div><i class="hi"></i><p><b>Cookie — это ключ от аккаунта</b>Кто его знает, тот входит как вы. Если он утёк — выйдите из аккаунта на сайте, сессия умрёт у всех.</p></div>
-      <div><i class="md"></i><p><b>Токен Telegram</b>Позволяет писать от имени вашего бота. Если утёк — <code>/revoke</code> у @BotFather.</p></div>
-    </div>
-    <div class="risk">
-      <div><i class="lo"></i><p><b>Файл настроек закрыт</b>Бот сохраняет <code>config.ini</code> только для вашей учётной записи (ACL на Windows, chmod 600 на Linux) и предупреждает, если не получилось.</p></div>
-      <div><i class="lo"></i><p><b>Контейнер без root</b>Образ Docker работает от обычного пользователя и подписан cosign. Cookie можно передать файлом-секретом.</p></div>
-      <div><i class="lo"></i><p><b>Проверяемый .exe</b>К каждому релизу прилагается SHA256. Все GitHub Actions закреплены по хэшу коммита.</p></div>
-    </div>
-  </div>
-</section>
-
-<section id="dev">
-  <div class="sec-head">
-    <div class="tag">Разработчикам</div>
-    <div><h2>Новый сайт — один класс</h2><p>Цикл бота ничего не знает о конкретном сайте. Всё, что относится к SteamGifts, живёт в одном провайдере, и второй сайт подключается рядом.</p></div>
-  </div>
-  <div class="arch" role="img" aria-label="Схема: runner использует GiveawayProvider, WinWatcher и FreeGameWatcher">
-    <svg viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg">
-      <rect class="box hot" x="330" y="20" width="240" height="64" rx="10"/>
-      <text x="450" y="47" text-anchor="middle" font-weight="700">bot.py · runner</text>
-      <text class="sub" x="450" y="67" text-anchor="middle">страницы · фильтры · dry-run · паузы · сводка</text>
-
-      <path class="edge" d="M390 84 C 300 120, 180 120, 150 150"/>
-      <path class="edge" d="M450 84 L 450 150"/>
-      <path class="edge" d="M510 84 C 600 120, 720 120, 750 150"/>
-
-      <rect class="box" x="30" y="150" width="240" height="70" rx="10"/>
-      <text x="150" y="176" text-anchor="middle" font-weight="700">GiveawayProvider</text>
-      <text class="sub" x="150" y="194" text-anchor="middle">refresh · listGiveaways · enter</text>
-      <text class="sub" x="150" y="209" text-anchor="middle">fetchWins · hasCards</text>
-
-      <rect class="box" x="330" y="150" width="240" height="70" rx="10"/>
-      <text x="450" y="176" text-anchor="middle" font-weight="700">WinWatcher</text>
-      <text class="sub" x="450" y="194" text-anchor="middle">страница выигрышей → state</text>
-      <text class="sub" x="450" y="209" text-anchor="middle">→ Telegram / Discord</text>
-
-      <rect class="box gld" x="630" y="150" width="240" height="70" rx="10"/>
-      <text x="750" y="176" text-anchor="middle" font-weight="700">FreeGameWatcher</text>
-      <text class="sub" x="750" y="194" text-anchor="middle">FeedProvider · GamerPower</text>
-      <text class="sub" x="750" y="209" text-anchor="middle">только уведомления</text>
-
-      <text class="sub" x="150" y="240" text-anchor="middle">steamgifts.py · (следующий: Opium Pulses)</text>
-    </svg>
-  </div>
-  <div class="two" style="margin-top:24px">
-    <div>
-      <h3>Каркас провайдера</h3>
-      <div class="cmd"><div class="lbl">providers/example.py<button class="copy" type="button">копировать</button></div><pre>class ExampleProvider:
-    name = 'Example'
-
-    def refresh(self): ...            <span class="d"># баланс или SessionExpired</span>
-    def listGiveaways(self, page): ... <span class="d"># [Giveaway | Unreadable]</span>
-    def enter(self, giveaway): ...     <span class="d"># EntryResult, без sleep</span>
-    def fetchWins(self): ...           <span class="d"># (wins, recognised)</span>
-    def hasCards(self, appid): ...     <span class="d"># True / False / None</span></pre></div>
-    </div>
-    <div>
-      <h3>Что дальше</h3>
-      <p style="color:var(--muted);font-size:15px"><b style="color:var(--ink)">Opium Pulses</b> — ближе всего к SteamGifts по устройству, сначала нужно проверить вход и капчу. <b style="color:var(--ink)">Бесплатные игры Epic</b> — вторая лента уведомлений. <b style="color:var(--ink)">IndieGala</b> технически прост, но его правила прямо запрещают автоматизацию. <b style="color:var(--ink)">Gleam и KeyJoker</b> требуют соцсетей и браузера — не для этого бота.</p>
-      <div class="cmd"><div class="lbl">проверка<button class="copy" type="button">копировать</button></div><pre>pip install -r requirements-dev.txt
-pytest
-ruff check .
-bash scripts/check-docker.sh</pre></div>
-    </div>
-  </div>
-</section>
-
-<section id="history">
-  <div class="sec-head">
-    <div class="tag">История</div>
-    <div><h2>Как проект рос</h2><p>От одного скрипта до пакета с тестами, Docker и архитектурой под несколько сайтов.</p></div>
-  </div>
-  <ol class="timeline">
-    <li><h3>Первые версии</h3><p>Проект PalmaLuv под лицензией MPL-2.0: cookie, список раздач, вход — и так по кругу. Готовый .exe для Windows в релизах.</p></li>
-    <li><h3>Docker и работа без присмотра</h3><p>Образ в GitHub Container Registry, настройки из переменных окружения, режим <code>--once</code> для планировщика.</p></li>
-    <li><h3>Пакет и тесты</h3><p>Код разложен по модулям пакета <code>steamgiftbot</code>, тесты гоняют сохранённые страницы сайта без сети. Поддержка Python 3.9 снята: зависимости требуют 3.10.</p></li>
-    <li class="now"><h3>Аудит и версия 2.2</h3><p>Бот больше не молчит об ошибках, закрыты найденные проблемы безопасности, ядро разделено на провайдеров, появились бесплатные игры от GamerPower. Тестов стало 338 вместо 251.</p></li>
-  </ol>
-</section>
-
-<section id="faq">
-  <div class="sec-head">
-    <div class="tag">Вопросы</div>
-    <div><h2>Частые вопросы</h2></div>
-  </div>
-  <details><summary>Бот пишет «Your SteamGifts session has expired». Что делать?</summary><div class="a"><p>Cookie истёк, это нормально. Войдите на сайт заново, скопируйте новый <code>PHPSESSID</code> и выполните <code>--setup</code>. Чтобы это случалось реже, не нажимайте «выйти» в браузере: выход завершает сессию и для бота.</p></div></details>
-  <details><summary>Почему бот почти никуда не входит?</summary><div class="a"><p>Запустите <code>--dry-run</code> и прочитайте сводку: каждая причина пропуска посчитана. Чаще всего виноваты завышенный <code>contributor_level</code>, <code>whitelist</code>, под который ничего не подходит, или <code>max_entries</code> меньше 250.</p></div></details>
-  <details><summary>Что значит «Cloudflare check instead of the site»?</summary><div class="a"><p>Сайт решил, что запрос пришёл не из браузера. Откройте steamgifts.com в браузере, дождитесь, пока он вас пустит, и попробуйте позже. Бот намеренно не пытается обойти эту проверку.</p></div></details>
-  <details><summary>В сводке «could not read the listing row» — это ошибка?</summary><div class="a"><p>Скорее всего, SteamGifts поменял вёрстку. Один пример непрочитанной строки есть в логе — приложите его к issue на GitHub, и парсер поправят.</p></div></details>
-  <details><summary>Можно ли запустить на Raspberry Pi или дешёвом сервере?</summary><div class="a"><p>Да. Образ Docker собирается для amd64 и arm64 и весит около 47 МБ.</p></div></details>
-  <details><summary>Бот сам забирает бесплатные игры?</summary><div class="a"><p>Нет, он только сообщает о них. Забрать игру — один клик по ссылке, и этот клик остаётся за вами.</p></div></details>
-</section>
-
+    <p class="fine center">Независимый проект. Не связан со SteamGifts, IndieGala, OpiumPulses, GOG, itch.io и Valve.</p>
+  </footer>
 </div>
 
-<footer>
-  <div class="shell">
-    <span>SteamGiftBot · открытый код, MPL-2.0 · <a href="https://github.com/PalmaLuv/SteamGiftBot">github.com/PalmaLuv/SteamGiftBot</a></span>
-    <span>Независимый проект. Не связан со SteamGifts и Valve. Данные о бесплатных играх — GamerPower.</span>
+<div class="palette" data-palette-box hidden>
+  <div class="palette-card" role="dialog" aria-modal="true" aria-label="Меню команд">
+    <input type="text" data-palette-input placeholder="Что сделать?" aria-label="Что сделать?" autocomplete="off">
+    <ul data-palette-list role="listbox"></ul>
+    <p class="palette-hint mono">↑↓ · Enter · Esc</p>
   </div>
-</footer>
+</div>
+<div class="toast" data-toast role="status" aria-live="polite" hidden></div>
+<canvas class="confetti" data-confetti aria-hidden="true"></canvas>
 
-<script>
-(function(){
-  // Install tabs, remembered per viewer.
-  var tabs = document.querySelectorAll('[role="tab"]');
-  function select(tab){
-    tabs.forEach(function(t){
-      var on = t === tab;
-      t.setAttribute('aria-selected', String(on));
-      t.tabIndex = on ? 0 : -1;
-      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
-    });
-    try { localStorage.setItem('sgbsite-tab', tab.id); } catch(e){}
-  }
-  tabs.forEach(function(t, i){
-    t.addEventListener('click', function(){ select(t); });
-    t.addEventListener('keydown', function(e){
-      var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-      if (!d) return;
-      var next = tabs[(i + d + tabs.length) % tabs.length]; select(next); next.focus();
-    });
-  });
-  try { var saved = document.getElementById(localStorage.getItem('sgbsite-tab') || ''); if (saved && saved.getAttribute('role') === 'tab') select(saved); } catch(e){}
-
-  // Copy buttons.
-  document.querySelectorAll('.copy').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var pre = btn.closest('.cmd').querySelector('pre');
-      function done(){ btn.textContent = 'скопировано'; setTimeout(function(){ btn.textContent = 'копировать'; }, 1400); }
-      function fallback(){ var r = document.createRange(); r.selectNodeContents(pre); var s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = 'Ctrl+C'; }
-      try { navigator.clipboard.writeText(pre.innerText).then(done, fallback); } catch(e){ fallback(); }
-    });
-  });
-
-  // Terminal replay: the output is already on screen; this only plays it again.
-  var out = document.getElementById('termOut');
-  var replay = document.getElementById('replay');
-  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (replay && out) {
-    var lines = out.innerHTML.split('\n');
-    var timer = null;
-    replay.addEventListener('click', function(){
-      if (reduce) return;
-      clearTimeout(timer);
-      var i = 0;
-      out.innerHTML = '';
-      (function step(){
-        out.innerHTML = lines.slice(0, i + 1).join('\n');
-        i++;
-        if (i < lines.length) timer = setTimeout(step, i === 1 ? 500 : 170);
-      })();
-    });
-  }
-})();
-</script>
-
+<script id="i18n" type="application/json">{"copied": "Скопировано", "copyFail": "Не получилось скопировать", "dark": "Тёмная тема", "light": "Светлая тема", "konami": "Код Konami принят. Поинтов не будет, но вот конфетти.", "verdictHigh": "Ферма возьмёт такую раздачу одной из первых.", "verdictMid": "Возьмёт, если останется баланс.", "verdictLow": "Окажется в самом конце очереди.", "win": "Выпал ваш билет. Такое бывает редко — запомните этот день.", "lose": "Выпал билет №{n} из {total}. Мимо — ферма попробует в следующей.", "stars": "звёзд", "palette": {"go": "Перейти", "farm": "Ферма", "sites": "Площадки", "odds": "Шансы", "install": "Установка", "faq": "Вопросы", "theme": "Сменить тему", "lang": "Язык", "copyInstall": "Скопировать команду установки", "wiki": "Открыть вики", "github": "Открыть GitHub", "portfolio": "Портфолио автора", "roll": "Разыграть билет", "confetti": "Конфетти просто так", "empty": "Ничего не нашлось"}, "lines": ["[IndieGala] Аккаунт palma, баланс 40 iS", "[IndieGala] Вошёл: ★ Doughlings: Arcade за 4 iS (участников 31, осталось 36)", "[IndieGala] Вошёл: Tiny Farm за 1 iS (участников 40, осталось 35)", "[IndieGala] Пропущено: не хватает iS — 12, DLC / саундтрек / пак — 4, 18+ — 3", "[SteamGifts] Ждёт поинты: 21 из 30 P", "[Steam] Вошёл: Star Courier — добавлено в библиотеку Steam", "[GOG] раздачи сейчас нет", "🎉 Выигрыш на IndieGala: Hollow Pact"]}</script>
+<script src="assets/site.js" defer></script>
 </body>
 </html>
