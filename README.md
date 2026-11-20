@@ -12,25 +12,44 @@
 
 </div>
 
-Enters giveaways on [SteamGifts](https://www.steamgifts.com/) for you, and tells
-you on Telegram when you win one.
+Enters giveaways for you and tells you on Telegram when you win one.
 
-![image](https://github.com/PalmaLuv/SteamGiftBot/assets/84909252/34b5e86f-54d1-462a-aadf-fe9c5ccb823c)
+**[Русская версия](README.ru.md)**
 
-- Walks the giveaway pages and enters what is worth your points
-- Filters by price, by contributor level, by how crowded a giveaway already is,
-  by name, by whether the game has Steam trading cards
-- Waits for points instead of burning through them
-- Paces itself between entries and backs off when the site asks it to
-- Runs unattended: as a service, from cron, or in Docker
-- Messages you on Telegram the moment you win, and when your session expires
-- Keeps a log of every run
+SteamGiftBot comes two ways, sharing one install:
+
+- **The command line bot** walks [SteamGifts](https://www.steamgifts.com/) and
+  enters what is worth your points. One site, no server needed, also as a
+  Windows `.exe` and a Docker image.
+- **The bot farm** runs SteamGifts, IndieGala, OpiumPulses, free Steam games
+  (through ArchiSteamFarm), GOG and itch.io side by side, behind a web panel
+  you can open from your phone.
+
+<p align="center"><img src="docs/images/sites.png" width="900" alt="The farm's Sites page: connected sites and the catalog of sites to add"></p>
+
+What both do:
+
+- Filter by price, by level, by how crowded a giveaway already is, by name, by
+  whether the game has Steam trading cards
+- Wait for points instead of burning through them, and back off when a site asks
+- Message you on Telegram the moment you win, and when your session expires
+
+What the farm adds:
+
+- A step-by-step wizard for each site; no site ever gets your password
+- A dry run: what it would enter right now, and why it skips the rest
+- Working hours, daily limits, ready-made filters (DLC, adult games, games you
+  already own), your Steam wishlist first
+- Wins with key status, keys activated through ArchiSteamFarm
+- Telegram commands: `/status`, `/pause`, `/run`, `/preview`…
+- A chart of entries per day, a searchable log and history, CSV export
 
 ---
 
-**Contents** · [Install](#install) · [First run](#first-run) ·
-[Settings](#settings) · [Choosing giveaways](#choosing-giveaways) ·
-[Telegram](#telegram) · [Running unattended](#running-unattended) ·
+**Contents** · [Install](#install) · [Bot farm](#bot-farm) ·
+[Command line bot](#first-run): [first run](#first-run),
+[settings](#settings), [choosing giveaways](#choosing-giveaways),
+[Telegram](#telegram-1), [running unattended](#running-unattended) ·
 [Updating](#updating) · [When something goes wrong](#when-something-goes-wrong) ·
 [Contributing](#contributing)
 
@@ -75,7 +94,153 @@ The container never asks questions, so its settings arrive as environment
 variables or in a mounted `config.ini`. See
 [Running unattended](#running-unattended).
 
+## Bot farm
+
+The farm runs several giveaway sites at once, each in its own thread, and puts
+them behind one password protected web panel. It needs nothing beyond what the
+bot already installs.
+
+<p align="center"><img src="docs/images/overview.png" width="900" alt="The farm's overview page: new wins, entries per day and the state of each site"></p>
+
+### Sites
+
+| Site | What it enters | Connected with |
+| --- | --- | --- |
+| [SteamGifts](https://www.steamgifts.com/) | giveaways for points (P) | browser cookie |
+| [IndieGala](https://www.indiegala.com/giveaways) | giveaways for Galasilver (iS) | browser cookie |
+| [OpiumPulses](https://www.opiumpulses.com/giveaways) | free and OP giveaways | browser cookie |
+| Free Steam games | free-to-keep Steam promotions, added through [ArchiSteamFarm](https://github.com/JustArchiNET/ArchiSteamFarm) | a running ASF |
+| [GOG](https://www.gog.com/) | the giveaway on GOG's home page | browser cookie |
+| [itch.io](https://itch.io/games/on-sale) | games on a 100% sale | browser cookie |
+
+No site gets your password. Each is connected with the cookies your browser
+already holds, pasted once as *Copy as cURL*; the panel walks you through it.
+
+### Starting it
+
+```bash
+python -m steamgiftbot.farm --set-password          # once: the panel's password
+python -m steamgiftbot.farm --host 192.168.1.10     # your LAN address
+```
+
+Open `http://192.168.1.10:8092/`, sign in, go to **Площадки** (Sites) and pick one
+from the catalog. The panel's interface is in Russian. `--host` takes several addresses separated by commas (a LAN one and a
+Tailscale one, say); keep it off `0.0.0.0`, because the panel holds your site
+cookies. `--port` changes the port, `--no-autostart` starts with every site
+stopped.
+
+### Connecting a site
+
+<p align="center"><img src="docs/images/connect.png" width="900" alt="The connect wizard for GOG: numbered steps, then a box for the copied request"></p>
+
+1. Sign in to the site in your browser.
+2. Press `F12`, open **Network**, reload the page.
+3. Right click the first request → **Copy** → **Copy as cURL** (bash or cmd, both work).
+4. Paste it into the panel and press **Проверить подключение** (check connection). The farm signs in with
+   it without saving anything and shows the account and balance it found.
+5. Pick a preset (*Сбалансировано* balanced, *Экономно* economy, *Максимум*,
+   *Только игры* games only) and press **Сохранить и запустить** (save and start).
+
+Only the cookies and the browser's User-Agent are kept from what you paste. If a
+site signs you out later, its card turns red with a **Подключить заново** (reconnect) button, and
+Telegram tells you.
+
+### The panel
+
+- **Обзор** (overview): new wins, entries and spending over the last day, a chart of
+  entries per day, and every site with why it is waiting ("waiting for points:
+  21 of 30 P", "outside working hours until 08:00", "daily limit reached").
+- **Площадки** (sites): connected sites and the catalog. Each site has its own page with
+  its state, settings, a dry run and its connection.
+- **Выигрыши** (wins): every win, with a status (new / key received / activated), the key
+  if you have one, and **Активировать в ASF**.
+- **Журнал** (journal): one log for every site with filters and search, and the entry
+  history with search, pages and a CSV export.
+- **Настройки** (settings): time zone, Telegram, Steam library, ArchiSteamFarm, the panel
+  password, and how to put the panel on your phone. Sections fold away.
+
+**Что возьмёт** (what it would take now). The dry run lists every giveaway on offer and what
+the farm would do with each, entering nothing:
+
+<p align="center"><img src="docs/images/preview.png" width="900" alt="Dry run for IndieGala: two giveaways it would enter, two it would skip, with the reason"></p>
+
+The 🚫 and ★ buttons beside a game put it on the blacklist or the priority list
+in one click; they are in the entry history too.
+
+### Rules every site understands
+
+- **Working hours**, such as `08:00-23:00` or `09:00-13:00, 18:00-02:00`, in the
+  farm's time zone.
+- **Daily limits** on entries and on spending.
+- **Ready-made filters**: skip DLC, soundtracks and packs; skip adult games;
+  skip games already in your Steam library (needs a Steam Web API key).
+- **Wishlist first**: games on your Steam wishlist go first on IndieGala, and
+  every SteamGifts pass starts with its wishlist section.
+- **IndieGala smart order**: the best chance per Galasilver first, that is few
+  entrants and a cheap ticket, with a priority list that may dip into the reserve.
+
+### Telegram
+
+The farm uses the Telegram settings the bot already has; in the panel they are
+under **Настройки → Telegram**, where **Найти мой чат** (find my chat) fills in the chat id for
+you. It sends wins, errors, expired sessions and, if you like, a daily summary.
+
+With **Управлять фермой командами** (control with commands) on, the same bot also answers, only in
+your chat: `/status`, `/start <site|all>`, `/pause <site|all>`, `/run <site>`,
+`/preview <site>`, `/wins`, `/report`, `/help`. Commands sent while the farm was
+off are dropped rather than run late.
+
+### ArchiSteamFarm
+
+With [ASF](https://github.com/JustArchiNET/ArchiSteamFarm) running, the farm can
+activate won keys (by hand from **Выигрыши**, or as soon as a key appears) and claim
+free Steam games. If ASF runs on the same machine and `IPCPassword` is set in
+`~/asf/config/ASF.json`, there is nothing to fill in; otherwise give its address
+and password under **Настройки → ArchiSteamFarm**.
+
+### On a phone
+
+The panel works in a phone's browser and can be added to the home screen
+(Chrome: ⋮ → *Add to Home screen*; Safari: *Share* → *Add to Home Screen*).
+Over plain http that makes a shortcut; a full install needs https, for example
+`tailscale serve --bg 8092`. **Настройки → Панель на телефоне** has the steps for Android, iPhone and Tailscale.
+
+<p align="center"><img src="docs/images/mobile.png" width="300" alt="The overview on a phone, with the tab bar at the bottom"></p>
+
+### Running it as a service
+
+[`deploy/botfarm.service`](deploy/botfarm.service) is a systemd unit: replace
+the user, the path and the address, then
+
+```bash
+sudo cp deploy/botfarm.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now botfarm
+```
+
+If the panel does not open from another device, check the firewall: with `ufw`,
+`sudo ufw allow from 192.168.1.0/24 to any port 8092 proto tcp`.
+
+Settings that only the farm uses live in `farm.json`, history in
+`botfarm-state.json`; SteamGifts and Telegram keep using `config.ini`. All three
+hold cookies or tokens and are in `.gitignore`; the farm writes its two files
+readable by their owner only, and `config.ini` deserves the same
+(`chmod 600 config.ini`). [`scripts/backup-farm.sh`](scripts/backup-farm.sh) keeps daily
+copies of them.
+
+### Keeping the panel safe
+
+- Sign in is a password (stored as a PBKDF2 hash) and an HttpOnly, SameSite=Strict
+  cookie. Ten wrong passwords lock that address out for ten minutes.
+- Every POST must carry a header a cross-site form cannot send.
+- The API never returns a saved cookie, token or password, only whether one is set.
+- Changing the password, or **Выйти на всех других устройствах** (sign out
+  everywhere else), ends every other session.
+
+
 ## First run
+
+*This and the sections below are about the command line bot.*
 
 The bot signs in as you, using the session cookie your browser already has.
 
@@ -437,6 +602,23 @@ steamgiftbot/
   ui.py             the interactive questions
   console.py        banner, colours, progress lines
   logging_setup.py  the optional log file
+  farm/             the bot farm
+    __main__.py     python -m steamgiftbot.farm: listeners, autostart
+    manager.py      farm.json, botfarm-state.json, summary, Telegram reports
+    base.py         a site's worker thread, settings forms, cookie parsing
+    rules.py        word filters, working hours, Steam library and wishlist
+    steamgifts.py   the command line bot, run inside the farm
+    indiegala.py    IndieGala's JSON API
+    opiumpulses.py  OpiumPulses' pages
+    steamfree.py    free Steam games through ArchiSteamFarm
+    gog.py          GOG's home page giveaway
+    itch.py         itch.io 100% sales
+    asf.py          ArchiSteamFarm's IPC API
+    telegram.py     Telegram commands (long polling)
+    web.py          the panel's HTTP server and JSON API
+    static/         the panel itself: one page, no build step
+deploy/             systemd unit for the farm
+docs/images/        screenshots for this file
 tests/              pytest suite, HTML fixtures under tests/fixtures
 ```
 
