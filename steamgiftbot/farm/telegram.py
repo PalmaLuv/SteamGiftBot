@@ -58,9 +58,11 @@ class TelegramControl:
                 continue
             snap = platform.snapshot()
             unit = f" {platform.unit}" if platform.unit else ''
-            rows.append([STATE_ICON.get(snap['state'], '•'), platform.title[:18],
-                         f"{snap['totals']['today']} вх./24 ч",
-                         '' if snap['balance'] is None else f"баланс {snap['balance']}{unit}"])
+            # The state icon goes last: emoji differ in width and would push
+            # the columns of a monospace table out of line.
+            rows.append([platform.title[:18], f"{snap['totals']['today']} вх./24 ч",
+                         '—' if snap['balance'] is None else f"{snap['balance']}{unit}",
+                         STATE_ICON.get(snap['state'], '•')])
             if snap['error']:
                 notes.append(f"⚠️ {platform.title}: {snap['error']}")
             elif snap['reason']:
