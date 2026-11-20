@@ -1,5 +1,5 @@
 /* SteamGiftBot — project page behaviour: theme, Ctrl+K menu, the log replay,
-   the odds calculator, install tabs, copy buttons, GitHub stars, Konami. */
+   the panel tour, the odds calculator, install tabs, copy buttons, GitHub stars, Konami. */
 (() => {
   'use strict';
   const $ = (s, el = document) => el.querySelector(s);
@@ -85,8 +85,63 @@
   }
   $('[data-roll]').addEventListener('click', roll);
 
+  /* ---------- panel tour ---------- */
+  // Plays through the screens on its own while in view; hovering or focusing
+  // pauses it, and the first click hands it over to the visitor for good.
+  const tour = $('[data-tour]');
+  if (tour) {
+    const tourTabs = $$('[role=tab]', tour), url = $('[data-tour-url]', tour);
+    const STEP = 7000;
+    let current = 0, timer = 0, started = 0, left = STEP, auto = !reduced, visible = false, held = false;
+    tour.style.setProperty('--tour-ms', STEP + 'ms');
+    function show(i, focus = false) {
+      current = (i + tourTabs.length) % tourTabs.length;
+      tourTabs.forEach((t, n) => {
+        const on = n === current, panel = $('#' + t.getAttribute('aria-controls'));
+        t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1; panel.hidden = !on;
+        if (on) url.textContent = panel.dataset.url;
+      });
+      if (focus) tourTabs[current].focus();
+      left = STEP; restart();
+    }
+    function restart() {
+      clearTimeout(timer);
+      const run = auto && visible && !held;
+      tour.classList.toggle('playing', auto);
+      tour.classList.toggle('paused', auto && !run);
+      if (!run) return;
+      // a fresh step starts the progress line from zero
+      if (left === STEP) { const bar = $('[aria-selected="true"] .tt-bar i', tour); bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = ''; }
+      started = Date.now(); timer = setTimeout(() => show(current + 1), left);
+    }
+    function hold(on) {
+      if (on && !held && auto && visible) left = Math.max(400, left - (Date.now() - started));
+      held = on; restart();
+    }
+    function stop() { auto = false; restart(); }
+    tourTabs.forEach((t, i) => {
+      t.addEventListener('click', () => { stop(); show(i); });
+      t.addEventListener('keydown', e => {
+        const step = {ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1}[e.key];
+        if (step) { e.preventDefault(); stop(); show(current + step, true); }
+        else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); stop(); show(e.key === 'Home' ? 0 : tourTabs.length - 1, true); }
+      });
+    });
+    tour.addEventListener('pointerenter', () => hold(true));
+    tour.addEventListener('pointerleave', () => hold(false));
+    tour.addEventListener('focusin', () => hold(true));
+    tour.addEventListener('focusout', e => { if (!tour.contains(e.relatedTarget)) hold(false); });
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(([e]) => {
+        if (e.isIntersecting) $$('img[loading=lazy]', tour).forEach(img => { img.loading = 'eager'; });
+        visible = e.isIntersecting; restart();
+      }, {threshold: .35}).observe(tour);
+    }
+    document.addEventListener('visibilitychange', () => hold(document.hidden));
+  }
+
   /* ---------- install tabs ---------- */
-  const tabs = $$('[role=tab]');
+  const tabs = $$('.tabs [role=tab]');
   function selectTab(tab) {
     tabs.forEach(t => { const on = t === tab; t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1; $('#' + t.getAttribute('aria-controls')).hidden = !on; });
   }
