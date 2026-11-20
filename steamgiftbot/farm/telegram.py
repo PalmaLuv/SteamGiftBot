@@ -9,7 +9,7 @@ import threading
 
 import requests
 
-from steamgiftbot.farm import cards
+from steamgiftbot.farm import cards, support
 
 log = logging.getLogger('botfarm')
 
@@ -25,6 +25,7 @@ COMMANDS = [
     ('preview', 'что ферма взяла бы сейчас: /preview indiegala'),
     ('wins', 'выигрыши без отметки'),
     ('report', 'сводка за сутки'),
+    ('donate', 'поддержать проект'),
     ('help', 'список команд'),
 ]
 
@@ -92,6 +93,8 @@ class TelegramControl:
             return self.statusCard()
         if command == 'report':
             return manager.reportCard()
+        if command == 'donate':
+            return self.donateCard()
         if command == 'wins':
             wins = manager.openWins()
             if not wins:
@@ -127,6 +130,18 @@ class TelegramControl:
                                   headline="Нечего делать: площадки уже в этом состоянии.")
             return cards.Card('✅', 'ГОТОВО', headline=f"{verb}: {', '.join(done)}")
         return cards.Card('⚠️', 'ВНИМАНИЕ', headline="Не знаю такой команды. /help — список.")
+
+    # TON goes in a monospace block, which Telegram copies with one tap.
+    def donateCard(self):
+        lang = self.manager.uiSettings()['lang']
+        return cards.Card('💙', headline="SteamGiftBot бесплатный и останется бесплатным.",
+                          block=[support.TON],
+                          lines=["Ферму развивает один человек в свободное время. "
+                                 "Если она приносит вам игры, разработку можно поддержать.",
+                                 "Выше адрес TON: нажмите на него, чтобы скопировать. "
+                                 "Остальные способы — кнопками."],
+                          buttons=[(title, url) for title, url in support.LINKS]
+                                  + [("Все способы", support.page(lang))])
 
     def handle(self, text):
         card = self.reply(text)

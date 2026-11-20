@@ -151,6 +151,11 @@ svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .win .big{font-size:20px}
 .win .sp{flex:1}
 .more{color:var(--muted);font-size:12px}
+.support{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:-6px 0 16px;padding:8px 12px;border:1px dashed var(--line);border-radius:var(--radius);color:var(--muted);font-size:13px}
+.support a{color:var(--accent)}
+.support .sp{flex:1}
+.support button{min-height:30px;padding:4px 10px;font-size:12px}
+.give{display:flex;flex-wrap:wrap;gap:8px}
 
 /* accounts */
 .acc-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
@@ -430,7 +435,7 @@ const THEMES = {
 };
 const THEME_NAMES = {store: 'Классическая', graphite: 'Графит', midnight: 'Полночь', light: 'Светлая'};
 const ACCENTS = ['#1a9fff', '#2ec27e', '#9b5de5', '#ff7a1a', '#e5487a', '#14b8a6', '#e5c22e'];
-const UI_DEFAULT = {lang: 'ru', theme: 'store', accent: '#1a9fff', radius: 'square', scale: 100, glow: true, motion: true, tour: false};
+const UI_DEFAULT = {lang: 'ru', theme: 'store', accent: '#1a9fff', radius: 'square', scale: 100, glow: true, motion: true, tour: false, support: true};
 let ui = {...UI_DEFAULT};
 function mixHex(hex, to, t){
   const n = parseInt(hex.slice(1), 16), c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
@@ -811,6 +816,7 @@ async function pageOverview(view){
   view.innerHTML = `<div class="page-head"><h1>Обзор</h1>
       <div class="actions"><button class="primary" data-act="start-all">${icon('play')}Запустить всё</button><button data-act="stop-all">${icon('stop')}Остановить всё</button></div></div>
     <div id="winsBanner" class="wins hidden"></div>
+    <div id="supportLine" class="support hidden"></div>
     <div class="summary">
       <div class="tiles" id="tiles"></div>
       <div class="chart" id="chart">
@@ -842,6 +848,19 @@ function renderWinsBanner(){
       <button data-winset="received" ${attrs(w)}>Ключ получен</button><button class="go" data-winset="activated" ${attrs(w)}>Активирован</button></div>`).join('') +
     (openWins.length > 3 ? `<a class="more" href="#/wins">И ещё ${openWins.length - 3} — все в разделе «Выигрыши» →</a>` : '');
 }
+// One quiet line once the farm has won something; 'Скрыть' turns it off on
+// every device, and Settings → «О ферме» turns it back on.
+function renderSupportLine(wins){
+  const box = $('#supportLine'); if (!box) return;
+  const show = ui.support !== false && wins > 0;
+  box.classList.toggle('hidden', !show);
+  if (!show) return;
+  paint(box, `<span aria-hidden="true">💙</span><span>Выиграно игр: ${wins}.</span><span>Если ферма полезна, <a href="#/settings" data-support-open>поддержите её развитие</a>.</span><span class="sp"></span><button class="ghost" type="button" data-support-hide>Скрыть</button>`);
+  box.onclick = async e => {
+    if (e.target.closest('[data-support-hide]')) { await saveUi({support: false}); box.classList.add('hidden'); toast('Строка скрыта. Вернуть: «Настройки» → «О ферме».'); }
+    else if (e.target.closest('[data-support-open]')) localStorageSet('open_sec-about', '1');
+  };
+}
 function renderSiteRows(){
   const box = $('#siteRows'); if (!box) return;
   const list = connected();
@@ -868,6 +887,7 @@ function renderSummary(){
   const S = summary.sites, entered = sum(S, s => s.entered), wins = sum(S, s => s.wins);
   const spent = S.filter(s => s.spentToday).map(s => `${s.spentToday} ${s.unit}`).join(' · ') || '0';
   const luck = entered ? (wins / entered * 100).toFixed(wins && wins / entered < .01 ? 2 : 1) + '%' : '—';
+  renderSupportLine(wins);
   $('#tiles').innerHTML = [
     [sum(S, s => s.today), 'входов сегодня'], [spent, 'потрачено сегодня'],
     [wins, `выигрышей, ${sum(S, s => s.winsWeek)} за 7 дней`], [luck, `выигрышей на ${entered} входов`],
@@ -1522,7 +1542,8 @@ async function pageSettings(view){
       <div><span class="muted">Запущена</span><br>${dt(settingsInfo.startedAt)} (${esc(ago(settingsInfo.startedAt))})</div>
       <div><span class="muted">Адреса панели</span><br>${urls.map(u => `<a href="${esc(u)}">${esc(u)}</a>`).join('<br>')}</div>
       <div><span class="muted">Площадок подключено</span><br>${connected().length} из ${platforms.length}</div>
-      <div><span class="muted">Время фермы</span><br>${esc(settingsInfo.zone)}, ${esc(settingsInfo.now)}</div></div>`, 'info', false);
+      <div><span class="muted">Время фермы</span><br>${esc(settingsInfo.zone)}, ${esc(settingsInfo.now)}</div></div>
+    ${supportBlock(settingsInfo.support)}`, 'info', false);
   const look = section('sec-look', 'Оформление и язык', 'Язык панели, тема, цвет акцента и масштаб — для всех ваших устройств', lookForm(), 'palette', false);
   view.innerHTML = `<div class="page-head"><h1>Настройки</h1><div class="actions"><button class="ghost" id="expandAll">Развернуть всё</button><button class="ghost" id="collapseAll">Свернуть всё</button></div>
       <p class="lead">Общие настройки фермы. Настройки отдельных сайтов — в разделе «Площадки».</p></div>
@@ -1658,7 +1679,20 @@ function markDirty(form, dirty){
   $('.sect-dirty', sect).classList.toggle('hidden', !dirty);
   const save = $('button[type=submit]', form); if (save && form.dataset.group) save.disabled = !dirty;
 }
+function supportBlock(s){
+  if (!s) return '';
+  return `<div class="sub-block" id="support"><h3>Поддержать проект</h3>
+    <p class="muted small">SteamGiftBot бесплатный и останется бесплатным. Ферму развивает один человек в свободное время. Если она приносит вам игры, разработку можно поддержать.</p>
+    <div class="give">${s.links.map(l => `<a class="btn" href="${esc(l.url)}" target="_blank" rel="noopener">${icon('ext')}${esc(l.title)}</a>`).join('')}</div>
+    <div class="addr"><span class="muted small">Адрес TON</span><code data-notranslate>${esc(s.ton)}</code><button type="button" class="icon" data-copy="${esc(s.ton)}" aria-label="Скопировать адрес">${icon('copy')}</button></div>
+    <div class="chk"><input type="checkbox" class="switch" role="switch" id="supportAsk" ${ui.support !== false ? 'checked' : ''}><label for="supportAsk">Напоминать о поддержке: строка под выигрышами в «Обзоре» и в Telegram не чаще раза в неделю</label></div></div>`;
+}
 function wireSettings(view, s){
+  view.addEventListener('click', async e => {
+    const c = e.target.closest('[data-copy]'); if (!c) return;
+    try { await navigator.clipboard.writeText(c.dataset.copy); toast('Скопировано'); } catch { toast('Браузер не дал скопировать: выделите текст вручную', true); }
+  });
+  const ask = $('#supportAsk', view); if (ask) ask.onchange = () => saveUi({support: ask.checked});
   const gs = groups(s.schema);
   $$('details.sect', view).forEach(d => d.addEventListener('toggle', () => localStorageSet('open_' + d.id, d.open ? '1' : '0')));
   $('#expandAll').onclick = () => $$('details.sect', view).forEach(d => d.open = true);

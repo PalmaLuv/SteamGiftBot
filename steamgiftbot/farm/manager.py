@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 from steamgiftbot import notify
 from steamgiftbot import settings as sgSettings
-from steamgiftbot.farm import cards, rules
+from steamgiftbot.farm import cards, rules, support
 from steamgiftbot.farm.base import (HISTORY_LENGTH, actingFor, applySettings, field, grouped,
                                     publicValues)
 
@@ -59,6 +59,9 @@ UI_FIELDS = {
     'motion': (True, lambda v: isinstance(v, bool)),
     # The first-run tour has been seen (or skipped) on some device.
     'tour':   (False, lambda v: isinstance(v, bool)),
+    # A quiet line asking to support the project: under the wins in the
+    # panel, and under a win in Telegram at most once a week.
+    'support': (True, lambda v: isinstance(v, bool)),
 }
 
 # A line of log/botfarm.log: '[INFO 2026-11-20 21:11:31,975 botfarm.indiegala] text'.
@@ -417,7 +420,8 @@ class FarmManager:
                        if '/' in name and not name.startswith(('Etc/', 'SystemV/', 'posix/',
                                                                'right/')))
         return {'zones': zones, 'panelURLs': self.panelURLs, 'startedAt': self.startedAt,
-                'now': self.localNow().strftime('%H:%M'), 'zone': str(self.zone())}
+                'now': self.localNow().strftime('%H:%M'), 'zone': str(self.zone()),
+                'support': support.info(self.uiSettings()['lang'])}
 
     # Chats the bot has seen, so the chat id can be picked rather than looked up.
     def telegramChats(self, token=None):
@@ -1094,8 +1098,25 @@ class FarmManager:
             return ['уведомления не настроены']
         if card is None:
             card = cards.Card(lines=[text or ''])
+        asking = card.icon == '🎉' and support.due(self.uiSettings()['support'],
+                                                    self.farm.get('supportAsked'))
+        if asking:
+            card = self.withSupportLine(card)
         card = self.translateCard(card)
         problems = notify.send(config, card.plain(), card=card)
         for problem in problems:
             log.warning(f"Уведомление не доставлено: {problem}")
+        if asking and not problems:
+            self.farm['supportAsked'] = time.time()
+            self.saveFarm()
         return problems
+
+    # A win with one quiet line under it, at most once a week: the moment the
+    # farm has just been useful is the only one it asks in.
+    def withSupportLine(self, card):
+        note = ("Если ферма приносит вам игры — её развитие можно поддержать. "
+                "Отключается в панели: «Настройки» → «О ферме».")
+        return cards.Card(card.icon, card.title, card.site, card.key, card.headline, card.link,
+                          card.lines + ([card.note] if card.note else []), card.block, note,
+                          card.buttons + [("Поддержать проект",
+                                           support.page(self.uiSettings()['lang']))])
