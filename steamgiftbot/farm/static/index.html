@@ -164,6 +164,15 @@ button.acc-tab.add:hover{background:var(--tint);color:#fff;border-color:var(--li
 .acc-t{flex:1;min-width:200px}
 .acc-t h2{font-size:18px;color:#fff;margin-bottom:2px}
 .acc-row .actions{display:flex;gap:8px;flex-wrap:wrap}
+.acc-name{background:none;border:0;padding:0;min-height:0;color:#fff;font:inherit;font-size:18px;font-weight:600;gap:8px}
+.acc-name svg.i{width:15px;height:15px;color:var(--muted);opacity:0;transition:opacity .15s}
+.acc-name:hover,.acc-name:focus-visible{background:none;color:var(--link)}
+.acc-name:hover svg.i,.acc-name:focus-visible svg.i{opacity:1}
+.acc-form{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:end}
+.acc-form .acc-ava{align-self:start}
+.acc-fields{min-width:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:12px}
+.acc-fields .f{min-width:0}
+@media (max-width:700px){.acc-form{grid-template-columns:minmax(0,1fr)}.acc-form .acc-ava{display:none}.acc-form .actions{justify-content:flex-end}}
 
 /* site cards and catalog */
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:12px}
@@ -357,6 +366,7 @@ input.switch:checked::after{transform:translateX(18px)}
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
   <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
   <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3M17 6l3 3M14 9l2 2"/></symbol>
 </svg>
 
@@ -422,11 +432,21 @@ let logCursor = {}, logBuf = {}, previewSeq = 0, lastFocus = null;
 const connected = () => platforms.filter(p => p.configured);
 const catalog = () => platforms.filter(p => !p.configured);
 const byKey = key => platforms.find(p => p.key === key);
+// Redraws only when the markup changed. The 3 s poll redraws live parts of
+// the page; replacing a button between mouse down and mouse up loses the
+// click, and focus and hover go with it.
+function paint(el, html){ if (el && el._html !== html) { el._html = html; el.innerHTML = html; } }
 // Accounts are people: each has its own set of sites.
 const PROFILE = id => profiles.find(x => x.id === id);
 const profileSites = id => platforms.filter(p => (p.profile || 'main') === id);
 const AVA_COLORS = ['#8a6cf0', '#199e70', '#d95926', '#b4489f', '#c98500', '#3987e5'];
 const AVA = id => id === 'main' ? 'var(--mark)' : AVA_COLORS[(parseInt(String(id).replace(/\D/g, ''), 10) || 0) % AVA_COLORS.length];
+const sentence = text => { const t = String(text || '').trim(); return t ? t[0].toUpperCase() + t.slice(1) + (/[.!?]$/.test(t) ? '' : '.') : ''; };
+// Shows that a save is under way and stops a second click meanwhile.
+async function busy(button, text, work){
+  const label = button.innerHTML; button.disabled = true; button.textContent = text;
+  try { return await work(); } finally { if (button.isConnected) { button.disabled = false; button.innerHTML = label; } }
+}
 const initial = name => (String(name || '?').trim()[0] || '?').toUpperCase();
 function currentProfileId(){
   const {key} = parseRoute(), id = key || localStorageGet('profile') || 'main';
@@ -464,8 +484,8 @@ function renderNav(){
   const winsN = openWins.length, authN = platforms.filter(p => p.state === 'auth').length;
   const badge = key => key === 'wins' && winsN ? `<span class="badge" aria-label="${winsN} новых">${winsN}</span>`
     : key === 'sites' && authN ? `<span class="badge bad" aria-label="нужно внимание">${authN}</span>` : '';
-  $('#nav').innerHTML = NAV.map(([k, l, i]) => `<a href="#/${k}" class="${k === current ? 'on' : ''}" ${k === current ? 'aria-current="page"' : ''}>${icon(i)}${l}${badge(k)}</a>`).join('');
-  $('#tabbar').innerHTML = NAV.map(([k, l, i]) => `<a href="#/${k}" class="${k === current ? 'on' : ''}" ${k === current ? 'aria-current="page"' : ''}>${icon(i)}<span>${l}</span>${badge(k) ? '<span class="dot"></span>' : ''}</a>`).join('');
+  paint($('#nav'), NAV.map(([k, l, i]) => `<a href="#/${k}" class="${k === current ? 'on' : ''}" ${k === current ? 'aria-current="page"' : ''}>${icon(i)}${l}${badge(k)}</a>`).join(''));
+  paint($('#tabbar'), NAV.map(([k, l, i]) => `<a href="#/${k}" class="${k === current ? 'on' : ''}" ${k === current ? 'aria-current="page"' : ''}>${icon(i)}<span>${l}</span>${badge(k) ? '<span class="dot"></span>' : ''}</a>`).join(''));
 }
 const PAGES = {overview: pageOverview, sites: pageSites, site: pageSite, connect: pageConnect, wins: pageWins, journal: pageJournal, settings: pageSettings};
 let currentPage = null;
@@ -527,7 +547,7 @@ document.addEventListener('click', async e => {
     if (act === 'stop-all') { await api('/api/stop-all', {}); toast('Все площадки останавливаются'); }
     if (act === 'remove-account') { if (await removeAccount(byKey(key))) renderSiteCards(); return; }
     if (act === 'new-profile') return profileDialog();
-    if (act === 'edit-profile') return profileDialog(PROFILE(key));
+    if (act === 'edit-profile') return editProfile(key);
     if (act === 'delete-profile') return deleteProfile(key);
     if (act === 'start' || act === 'stop' || act === 'run-now') {
       b.disabled = true;
@@ -664,7 +684,7 @@ function renderWinsBanner(){
 function renderSiteRows(){
   const box = $('#siteRows'); if (!box) return;
   const list = connected();
-  if (!list.length) { box.innerHTML = `<div class="empty"><b>Пока ни одна площадка не подключена</b>Подключите первый сайт с раздачами — это займёт пару минут.<br><a class="btn primary" href="#/sites">${icon('plus')}Подключить площадку</a></div>`; return; }
+  if (!list.length) { paint(box, `<div class="empty"><b>Пока ни одна площадка не подключена</b>Подключите первый сайт с раздачами — это займёт пару минут.<br><a class="btn primary" href="#/sites">${icon('plus')}Подключить площадку</a></div>`); return; }
   const row = p => {
     const [label, cls] = stateOf(p), why = whyText(p);
     return `<div class="srow"><div class="name"><span class="dot-site" style="background:${SITE_COLOR(p.key)}"></span><a href="#/site/${p.key}">${esc(p.title)}</a><span class="pill ${cls}">${esc(label)}</span></div>
@@ -673,9 +693,9 @@ function renderSiteRows(){
       <div class="act">${siteActions(p, true)}</div></div>`;
   };
   // With several accounts the rows go under each account's name.
-  box.innerHTML = profiles.length > 1
+  paint(box, profiles.length > 1
     ? profiles.map(x => { const mine = list.filter(p => (p.profile || 'main') === x.id); return mine.length ? `<div class="acc-group"><a href="#/sites/${x.id}"><span class="acc-ava" style="background:${AVA(x.id)}" aria-hidden="true">${esc(initial(x.name))}</span>${esc(x.name)}</a></div>` + mine.map(row).join('') : ''; }).join('')
-    : list.map(row).join('');
+    : list.map(row).join(''));
 }
 
 /* ---- summary and chart ---- */
@@ -748,6 +768,7 @@ window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer
 
 /* ====================== sites ====================== */
 async function pageSites(view){
+  accEditing = null;
   localStorageSet('profile', currentProfileId());
   view.innerHTML = `<div class="page-head"><h1>Площадки</h1>
       <p class="lead">У каждой учётки свой набор сайтов: ваша, брата, сестры. Откройте учётку, чтобы подключить ей площадки; каждая площадка работает сама, по расписанию.</p></div>
@@ -781,19 +802,56 @@ function sharedCard(p){
 }
 function renderAccTabs(id){
   const box = $('#accTabs'); if (!box) return;
-  box.innerHTML = profiles.map(x => {
+  paint(box, profiles.map(x => {
     const n = profileSites(x.id).filter(p => p.configured).length, on = x.id === id;
     return `<a href="#/sites/${x.id}" class="acc-tab${on ? ' on' : ''}" ${on ? 'aria-current="page"' : ''}><span class="acc-ava" style="background:${AVA(x.id)}" aria-hidden="true">${esc(initial(x.name))}</span><span>${esc(x.name)}</span><small aria-label="площадок: ${n}">${n}</small></a>`;
-  }).join('') + `<button type="button" class="acc-tab add" data-act="new-profile">${icon('plus')}Новая учётка</button>`;
+  }).join('') + `<button type="button" class="acc-tab add" data-act="new-profile">${icon('plus')}Новая учётка</button>`);
 }
+// The account's header; "Изменить" turns it into a form in place.
+let accEditing = null;
 function renderAccHead(prof){
-  const box = $('#accHead'); if (!box) return;
+  const box = $('#accHead'); if (!box || accEditing === prof.id) return;
   const mine = profileSites(prof.id).filter(p => p.configured);
   const today = mine.reduce((a, p) => a + p.totals.today, 0), wins = mine.reduce((a, p) => a + p.totals.wins, 0);
-  const k = [prof.id, prof.name, prof.asfBot, mine.length, today, wins].join('|'); if (box.dataset.k === k) return; box.dataset.k = k;
-  box.innerHTML = `<div class="acc-row"><span class="acc-ava big" style="background:${AVA(prof.id)}" aria-hidden="true">${esc(initial(prof.name))}</span>
-      <div class="acc-t"><h2>${esc(prof.name)}</h2><div class="muted small">Площадок: ${mine.length} · входов за сутки: ${today} · выигрышей: ${wins}<br>Ключи активируются в Steam-боте ASF: <b>${esc(prof.asfBot || 'как в настройках фермы')}</b></div></div>
-      <div class="actions"><button data-act="edit-profile" data-key="${prof.id}">${icon('gear')}Настроить</button>${prof.main ? '' : `<button class="danger" data-act="delete-profile" data-key="${prof.id}">Удалить учётку</button>`}</div></div>`;
+  paint(box, `<div class="acc-row"><span class="acc-ava big" style="background:${AVA(prof.id)}" aria-hidden="true">${esc(initial(prof.name))}</span>
+      <div class="acc-t"><h2><button type="button" class="acc-name" data-act="edit-profile" data-key="${prof.id}" title="Изменить имя и Steam-бота">${esc(prof.name)}${icon('edit')}</button></h2>
+        <div class="muted small">Площадок: ${mine.length} · входов за сутки: ${today} · выигрышей: ${wins}</div>
+        <div class="small">Steam этой учётки (бот ASF для её ключей): <b>${esc(prof.asfBot || 'как в настройках фермы')}</b></div></div>
+      <div class="actions"><button data-act="edit-profile" data-key="${prof.id}">${icon('edit')}Изменить</button>${prof.main ? '' : `<button class="danger" data-act="delete-profile" data-key="${prof.id}">Удалить учётку</button>`}</div></div>`);
+}
+// Fills a select with ASF's bots, keeping the chosen one even if ASF is down.
+function fillBots(pick, note){
+  api('/api/asf/check', {}).then(r => {
+    if (!pick.isConnected) return;
+    const keep = pick.value, names = [...new Set([...(r.bots || []), ...(keep ? [keep] : [])])];
+    pick.innerHTML = '<option value="">Как в настройках фермы</option>' + names.map(b => `<option value="${esc(b)}" ${b === keep ? 'selected' : ''}>${esc(b)}${(r.online || []).includes(b) ? '' : ' (не в сети)'}</option>`).join('');
+    note.textContent = names.length ? `Ботов в ASF: ${(r.bots || []).length}.` : 'В ASF нет ботов.';
+  }).catch(err => { if (note.isConnected) note.textContent = 'ASF не ответил: ' + err.message + '. Бота можно выбрать позже.'; });
+}
+function editProfile(id){
+  const prof = PROFILE(id), box = $('#accHead'); if (!prof || !box) return;
+  accEditing = id; box._html = null;
+  box.innerHTML = `<form class="acc-row acc-form" id="accForm" novalidate>
+      <span class="acc-ava big" style="background:${AVA(prof.id)}" aria-hidden="true">${esc(initial(prof.name))}</span>
+      <div class="acc-fields">
+        <div class="f"><label for="accName">Имя учётки</label><input id="accName" maxlength="40" autocomplete="off" value="${esc(prof.name)}"><small class="warnText" id="accErr" role="alert"></small></div>
+        <div class="f"><label for="accBot">Steam этой учётки — бот в ArchiSteamFarm</label><select id="accBot"><option value="">Как в настройках фермы</option>${prof.asfBot ? `<option value="${esc(prof.asfBot)}" selected>${esc(prof.asfBot)}</option>` : ''}</select>
+          <small id="accBotNote">Спрашиваю у ASF список ботов…</small><small>В этого бота ASF активирует ключи, выигранные площадками учётки.</small></div>
+      </div>
+      <div class="actions"><button type="button" id="accCancel">Отмена</button><button class="primary" type="submit">Сохранить</button></div></form>`;
+  const name = $('#accName'); name.focus(); name.select();
+  fillBots($('#accBot'), $('#accBotNote'));
+  const close = () => { accEditing = null; renderAccHead(PROFILE(id) || prof); $('#accHead .actions [data-act="edit-profile"]')?.focus(); };
+  $('#accCancel').onclick = close;
+  $('#accForm').addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); close(); } });
+  $('#accForm').onsubmit = async e => {
+    e.preventDefault();
+    if (!name.value.trim()) { $('#accErr').textContent = 'Введите имя.'; name.focus(); return; }
+    try {
+      await busy($('#accForm button[type=submit]'), 'Сохраняю…', () => api(`/api/profiles/${id}/update`, {name: name.value, asfBot: $('#accBot').value}));
+      await poll(); close(); renderSiteCards(); toast('Учётка сохранена');
+    } catch (err) { $('#accErr').textContent = sentence(err.message); name.focus(); }
+  };
 }
 function renderSiteCards(){
   const cards = $('#siteCards'), cat = $('#catalog'); if (!cards) return;
@@ -801,36 +859,33 @@ function renderSiteCards(){
   const id = currentProfileId(), prof = PROFILE(id) || {id: 'main', name: 'Основная', main: true};
   renderAccTabs(id); renderAccHead(prof);
   const mine = profileSites(id), list = mine.filter(p => p.configured);
-  cards.innerHTML = list.length ? list.map(siteCard).join('') : `<div class="empty" style="grid-column:1/-1"><b>В учётке «${esc(prof.name)}» пока нет площадок</b>Выберите сайт ниже — подключение займёт пару минут.</div>`;
-  cat.innerHTML = platforms.filter(p => p.primary).map(base => {
+  paint(cards, list.length ? list.map(siteCard).join('') : `<div class="empty" style="grid-column:1/-1"><b>В учётке «${esc(prof.name)}» пока нет площадок</b>Выберите сайт ниже — подключение займёт пару минут.</div>`);
+  paint(cat, platforms.filter(p => p.primary).map(base => {
     if (mine.some(p => p.kind === base.kind && p.configured)) return '';
     if (prof.main) return catalogCard(base, `#/connect/${base.key}`);
     if (!base.multi) return sharedCard(base);
     const own = mine.find(p => p.kind === base.kind);
     return own ? catalogCard(own, `#/connect/${own.key}`, true) : catalogCard(base, `#/connect/${base.kind}/${id}`);
-  }).join('') || `<div class="empty" style="grid-column:1/-1">Все площадки уже подключены в эту учётку.</div>`;
+  }).join('') || `<div class="empty" style="grid-column:1/-1">Все площадки уже подключены в эту учётку.</div>`);
 }
 async function profileDialog(prof){
   openModal(`<h2 id="modalTitle">${prof ? `Учётка «${esc(prof.name)}»` : 'Новая учётка'}</h2>
     <form class="form" id="profForm">
       ${prof ? '' : '<p class="muted">Учётка — это человек со своими аккаунтами на сайтах: вы, брат, сестра. Создайте её, а потом подключите ей площадки — каждую своим cookie.</p>'}
-      <div class="f"><label for="profName">Имя</label><input id="profName" maxlength="40" required autocomplete="off" value="${esc(prof?.name || '')}" placeholder="Например, Брат"></div>
+      <div class="f"><label for="profName">Имя</label><input id="profName" maxlength="40" autocomplete="off" value="${esc(prof?.name || '')}" placeholder="Например, Брат"><small class="warnText" id="profErr" role="alert"></small></div>
       <div class="f"><label for="profBot">Steam этой учётки — бот в ArchiSteamFarm</label><select id="profBot"><option value="">Как в настройках фермы</option>${prof?.asfBot ? `<option value="${esc(prof.asfBot)}" selected>${esc(prof.asfBot)}</option>` : ''}</select>
         <small id="profBotNote">Спрашиваю у ASF список ботов…</small><small>В этого бота ASF активирует ключи, выигранные учёткой. Можно выбрать позже.</small></div>
       <div class="row"><button type="button" data-close>Отмена</button><button class="primary" type="submit">${prof ? 'Сохранить' : 'Создать и открыть'}</button></div></form>`);
   const pick = $('#profBot');
-  api('/api/asf/check', {}).then(r => {
-    const keep = pick.value, names = [...new Set([...(r.bots || []), ...(keep ? [keep] : [])])];
-    pick.innerHTML = '<option value="">Как в настройках фермы</option>' + names.map(b => `<option value="${esc(b)}" ${b === keep ? 'selected' : ''}>${esc(b)}${(r.online || []).includes(b) ? '' : ' (не в сети)'}</option>`).join('');
-    $('#profBotNote').textContent = `Ботов в ASF: ${(r.bots || []).length}.`;
-  }).catch(err => { const n = $('#profBotNote'); if (n) n.textContent = 'ASF не ответил: ' + err.message; });
+  fillBots(pick, $('#profBotNote'));
   $('#profForm').onsubmit = async e => {
     e.preventDefault();
     const body = {name: $('#profName').value, asfBot: pick.value};
+    if (!body.name.trim()) { $('#profErr').textContent = 'Введите имя.'; $('#profName').focus(); return; }
     try {
       if (prof) { await api(`/api/profiles/${prof.id}/update`, body); closeModal(); await poll(); renderSiteCards(); toast('Сохранено'); }
-      else { const r = await api('/api/profiles/create', body); closeModal(); await poll(); go(`#/sites/${r.id}`); toast(`Учётка «${r.name}» создана — подключите ей площадки`); }
-    } catch (err) { toast(err.message, true); }
+      else { const r = await busy($('#profForm button.primary'), 'Создаю…', () => api('/api/profiles/create', body)); closeModal(); await poll(); go(`#/sites/${r.id}`); toast(`Учётка «${r.name}» создана — подключите ей площадки`); }
+    } catch (err) { $('#profErr').textContent = sentence(err.message); $('#profName').focus(); }
   };
 }
 async function deleteProfile(id){
@@ -847,13 +902,14 @@ async function pageSite(view, {key, tab}){
   const p = byKey(key); if (!p) { view.innerHTML = '<div class="empty"><b>Нет такой площадки</b><a class="btn" href="#/sites">К площадкам</a></div>'; return; }
   if (!p.configured) return go(`#/connect/${key}`);
   tab = tab || 'overview';
-  view.innerHTML = `<a class="back" href="#/sites">← Площадки</a>
+  const home = PROFILE(p.profile || 'main');
+  view.innerHTML = `<a class="back" href="#/sites/${home ? home.id : ''}">← ${profiles.length > 1 && home ? `Учётка «${esc(home.name)}»` : 'Площадки'}</a>
     <div class="page-head" id="siteHead"></div>
     <nav class="tabs" aria-label="Разделы площадки">${SITE_TABS.map(([k, l]) => `<a href="#/site/${key}/${k}" class="${k === tab ? 'on' : ''}" ${k === tab ? 'aria-current="page"' : ''}>${l}</a>`).join('')}</nav>
     <div id="siteBody"></div>`;
   renderSiteHead(key);
   const body = $('#siteBody');
-  if (tab === 'overview') { body.innerHTML = '<div id="siteOverview" class="stack"></div>'; renderSiteOverview(key); loadRecent(key); }
+  if (tab === 'overview') { body.innerHTML = '<div id="siteOverview" class="stack"><div id="ovTop" class="stack"></div><section class="block" id="recent"></section></div>'; renderSiteOverview(key); loadRecent(key); }
   if (tab === 'settings') await renderSiteSettings(body, p);
   if (tab === 'preview') renderPreviewTab(body, p);
   if (tab === 'connection') renderConnection(body, p);
@@ -861,11 +917,11 @@ async function pageSite(view, {key, tab}){
 function renderSiteHead(key){
   const p = byKey(key), box = $('#siteHead'); if (!p || !box) return;
   const [label, cls] = stateOf(p);
-  box.innerHTML = `<span class="dot-site" style="background:${SITE_COLOR(p.key)}"></span><h1>${esc(p.title)}</h1><span class="pill ${cls}">${esc(label)}</span>
-    <div class="actions">${siteActions(p)}<a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener">${icon('ext')}Открыть сайт</a></div>`;
+  paint(box, `<span class="dot-site" style="background:${SITE_COLOR(p.key)}"></span><h1>${esc(p.title)}</h1><span class="pill ${cls}">${esc(label)}</span>
+    <div class="actions">${siteActions(p)}<a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener">${icon('ext')}Открыть сайт</a></div>`);
 }
 function renderSiteOverview(key){
-  const p = byKey(key), box = $('#siteOverview'); if (!p || !box) return;
+  const p = byKey(key), box = $('#ovTop'); if (!p || !box) return;
   const lim = p.limits || {}, why = whyText(p);
   const bars = limitBar('Входы за сутки', lim.entries, '') + limitBar('Траты за сутки', lim.spend, p.unit);
   const top = `<div class="stats"><div class="stat"><b>${esc(balance(p))}</b><small>баланс${p.account ? ' · ' + esc(p.account) : ''}</small></div><div class="stat"><b>${p.totals.today}</b><small>входов за сутки</small></div><div class="stat"><b>${p.totals.wins}</b><small>выигрышей всего</small></div></div>
@@ -876,8 +932,7 @@ function renderSiteOverview(key){
       <div><span class="muted">Часы работы</span><br>${lim.hours ? esc(lim.hours) : 'круглосуточно'}</div>
       <div><span class="muted">Автозапуск</span><br>${p.autostart ? 'вместе с фермой' : 'выключен'}</div></div>
       ${bars ? `<div class="bars" style="margin-top:14px">${bars}</div>` : ''}</div>`;
-  const recent = box.querySelector('#recent');
-  box.innerHTML = top + (recent ? recent.outerHTML : '<section class="block" id="recent"></section>');
+  paint(box, top);
 }
 async function loadRecent(key){
   const h = await api(`/api/history?kind=entries&site=${key}&per=10`).catch(() => null);
@@ -1014,7 +1069,8 @@ async function pageConnect(view, {key, tab}){
   let target = isNew ? null : key;
   const s = await api(`/api/platforms/${key}/settings`);
   const fields = s.schema.filter(f => s.connectFields.includes(f.name));
-  view.innerHTML = `<a class="back" href="#/sites">← Площадки</a>
+  const back = isNew ? prof : PROFILE(p.profile || 'main');
+  view.innerHTML = `<a class="back" href="#/sites/${back ? back.id : ''}">← ${profiles.length > 1 && back ? `Учётка «${esc(back.name)}»` : 'Площадки'}</a>
     <div class="page-head"><h1>${isNew ? `${esc(p.baseTitle)} для учётки «${esc(prof.name)}»` : `Подключение ${esc(p.title)}`}</h1><p class="lead">${esc(p.description)} Пройдите шаги по порядку — займёт пару минут.</p></div>
     ${isNew ? `<div class="note" style="margin-bottom:12px"><b>Войдите на сайт под аккаунтом «${esc(prof.name)}» в другом профиле браузера или в окне инкогнито</b> — иначе скопируются cookie другой учётки, и ферма скажет, что этот аккаунт уже подключён. После копирования окно можно закрыть, но не выходите из аккаунта: выход сбросит cookie.<br><span class="muted">Правила многих сайтов разрешают один аккаунт на человека, и с одного IP сайт может связать аккаунты между собой. Подключайте аккаунты разных людей — например, семьи — на свой риск.</span></div>` : ''}
     <ol class="steps">${s.guide.map(g => `<li><h3>${esc(g.title)}</h3><div><p>${esc(g.text)}</p>${g.link ? `<a class="btn" href="${esc(g.link)}" target="_blank" rel="noopener">${icon('ext')}Открыть ${esc(new URL(g.link).host)}</a>` : ''}</div></li>`).join('')}</ol>
@@ -1040,11 +1096,11 @@ async function pageConnect(view, {key, tab}){
       let r;
       if (!target) { r = await api('/api/accounts/add', {kind: key, profile: prof.id, values: values()}); target = r.key; await poll(); }
       else r = await api(`/api/platforms/${target}/check`, {values: values()});
-      $('#checkOut').innerHTML = `<div class="okbox" style="margin-top:10px"><b>Подключено.</b> ${r.account ? 'Аккаунт ' + esc(r.account) + '. ' : ''}${r.balance != null ? `Баланс ${r.balance} ${esc(p.unit)}.` : ''}</div>`;
+      $('#checkOut').innerHTML = `<div class="okbox" style="margin-top:10px"><b>Подключено.</b> ${r.account ? 'Аккаунт ' + esc(r.account) + '. ' : ''}${r.balance != null ? `Баланс ${r.balance}${p.unit ? ' ' + esc(p.unit) : ''}.` : ''}</div>`;
       $('#finish').classList.remove('hidden'); $('#finish').scrollIntoView({behavior: 'smooth', block: 'start'});
     } catch (err) {
       const twice = /уже подключ/.test(err.message);
-      $('#checkOut').innerHTML = `<div class="err" style="margin-top:10px"><b>Не получилось.</b> ${esc(err.message)}<br>${twice ? 'Это cookie аккаунта, который уже работает на ферме. Войдите в нужный аккаунт в отдельном профиле браузера или в окне инкогнито и скопируйте запрос оттуда.' : 'Проверьте, что вы вошли на сайт в браузере, обновите страницу и скопируйте запрос заново.'}</div>`;
+      $('#checkOut').innerHTML = `<div class="err" style="margin-top:10px"><b>Не получилось.</b> ${esc(sentence(err.message))}<br>${twice ? 'Это cookie аккаунта, который уже работает на ферме. Войдите в нужный аккаунт в отдельном профиле браузера или в окне инкогнито и скопируйте запрос оттуда.' : 'Проверьте, что вы вошли на сайт в браузере, обновите страницу и скопируйте запрос заново.'}</div>`;
     } finally { $('#checkBtn').disabled = false; }
   };
   $('#saveStart').onclick = async () => {
@@ -1059,11 +1115,13 @@ async function pageConnect(view, {key, tab}){
 }
 
 /* ====================== wins ====================== */
-let winsFilter = 'new', winsRows = [];
+let winsFilter = 'new', winsRows = [], winsProfile = '';
 async function pageWins(view){
   view.innerHTML = `<div class="page-head"><h1>Выигрыши</h1><p class="lead">Отмечайте, что ключ получен и активирован: так ни один выигрыш не потеряется. Новые выигрыши видны на обзоре и в счётчике меню.</p></div>
-    <div class="toolbar"><div class="seg" id="wf" role="group" aria-label="Показать"><button data-f="new">Новые</button><button data-f="received">Ключ получен</button><button data-f="activated">Активированы</button><button data-f="all">Все</button></div></div>
+    <div class="toolbar"><div class="seg" id="wf" role="group" aria-label="Показать"><button data-f="new">Новые</button><button data-f="received">Ключ получен</button><button data-f="activated">Активированы</button><button data-f="all">Все</button></div>
+      ${profiles.length > 1 ? `<select id="wp" aria-label="Учётка"><option value="">Все учётки</option>${profiles.map(x => `<option value="${x.id}" ${x.id === winsProfile ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>` : ''}</div>
     <div id="winsTable"></div>`;
+  if ($('#wp')) $('#wp').onchange = e => { winsProfile = e.target.value; renderWinsTable(false); };
   $('#wf').onclick = e => { const b = e.target.closest('[data-f]'); if (b) { winsFilter = b.dataset.f; renderWinsTable(false); } };
   await renderWinsTable();
 }
@@ -1071,7 +1129,8 @@ async function renderWinsTable(reload = true){
   if (reload) { const h = await api('/api/history?kind=wins&per=200').catch(() => null); if (h) winsRows = h.rows; }
   const box = $('#winsTable'); if (!box) return;
   $$('#wf button').forEach(b => b.classList.toggle('on', b.dataset.f === winsFilter));
-  const rows = winsRows.filter(w => winsFilter === 'all' || (winsFilter === 'new' ? !w.status : w.status === winsFilter));
+  const ofProfile = w => !winsProfile || ((byKey(w.key)?.profile || 'main') === winsProfile);
+  const rows = winsRows.filter(w => ofProfile(w) && (winsFilter === 'all' || (winsFilter === 'new' ? !w.status : w.status === winsFilter)));
   if (!rows.length) { box.innerHTML = `<div class="block empty"><b>${winsRows.length ? 'Здесь пусто' : 'Выигрышей пока нет'}</b>${winsRows.length ? 'Выберите другой фильтр.' : 'Когда ферма что-нибудь выиграет, оно появится здесь, на обзоре и в Telegram.'}</div>`; return; }
   box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Когда</th><th>Площадка</th><th>Игра</th><th>Ключ</th><th>Статус</th></tr></thead><tbody>` +
     rows.map(w => `<tr><td>${dt(w.time)}</td><td>${esc(w.title)}</td><td>${w.url ? `<a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.name)}</a>` : esc(w.name)}</td>

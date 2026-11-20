@@ -677,15 +677,24 @@ class FarmManager:
     # main account has keeps its plain name.
     def retitle(self):
         names = {item['id']: item['name'] for item in self.farm['profiles']}
+        # Only connected cards count: an empty catalog card is nobody's yet.
         owners = {}
         for key, platform in self.platforms.items():
-            owners.setdefault(platform.kind, set()).add(self.profileOf(key))
+            if self.isConnected(platform):
+                owners.setdefault(platform.kind, set()).add(self.profileOf(key))
         for key, platform in self.platforms.items():
             profile = self.profileOf(key)
             name = self.farm['platforms'].get(key, {}).get('label') or ''
-            if not name and (profile != MAIN_PROFILE or len(owners[platform.kind]) > 1):
+            if not name and (profile != MAIN_PROFILE or len(owners.get(platform.kind, ())) > 1):
                 name = names.get(profile, '')
             platform.title = f"{platform.baseTitle} · {name}" if name else platform.baseTitle
+
+    @staticmethod
+    def isConnected(platform):
+        try:
+            return platform.configured()
+        except Exception:
+            return False
 
     # Asks the site who the cookie belongs to, and refuses an account that is
     # already connected here under another card.
@@ -726,6 +735,8 @@ class FarmManager:
                                     if name in values})
             self.platformEntry(kind)['connected'] = True
             self.rememberAccount(primary, found)
+            self.saveFarm()
+            self.retitle()
             return primary, found
         for key, other in self.platforms.items():
             if other.kind == kind and self.profileOf(key) == profile \

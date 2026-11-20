@@ -193,3 +193,16 @@ def test_panel_adds_and_removes_accounts(panel, manager, accounts):  # noqa: F81
     assert status == 200 and len(manager.publicProfiles()) == 1
     status, body, _ = call(panel + '/api/profiles/main/delete', {}, cookie)
     assert status == 400
+
+
+def test_an_empty_card_takes_no_account_name(manager, accounts, brother):  # noqa: F811
+    # IndieGala is connected only in the brother's account: the main
+    # account's unconnected catalog card keeps its plain name.
+    second, _ = manager.addAccount('indiegala', {'cookie': 'user=bob'}, brother)
+    assert manager.platforms['indiegala'].title == 'IndieGala'
+    assert second.title == 'IndieGala · Брат'
+    manager.addAccount('indiegala', {'cookie': 'user=ann'})
+    assert manager.platforms['indiegala'].title == 'IndieGala · Основная'
+    manager.platforms['indiegala'].disconnect()
+    manager.retitle()
+    assert manager.platforms['indiegala'].title == 'IndieGala'

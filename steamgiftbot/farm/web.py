@@ -341,6 +341,7 @@ class Handler(BaseHTTPRequestHandler):
             if data.get('connect'):
                 manager.platformEntry(platform.key)['connected'] = True
                 manager.saveFarm()
+                manager.retitle()
             if 'autostart' in data:
                 manager.setAutostart(platform.key, bool(data['autostart']))
             return self.json({'ok': True, 'restarted': self.reloadSettings(platform)})
@@ -386,6 +387,7 @@ class Handler(BaseHTTPRequestHandler):
                               'restarted': self.reloadSettings(platform)})
         if action == 'disconnect':
             platform.disconnect()
+            manager.retitle()
             return self.json({'ok': True})
         if action == 'preview':
             try:
