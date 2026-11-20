@@ -126,7 +126,8 @@ class SteamGiftsPlatform(Platform):
     # Settings shown in the form, all kept in config.ini.
     FIELDS = grouped('Аккаунт', [
         field('cookie', 'Cookie PHPSESSID', 'secret',
-              help='steamgifts.com → DevTools → Application → Cookies → PHPSESSID'),
+              help='запрос steamgifts.com, скопированный как cURL, или само значение '
+                   'PHPSESSID (F12 → Application → Cookies)'),
         field('contributor_level', 'Ваш contributor level', 'int', None,
               'раздачи с уровнем выше пропускаются без лишних запросов'),
     ]) + grouped('Что брать', [

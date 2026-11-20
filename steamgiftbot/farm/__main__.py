@@ -8,6 +8,8 @@ import signal
 import sys
 import threading
 
+from pathlib import Path
+
 from steamgiftbot import settings as sgSettings
 from steamgiftbot.console import startLogFile
 from steamgiftbot.farm.manager import FarmManager
@@ -37,15 +39,23 @@ def main(argv=None):
     parser.add_argument('--host', default=os.environ.get('BOTFARM_HOST', '127.0.0.1'),
                         help="адрес(а) через запятую, например 192.168.1.10,100.64.0.5")
     parser.add_argument('--port', type=int, default=int(os.environ.get('BOTFARM_PORT', 8092)))
-    parser.add_argument('--config', default=sgSettings.DEFAULT_CONFIG_PATH,
-                        help="config.ini SteamGiftBot (там же cookie SteamGifts и Telegram)")
+    parser.add_argument('--config', default=None,
+                        help="config.ini SteamGiftBot (там же cookie SteamGifts и Telegram); "
+                             "по умолчанию — в папке данных")
+    parser.add_argument('--data', default=os.environ.get('BOTFARM_DATA'),
+                        help="папка для farm.json, истории и логов (по умолчанию — папка "
+                             "проекта); удобно для Docker")
     parser.add_argument('--no-autostart', action='store_true',
                         help="не запускать площадки с автозапуском (только панель)")
     parser.add_argument('--set-password', action='store_true',
                         help="задать пароль веб-панели и выйти")
     args = parser.parse_args(argv)
 
-    manager = FarmManager(configPath=args.config)
+    dataDir = Path(args.data) if args.data else None
+    if dataDir is not None:
+        dataDir.mkdir(parents=True, exist_ok=True)
+    config = args.config or (dataDir / 'config.ini' if dataDir else sgSettings.DEFAULT_CONFIG_PATH)
+    manager = FarmManager(dataDir=dataDir, configPath=config)
 
     if args.set_password:
         password = os.environ.get('BOTFARM_PASSWORD') or getpass.getpass("Новый пароль панели: ")
@@ -58,7 +68,7 @@ def main(argv=None):
 
     # SteamGiftBot's own file log, as the command line version writes it.
     try:
-        writeLog = sgSettings.load(args.config).log_info
+        writeLog = sgSettings.load(config).log_info
     except sgSettings.SettingsError:
         writeLog = False
     startLogFile(bool(writeLog), manager.dataDir / 'log')
