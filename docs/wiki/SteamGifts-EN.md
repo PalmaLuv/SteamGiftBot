@@ -17,6 +17,28 @@ wizard. The farm only needs the `PHPSESSID` cookie and discards the rest. You
 can also paste the `PHPSESSID` value itself from **F12 → Application →
 Cookies**.
 
+## Risk to the account
+
+SteamGifts' rules do not allow entering giveaways with scripts and bots, and
+the account on the site can be banned for it. Your Steam account is not
+affected. The connect wizard and the Connection («Подключение») tab say so
+plainly.
+
+What the farm does to lower the risk:
+
+- it sends your browser's User-Agent (the one from the copied cURL), not one
+  shared by every bot;
+- it pauses 3–7 seconds between entries and about 15 minutes between runs,
+  varied by up to 20 %;
+- it looks through no more than "Pages per run" and asks the site to drop the
+  giveaways you cannot enter or cannot afford;
+- it backs off when the site asks it to slow down and does not get around
+  Cloudflare checks.
+
+The risk cannot be removed entirely: by connecting SteamGifts you take it on
+yourself. Bans most often come for unactivated wins, so activate the keys and
+mark them received (see [Wins](#wins)).
+
 ## How a run goes
 
 1. The farm reads the balance and checks for new wins.

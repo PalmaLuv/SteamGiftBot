@@ -68,4 +68,6 @@ The farm behaves like a careful user: it pauses between entries, backs off
 when a site asks it to slow down, looks through a limited number of pages by
 default, and does not get around captchas or checks. But responsibility for
 the account stays with you. Read each site's rules, and on SteamGifts mark
-your wins as received and activate the keys.
+your wins as received and activate the keys. For SteamGifts, whose rules do
+not allow automatic entry, the connect wizard shows a separate warning (more
+in [SteamGifts](SteamGifts-EN.md#risk-to-the-account)).

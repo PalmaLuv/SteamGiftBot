@@ -1302,8 +1302,11 @@ function accountBlock(p){
       <p class="muted" style="margin:6px 0 12px">Площадка подключена в учётке «${esc(prof.name)}»${p.account ? `, аккаунт на сайте — <b>${esc(p.account)}</b>` : ''}.${p.category === 'points' ? ` Выигранные ключи ASF активирует в боте <b>${esc(p.keyBot || 'из настроек фермы')}</b> — это настройка учётки.` : ''}</p>
       <a class="btn" href="#/sites/${prof.id}">Открыть учётку «${esc(prof.name)}»</a></section>`;
 }
+function riskNote(p){
+  return p.risk ? `<div class="note" role="note" style="margin-bottom:12px"><b>⚠️ Риск для аккаунта.</b> ${esc(p.risk)}</div>` : '';
+}
 function renderConnection(body, p){
-  body.innerHTML = `<div class="stack"><section class="block"><h2>Подключение</h2>
+  body.innerHTML = `<div class="stack">${riskNote(p)}<section class="block"><h2>Подключение</h2>
       <p class="muted" style="margin:6px 0 12px">${p.state === 'auth' ? 'Сайт больше не узнаёт сохранённые cookie — подключите площадку заново.' : 'Cookie сохранены. Если сайт выкинет из аккаунта, ферма остановит площадку и пришлёт сообщение в Telegram.'}</p>
       <a class="btn primary" href="#/connect/${p.key}">${icon('key')}Подключить заново</a></section>
     ${accountBlock(p)}
@@ -1331,6 +1334,7 @@ async function pageConnect(view, {key, tab}){
   view.innerHTML = `<a class="back" href="#/sites/${back ? back.id : ''}">← ${profiles.length > 1 && back ? `Учётка «${esc(back.name)}»` : 'Площадки'}</a>
     <div class="page-head"><h1>${isNew ? `${esc(p.baseTitle)} для учётки «${esc(prof.name)}»` : `Подключение ${esc(p.title)}`}</h1><p class="lead">${esc(p.description)} Пройдите шаги по порядку — займёт пару минут.</p></div>
     ${isNew ? `<div class="note" style="margin-bottom:12px"><b>Войдите на сайт под аккаунтом «${esc(prof.name)}» в другом профиле браузера или в окне инкогнито</b> — иначе скопируются cookie другой учётки, и ферма скажет, что этот аккаунт уже подключён. После копирования окно можно закрыть, но не выходите из аккаунта: выход сбросит cookie.<br><span class="muted">Правила многих сайтов разрешают один аккаунт на человека, и с одного IP сайт может связать аккаунты между собой. Подключайте аккаунты разных людей — например, семьи — на свой риск.</span></div>` : ''}
+    ${riskNote(p)}
     <ol class="steps">${s.guide.map(g => `<li><h3>${esc(g.title)}</h3><div><p>${esc(g.text)}</p>${safeUrl(g.link) ? extLink(g.link, `${icon('ext')}Открыть ${esc(new URL(safeUrl(g.link)).host)}`, 'btn') : ''}</div></li>`).join('')}</ol>
     <form class="form" id="cform" style="margin-top:16px">
       <section class="fieldset" aria-labelledby="hPaste"><h2 id="hPaste">${fields.length ? 'Вставьте сюда' : 'Проверка'}</h2>${fields.length ? '' : '<p>Ферма спросит у ArchiSteamFarm список ботов. Адрес и пароль ASF — в «Настройки» → «ArchiSteamFarm».</p>'}

@@ -473,6 +473,9 @@ class Platform:
     # For the catalog: 'points' (raffles paid with site currency) or 'free'
     # (games that are free to keep), and what connecting it takes.
     category    = 'points'
+    # What connecting the site may cost the account, said before it is
+    # connected (the panel shows it in the wizard and on 'Подключение').
+    risk        = ''
     needs       = 'cookie'
     # Fields the connect wizard asks for; the rest keep their defaults.
     connectFields = ('cookie',)
@@ -1120,6 +1123,7 @@ class Platform:
             'nextCycle': self.nextCycle, 'reason': self.waitReason,
             'limits': self.limits(), 'lists': self.quickLists(),
             'unit': self.unit, 'category': self.category, 'needs': self.needs,
+            'risk': self.risk,
             'sessionEntered': self.sessionEntered, 'sessionSpent': self.sessionSpent,
             'autostart': self.manager.autostart(self.key),
             'totals': self.manager.state.totals(self.key),
