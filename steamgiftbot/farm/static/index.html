@@ -78,9 +78,26 @@ svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .page-head .actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
 .back{display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-size:13px;margin-bottom:6px}
 .tabbar{display:none}
+.main{min-width:0;display:flex;flex-direction:column}
+/* The phone's top bar and the 'no connection' banner stay in view while the
+   page scrolls: a phone has no sidebar to show the clock and 'Выйти'. */
+.top{position:sticky;top:0;z-index:6}
+.topbar{display:none}
+.conn{display:inline-flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums}
+.conn::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.conn.bad{color:var(--bad)}.conn.bad::before{background:var(--bad)}
+.offline{display:flex;align-items:center;gap:10px;padding:10px 28px;font-size:13px;color:var(--text);background:color-mix(in srgb,var(--bad) 22%,var(--bar));border-bottom:1px solid var(--bad)}
+.offline svg{color:var(--bad)}
+.offline b{color:var(--strong)}
 @media (max-width:900px){
   .shell{grid-template-columns:1fr}
   .side{display:none}
+  .topbar{display:flex;align-items:center;gap:10px;min-height:52px;padding:calc(4px + env(safe-area-inset-top)) 6px 4px 16px;background:var(--bar);border-bottom:1px solid rgba(102,192,244,.12)}
+  .topbar .brand{padding:0;font-size:13px;gap:8px;min-width:0}
+  .topbar .brand img{width:26px;height:26px}
+  .topbar .conn{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap}
+  .topbar .conn.bad{color:var(--bad)}
+  .offline{padding:10px 16px}
   .content{padding:16px 16px 96px}
   .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--bar);border-top:1px solid rgba(102,192,244,.12);padding:4px 4px calc(4px + env(safe-area-inset-bottom))}
   .tabbar a{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;min-height:52px;color:var(--muted);font-size:11px;position:relative}
@@ -91,6 +108,7 @@ svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-widt
   button.icon{min-width:44px}
   h1{font-size:20px}
 }
+@media (max-width:380px){.topbar .brand span{display:none}}
 
 /* ---- blocks ---- */
 .block{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
@@ -374,9 +392,17 @@ html.light .tip{box-shadow:0 6px 24px rgba(0,0,0,.15)}
   <aside class="side" aria-label="Разделы">
     <div class="brand"><img src="/icon.svg" alt="">Бот-ферма</div>
     <nav class="nav" id="nav"></nav>
-    <div class="foot"><span id="clock"></span><button class="ghost" data-act="logout" style="justify-content:flex-start;padding-left:2px"><svg class="i"><use href="#i-out"/></svg>Выйти</button></div>
+    <div class="foot"><span id="clock" class="conn" data-conn></span><button class="ghost" data-act="logout" style="justify-content:flex-start;padding-left:2px"><svg class="i"><use href="#i-out"/></svg>Выйти</button></div>
   </aside>
-  <main class="content" id="view" tabindex="-1"></main>
+  <div class="main">
+    <div class="top">
+      <header class="topbar"><div class="brand"><img src="/icon.svg" alt=""><span>Бот-ферма</span></div>
+        <span class="conn" data-conn role="status"></span>
+        <button class="ghost icon" data-act="logout" aria-label="Выйти" title="Выйти"><svg class="i" aria-hidden="true"><use href="#i-out"/></svg></button></header>
+      <div id="offline" class="offline hidden" role="alert"><svg class="i" aria-hidden="true"><use href="#i-info"/></svg><span><b>Нет связи с фермой.</b> <span id="offlineSince"></span></span></div>
+    </div>
+    <main class="content" id="view" tabindex="-1"></main>
+  </div>
   <nav class="tabbar" id="tabbar" aria-label="Разделы"></nav>
 </div>
 
@@ -495,9 +521,16 @@ function translateNode(node){
     if (node.closest('[data-notranslate],script,style,code,textarea')) return;
     // Only when something changed: rewriting an attribute that still holds
     // untranslated text (a game's or a profile's name) would wake the
-    // observer again, for ever.
-    for (const a of ATTRS) { const v = node.getAttribute(a); if (v && /[А-Яа-яЁё]/.test(v)) { const t = tr(v); if (t !== v) node.setAttribute(a, t); } }
-    if (node.tagName === 'INPUT' && /^(button|submit)$/.test(node.type) && /[А-Яа-яЁё]/.test(node.value)) { const t = tr(node.value); if (t !== node.value) node.value = t; }
+    // observer again, for ever. And never twice: a translation can hold a
+    // phrase that translates again ('30 дн' -> '30 дн.' in Ukrainian, so
+    // the chart's '… за 30 дн., …' grew a dot per pass and froze the page).
+    const done = TRANSLATED.get(node) || {};
+    for (const a of ATTRS) {
+      const v = node.getAttribute(a);
+      if (v && v !== done[a] && /[А-Яа-яЁё]/.test(v)) { const t = tr(v); if (t !== v) node.setAttribute(a, t); done[a] = t; }
+    }
+    if (node.tagName === 'INPUT' && /^(button|submit)$/.test(node.type) && node.value !== done.value && /[А-Яа-яЁё]/.test(node.value)) { const t = tr(node.value); if (t !== node.value) node.value = t; done.value = t; }
+    TRANSLATED.set(node, done);
   }
 }
 function translateTree(root){
@@ -539,6 +572,19 @@ async function saveUi(change){
   try { ui = (await api('/api/ui', {values: ui})).ui; } catch (err) { toast(err.message, true); }
 }
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Links built from what the sites send (giveaway and win pages, log details):
+// only a full http(s) address becomes a link. A 'javascript:' or 'data:' one
+// would run inside the panel, signed in, at a click; esc() does not stop it.
+function safeUrl(url){
+  const text = String(url ?? '').trim();
+  if (!/^https?:\/\//i.test(text)) return '';
+  try { const u = new URL(text); return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : ''; } catch { return ''; }
+}
+// An outside link from data, or just its text when the address is not safe.
+function extLink(url, html, cls){
+  const href = safeUrl(url);
+  return href ? `<a ${cls ? `class="${cls}" ` : ''}href="${esc(href)}" target="_blank" rel="noopener">${html}</a>` : html;
+}
 const icon = (name, label) => `<svg class="i" ${label ? `role="img" aria-label="${esc(label)}"` : 'aria-hidden="true"'}><use href="#i-${name}"/></svg>`;
 function localStorageGet(k){ try { return localStorage.getItem('bf_' + k) } catch { return null } }
 function localStorageSet(k, v){ try { localStorage.setItem('bf_' + k, v) } catch {} }
@@ -687,10 +733,20 @@ $('#loginForm').addEventListener('submit', async e => {
 async function poll(){
   const s = await api('/api/status');
   platforms = s.platforms; profiles = s.profiles || []; openWins = s.wins || []; announceWins();
-  $('#clock').textContent = 'Обновлено ' + new Date().toLocaleTimeString(LOCALE(), {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+  polledAt = Date.now(); showConnection(true);
+}
+// The sidebar's clock, the phone's top bar and a banner over the page: when
+// the farm stops answering, the numbers on the page are old, and a phone has
+// no sidebar to say so.
+let polledAt = 0;
+function showConnection(ok){
+  const time = polledAt ? new Date(polledAt).toLocaleTimeString(LOCALE(), {hour: '2-digit', minute: '2-digit', second: '2-digit'}) : '';
+  $$('[data-conn]').forEach(el => { el.textContent = ok ? 'Обновлено ' + time : 'Нет связи с фермой'; el.classList.toggle('bad', !ok); });
+  $('#offline').classList.toggle('hidden', ok);
+  if (!ok) $('#offlineSince').textContent = time ? `Данные на странице — на ${time}. Пробую подключиться снова…` : 'Пробую подключиться снова…';
 }
 async function tick(){
-  try { await poll(); } catch (err) { if (err.message !== 'нужно войти') $('#clock').textContent = 'Нет связи с фермой'; return; }
+  try { await poll(); } catch (err) { if (err.message !== 'нужно войти') showConnection(false); return; }
   renderNav(); live();
   if (currentPage === 'overview' && Date.now() - summaryAt > 30000) loadSummary();
 }
@@ -709,7 +765,11 @@ document.addEventListener('click', async e => {
   try {
     if (act === 'logout') { await api('/api/logout', {}); return showLogin(); }
     if (act === 'start-all') { const r = await api('/api/start-all', {}); toast(r.started.length ? 'Запущено: ' + r.started.length : 'Все подключённые площадки уже работают'); }
-    if (act === 'stop-all') { await api('/api/stop-all', {}); toast('Все площадки останавливаются'); }
+    if (act === 'stop-all') {
+      // One stray tap would stop every site mid-pass, so it asks first.
+      if (!await confirmDialog('Остановить все площадки?', 'Ферма остановит все площадки, начатые проходы прервутся. Запустить снова можно кнопкой «Запустить всё».', 'Остановить всё', true)) return;
+      await api('/api/stop-all', {}); toast('Все площадки останавливаются');
+    }
     if (act === 'remove-account') { if (await removeAccount(byKey(key))) renderSiteCards(); return; }
     if (act === 'new-profile') return profileDialog();
     if (act === 'edit-profile') return editProfile(key);
@@ -845,7 +905,7 @@ function renderWinsBanner(){
   const attrs = w => `data-site="${w.key}" data-time="${w.time}" data-name="${esc(w.name)}"`;
   box.innerHTML = openWins.slice(0, 3).map(w => `<div class="win"><span class="big" aria-hidden="true">🎉</span>
       <div><b>${esc(w.name)}</b><div class="small muted">Выигрыш на ${esc(w.title)}, ${dt(w.time)}</div></div><span class="sp"></span>
-      ${w.url ? `<a class="btn" href="${esc(w.url)}" target="_blank" rel="noopener">${icon('ext')}Забрать ключ</a>` : ''}
+      ${safeUrl(w.url) ? extLink(w.url, icon('ext') + 'Забрать ключ', 'btn') : ''}
       <button data-winset="received" ${attrs(w)}>Ключ получен</button><button class="go" data-winset="activated" ${attrs(w)}>Активирован</button></div>`).join('') +
     (openWins.length > 3 ? `<a class="more" href="#/wins">И ещё ${openWins.length - 3} — все в разделе «Выигрыши» →</a>` : '');
 }
@@ -883,15 +943,19 @@ function renderSiteRows(){
 async function loadSummary(){
   try { summary = await api('/api/summary?days=' + days); summaryAt = Date.now(); renderSummary(); } catch {}
 }
+const luckText = (wins, entered) => entered ? (wins / entered * 100).toFixed(wins && wins / entered < .01 ? 2 : 1) + '%' : '—';
 function renderSummary(){
   if (!summary || !$('#tiles')) return;
-  const S = summary.sites, entered = sum(S, s => s.entered), wins = sum(S, s => s.wins);
+  const S = summary.sites, wins = sum(S, s => s.wins);
   const spent = S.filter(s => s.spentToday).map(s => `${s.spentToday} ${s.unit}`).join(' · ') || '0';
-  const luck = entered ? (wins / entered * 100).toFixed(wins && wins / entered < .01 ? 2 : 1) + '%' : '—';
+  // Luck is wins per giveaway entered: a free GOG, itch.io or Steam claim
+  // is always 'won', so counting it would only drag the rate down.
+  const G = S.filter(s => !s.free), drawn = sum(G, s => s.entered), drawnWins = sum(G, s => s.wins);
+  const luck = luckText(drawnWins, drawn);
   renderSupportLine(wins);
   $('#tiles').innerHTML = [
     [sum(S, s => s.today), 'входов сегодня'], [spent, 'потрачено сегодня'],
-    [wins, `выигрышей, ${sum(S, s => s.winsWeek)} за 7 дней`], [luck, `выигрышей на ${entered} входов`],
+    [wins, `выигрышей, ${sum(S, s => s.winsWeek)} за 7 дней`], [luck, `выигрышей на ${drawn} входов в раздачи`],
   ].map(([v, l]) => `<div class="tile"><b class="${String(v).length > 8 ? 'long' : ''}">${esc(v)}</b><small>${esc(l)}</small></div>`).join('');
   const shown = S.filter(s => s.entered || s.entries.some(Boolean));
   $('#legend').innerHTML = shown.map(s => `<span><i style="background:${SITE_COLOR(s.key)}"></i>${esc(s.title)}</span>`).join('');
@@ -986,7 +1050,7 @@ function catalogCard(p, href, removable){
   return `<article class="card cat"><div><span class="tag">${esc(CATEGORY[p.category] || p.category)}</span></div>
     <div><h2>${esc(p.baseTitle)}</h2><p class="muted small" style="margin-top:4px">${esc(p.description)}</p></div>
     <p class="small">${esc(NEEDS[p.needs] || '')}</p>
-    <div class="actions"><a class="btn primary" href="${href}">${icon('plus')}Подключить</a>${removable ? `<button class="danger" data-act="remove-account" data-key="${p.key}">Убрать</button>` : `<a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener">${icon('ext')}Сайт</a>`}</div></article>`;
+    <div class="actions"><a class="btn primary" href="${href}">${icon('plus')}Подключить</a>${removable ? `<button class="danger" data-act="remove-account" data-key="${p.key}">Убрать</button>` : (safeUrl(p.url) ? extLink(p.url, icon('ext') + 'Сайт', 'btn') : '')}</div></article>`;
 }
 // Free Steam games: one card for every account, in the main one.
 function sharedCard(p){
@@ -1112,7 +1176,7 @@ function renderSiteHead(key){
   const p = byKey(key), box = $('#siteHead'); if (!p || !box) return;
   const [label, cls] = stateOf(p);
   paint(box, `<span class="dot-site" style="background:${SITE_COLOR(p.key)}"></span><h1>${esc(p.title)}</h1><span class="pill ${cls}">${esc(label)}</span>
-    <div class="actions">${siteActions(p)}<a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener">${icon('ext')}Открыть сайт</a></div>`);
+    <div class="actions">${siteActions(p)}${safeUrl(p.url) ? extLink(p.url, icon('ext') + 'Открыть сайт', 'btn') : ''}</div>`);
 }
 function renderSiteOverview(key){
   const p = byKey(key), box = $('#ovTop'); if (!p || !box) return;
@@ -1135,7 +1199,7 @@ async function loadRecent(key){
 }
 function entriesTable(rows, withSite){
   return `<div class="table-wrap"><table><thead><tr><th>Когда</th>${withSite ? '<th>Площадка</th>' : ''}<th>Раздача</th><th class="n">Цена</th><th><span class="sr">Действия</span></th></tr></thead><tbody>` +
-    rows.map(r => `<tr><td>${dt(r.time)}</td>${withSite ? `<td><span class="dot-site" style="display:inline-block;background:${SITE_COLOR(r.key)};margin-right:6px"></span>${esc(r.title)}</td>` : ''}<td>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a>` : esc(r.name)}</td><td class="n">${r.cost || 0} ${esc(r.unit || '')}</td><td class="act">${listButtons(r.key, r.name)}</td></tr>`).join('') + '</tbody></table></div>';
+    rows.map(r => `<tr><td>${dt(r.time)}</td>${withSite ? `<td><span class="dot-site" style="display:inline-block;background:${SITE_COLOR(r.key)};margin-right:6px"></span>${esc(r.title)}</td>` : ''}<td>${extLink(r.url, esc(r.name))}</td><td class="n">${r.cost || 0} ${esc(r.unit || '')}</td><td class="act">${listButtons(r.key, r.name)}</td></tr>`).join('') + '</tbody></table></div>';
 }
 
 /* ---- settings form ---- */
@@ -1215,7 +1279,7 @@ async function runPreviewInto(box, p){
   const draw = () => {
     const rows = r.items.filter(i => filter === 'all' || (filter === 'enter') === i.enter);
     $('#pvTable', box).innerHTML = rows.length ? `<table><thead><tr><th>Раздача</th><th class="n">Цена</th><th class="n">Участников</th><th>Решение</th><th><span class="sr">Действия</span></th></tr></thead><tbody>` +
-      rows.map(i => `<tr><td><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.name)}</a>${i.priority ? ` ${icon('star', 'приоритетная')}` : ''}</td>
+      rows.map(i => `<tr><td>${extLink(i.url, esc(i.name))}${i.priority ? ` ${icon('star', 'приоритетная')}` : ''}</td>
         <td class="n">${i.cost ?? '—'}</td><td class="n">${i.entries ?? '—'}</td><td class="${i.enter ? 'ok' : 'skip'}">${i.enter ? '✓ войдёт' : esc(i.reason)}</td><td class="act">${listButtons(p.key, i.name)}</td></tr>`).join('') + '</tbody></table>'
       : '<div class="empty">Здесь пусто.</div>';
     $$('#pvFilter button', box).forEach(b => b.classList.toggle('on', b.dataset.f === filter));
@@ -1267,7 +1331,7 @@ async function pageConnect(view, {key, tab}){
   view.innerHTML = `<a class="back" href="#/sites/${back ? back.id : ''}">← ${profiles.length > 1 && back ? `Учётка «${esc(back.name)}»` : 'Площадки'}</a>
     <div class="page-head"><h1>${isNew ? `${esc(p.baseTitle)} для учётки «${esc(prof.name)}»` : `Подключение ${esc(p.title)}`}</h1><p class="lead">${esc(p.description)} Пройдите шаги по порядку — займёт пару минут.</p></div>
     ${isNew ? `<div class="note" style="margin-bottom:12px"><b>Войдите на сайт под аккаунтом «${esc(prof.name)}» в другом профиле браузера или в окне инкогнито</b> — иначе скопируются cookie другой учётки, и ферма скажет, что этот аккаунт уже подключён. После копирования окно можно закрыть, но не выходите из аккаунта: выход сбросит cookie.<br><span class="muted">Правила многих сайтов разрешают один аккаунт на человека, и с одного IP сайт может связать аккаунты между собой. Подключайте аккаунты разных людей — например, семьи — на свой риск.</span></div>` : ''}
-    <ol class="steps">${s.guide.map(g => `<li><h3>${esc(g.title)}</h3><div><p>${esc(g.text)}</p>${g.link ? `<a class="btn" href="${esc(g.link)}" target="_blank" rel="noopener">${icon('ext')}Открыть ${esc(new URL(g.link).host)}</a>` : ''}</div></li>`).join('')}</ol>
+    <ol class="steps">${s.guide.map(g => `<li><h3>${esc(g.title)}</h3><div><p>${esc(g.text)}</p>${safeUrl(g.link) ? extLink(g.link, `${icon('ext')}Открыть ${esc(new URL(safeUrl(g.link)).host)}`, 'btn') : ''}</div></li>`).join('')}</ol>
     <form class="form" id="cform" style="margin-top:16px">
       <section class="fieldset" aria-labelledby="hPaste"><h2 id="hPaste">${fields.length ? 'Вставьте сюда' : 'Проверка'}</h2>${fields.length ? '' : '<p>Ферма спросит у ArchiSteamFarm список ботов. Адрес и пароль ASF — в «Настройки» → «ArchiSteamFarm».</p>'}
         ${fields.map(f => `<div class="f"><label for="c_${f.name}">${esc(f.label)}</label><textarea id="c_${f.name}" autocomplete="off" spellcheck="false" placeholder="curl 'https://…' -H 'cookie: …'"></textarea></div>`).join('')}
@@ -1302,8 +1366,14 @@ async function pageConnect(view, {key, tab}){
     try {
       await api(`/api/platforms/${target}/settings`, {values: values(), autostart: $('#c_autostart').checked, connect: true});
       if (picked) await api(`/api/platforms/${target}/preset`, {name: picked});
-      await api(`/api/platforms/${target}/start`, {}).catch(() => null);
-      await poll(); toast(`${byKey(target)?.title || p.title} подключена и запущена`); go(`#/site/${target}`);
+      // The site is connected and saved either way; a start that failed is
+      // said as it is, not as 'запущена'.
+      const startError = await api(`/api/platforms/${target}/start`, {}).then(() => null, err => err);
+      await poll();
+      const title = byKey(target)?.title || p.title;
+      if (startError) toast(`${title} подключена, но не запустилась: ${startError.message}`, true);
+      else toast(`${title} подключена и запущена`);
+      go(`#/site/${target}`);
     } catch (err) { toast(err.message, true); b.disabled = false; }
   };
 }
@@ -1327,7 +1397,7 @@ async function renderWinsTable(reload = true){
   const rows = winsRows.filter(w => ofProfile(w) && (winsFilter === 'all' || (winsFilter === 'new' ? !w.status : w.status === winsFilter)));
   if (!rows.length) { box.innerHTML = `<div class="block empty"><b>${winsRows.length ? 'Здесь пусто' : 'Выигрышей пока нет'}</b>${winsRows.length ? 'Выберите другой фильтр.' : 'Когда ферма что-нибудь выиграет, оно появится здесь, на обзоре и в Telegram.'}</div>`; return; }
   box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Когда</th><th>Площадка</th><th>Игра</th><th>Ключ</th><th>Статус</th></tr></thead><tbody>` +
-    rows.map(w => `<tr><td>${dt(w.time)}</td><td>${esc(w.title)}</td><td>${w.url ? `<a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.name)}</a>` : esc(w.name)}</td>
+    rows.map(w => `<tr><td>${dt(w.time)}</td><td>${esc(w.title)}</td><td>${extLink(w.url, esc(w.name))}</td>
       <td>${keyCell(w)}</td>
       <td>${winSelect(w)}</td></tr>`).join('') + '</tbody></table></div>';
 }
@@ -1397,7 +1467,7 @@ const ENTRY_LINE = /^(Вошёл|One more game|Would enter)/;
 // What the sites attach to a log line, in the panel's words.
 const DETAIL_LABEL = {cost: 'Цена', balance: 'Баланс после входа', entries: 'Участников', today: 'Входов за 24 ч', priority: 'Приоритетная', url: 'Ссылка'};
 function detailList(d){
-  return Object.entries(d).map(([k, v]) => `<span><b>${esc(DETAIL_LABEL[k] || k)}</b> ${k === 'url' && /^https:\/\//.test(v) ? `<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v.replace(/^https:\/\/(www\.)?/, ''))}</a>` : esc(v)}</span>`).join('');
+  return Object.entries(d).map(([k, v]) => `<span><b>${esc(DETAIL_LABEL[k] || k)}</b> ${k === 'url' ? extLink(v, esc(String(v).replace(/^https?:\/\/(www\.)?/i, ''))) : esc(v)}</span>`).join('');
 }
 // 21:05:07 today, 19.11 21:05:07 on another day.
 function logTime(t){
@@ -1541,7 +1611,7 @@ async function pageSettings(view){
   const phone = section('sec-phone', 'Панель на телефоне', 'Как открыть ферму с телефона и поставить её как приложение', phoneGuide(lan, ts), 'phone', false);
   const about = section('sec-about', 'О ферме', `Работает с ${dt(settingsInfo.startedAt)}`, `<div class="cols small">
       <div><span class="muted">Запущена</span><br>${dt(settingsInfo.startedAt)} (${esc(ago(settingsInfo.startedAt))})</div>
-      <div><span class="muted">Адреса панели</span><br>${urls.map(u => `<a href="${esc(u)}">${esc(u)}</a>`).join('<br>')}</div>
+      <div><span class="muted">Адреса панели</span><br>${urls.map(u => safeUrl(u) ? `<a href="${esc(safeUrl(u))}">${esc(u)}</a>` : esc(u)).join('<br>')}</div>
       <div><span class="muted">Площадок подключено</span><br>${connected().length} из ${platforms.length}</div>
       <div><span class="muted">Время фермы</span><br>${esc(settingsInfo.zone)}, ${esc(settingsInfo.now)}</div></div>
     ${supportBlock(settingsInfo.support)}`, 'info', false);
@@ -1682,7 +1752,7 @@ function markDirty(form, dirty){
 }
 function supportBody(s){
   return `<p class="muted small">SteamGiftBot бесплатный и останется бесплатным. Ферму развивает один человек в свободное время. Если она приносит вам игры, разработку можно поддержать.</p>
-    <div class="give">${s.links.map(l => `<a class="btn" href="${esc(l.url)}" target="_blank" rel="noopener">${icon('ext')}${esc(l.title)}</a>`).join('')}</div>
+    <div class="give">${s.links.map(l => extLink(l.url, icon('ext') + esc(l.title), 'btn')).join('')}</div>
     <div class="addr"><span class="muted small">Адрес TON</span><code data-notranslate>${esc(s.ton)}</code><button type="button" class="icon" data-copy="${esc(s.ton)}" aria-label="Скопировать адрес">${icon('copy')}</button></div>`;
 }
 function supportBlock(s){

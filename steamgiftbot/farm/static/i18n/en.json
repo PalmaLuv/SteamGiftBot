@@ -1020,5 +1020,11 @@
  "Повтор активации ключей не удался": "Retrying key activation failed",
  "Повтор активации": "Retrying activation of",
  "не удался": "failed",
- "повторю в": "will retry at"
+ "повторю в": "will retry at",
+ "Ферма остановит все площадки, начатые проходы прервутся. Запустить снова можно кнопкой «Запустить всё»": "The farm will stop every site; passes under way are cut short. Start them again with «Start all»",
+ "подключена, но не запустилась": "connected, but did not start",
+ "Пробую подключиться снова…": "Trying to reconnect…",
+ "Остановить все площадки?": "Stop all sites?",
+ "Данные на странице — на": "The page shows data as of",
+ "входов в раздачи": "giveaway entries"
 }

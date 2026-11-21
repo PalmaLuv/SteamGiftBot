@@ -760,6 +760,9 @@ class FarmManager:
             series = [self.state.daily(platform.key, day) for day in dates]
             sites.append({
                 'key': platform.key, 'title': platform.title, 'unit': platform.unit,
+                # Free claims (GOG, itch.io, Steam) are entries no one can
+                # lose: the panel leaves them out of the win rate.
+                'free': platform.category == 'free',
                 # The tiles count today from midnight, like the chart's last
                 # bar; the 24-hour window stays on the cards and the limits.
                 'today': series[-1]['e'], 'spentToday': series[-1]['s'],
