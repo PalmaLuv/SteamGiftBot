@@ -1014,5 +1014,11 @@
  "P. Пауза увеличена до": "P. Pause raised to",
  "Баланс вырос на": "Balance grew by",
  "Был вход": "Entered a giveaway",
- "пауза между проходами снова": "pause between passes is back to"
+ "пауза между проходами снова": "pause between passes is back to",
+ "это ссылка на подарок, а не ключ Steam: откройте её в браузере": "this is a gift link, not a Steam key: open it in a browser",
+ "повторы не помогли, активируйте вручную": "retries did not help, activate it by hand",
+ "Повтор активации ключей не удался": "Retrying key activation failed",
+ "Повтор активации": "Retrying activation of",
+ "не удался": "failed",
+ "повторю в": "will retry at"
 }

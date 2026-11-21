@@ -9,6 +9,7 @@ is set in the farm it is read from ASF's own config file.
 Every answer is {Success, Message, Result}; enums come back as numbers."""
 import json
 import logging
+import re
 
 from pathlib import Path
 from urllib.parse import quote
@@ -39,6 +40,50 @@ DETAILS = {
 # Outcomes: 'ok' activated, 'owned' already had it, 'retry' worth another
 # go later, 'fail' will never work.
 RETRY_DETAILS = {53, 4}
+
+# A Steam key the way ASF itself recognises one: three to five groups of 4-7
+# letters and digits. Steam prints them in capitals and does not care about
+# case, so a code in mixed case is some other shop's, where case may matter.
+STEAM_KEY = re.compile(r'(?<![0-9A-Za-z-])[0-9A-Za-z]{4,7}(?:-[0-9A-Za-z]{4,7}){2,4}'
+                       r'(?![0-9A-Za-z-])')
+LINK      = re.compile(r'https?://\S+', re.I)
+
+
+def isSteamKey(token):
+    return bool(STEAM_KEY.fullmatch(token)) and (token.isupper() or token.islower() or
+                                                  not any(c.isalpha() for c in token))
+
+
+def normalizeKey(value):
+    """The won key as the farm keeps it: spaces collapsed, Steam keys in
+    capitals, links and any other code exactly as pasted (a gift link or a
+    case-sensitive code breaks when uppercased)."""
+    text = ' '.join(str(value or '').split())
+    out, last = [], 0
+    for link in LINK.finditer(text):
+        out.append(upperKeys(text[last:link.start()]))
+        out.append(link.group(0))
+        last = link.end()
+    out.append(upperKeys(text[last:]))
+    return ''.join(out)
+
+
+def upperKeys(text):
+    return STEAM_KEY.sub(lambda m: m.group(0).upper() if isSteamKey(m.group(0)) else m.group(0),
+                         text)
+
+
+def steamKeys(value):
+    """What goes to ASF, one key per request: every Steam key in the text (a
+    bundle comes as several), else the whole text as one code, unless it is
+    nothing but links, which only open in a browser."""
+    text = normalizeKey(value)
+    rest = LINK.sub(' ', text)
+    keys = [m.group(0) for m in STEAM_KEY.finditer(rest) if isSteamKey(m.group(0))]
+    if keys:
+        return list(dict.fromkeys(keys))
+    rest = ' '.join(rest.split())
+    return [rest] if rest else []
 
 
 def localPassword(path=LOCAL_CONFIG):
@@ -130,6 +175,23 @@ class ASF:
         kind, words = outcome(answer)
         log.info(f"ASF: ключ для {bot}: {words}")
         return kind, words
+
+    # [(kind, words)] for each key, one request per key: ASF answers a list
+    # only once every key in it is done, and a rate limit on one would hold
+    # back the rest. After a 'retry' the rest is not sent: Steam asked to wait
+    # or the bot is away, so they would only fail the same way.
+    def redeemEach(self, keys, bot=None):
+        found = []
+        for key in keys:
+            if found and found[-1][0] == 'retry':
+                found.append(found[-1])
+                continue
+            try:
+                found.append(self.redeem(key, bot=bot))
+            except ValueError as error:
+                # ASF down, timed out or without a bot online: try later.
+                found.append(('retry', str(error)))
+        return found
 
     # {('app'|'sub', id): (kind, words)} over every bot, or over the named
     # ones: ASF takes several names joined by commas.

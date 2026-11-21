@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 from steamgiftbot import logging_setup, notify
 from steamgiftbot import settings as sgSettings
 from steamgiftbot.farm import cards, rules, support
+from steamgiftbot.farm.asf import normalizeKey, steamKeys
 from steamgiftbot.farm.base import (HISTORY_LENGTH, actingFor, applySettings, field, grouped,
                                     publicValues)
 
@@ -72,6 +73,11 @@ FARM_LINE = re.compile(r'^\[(\w+) (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)[,.]\d+ '
 
 # What the user has done with a key they won.
 WIN_STATUSES = ('', 'received', 'activated')
+
+# A key Steam or ASF could not take right now is tried again this often, at
+# most this many times (Steam's limit on activations lasts about an hour).
+REDEEM_EVERY = 1800
+REDEEM_TRIES = 6
 
 log = logging.getLogger('botfarm')
 
@@ -469,6 +475,9 @@ class FarmManager:
         self.translations = {}
         self.startedAt  = time.time()
         self.clockStop  = threading.Event()
+        # One activation at a time: a retry by the clock and a click in the
+        # panel must not send the same key twice.
+        self.redeemLock = threading.Lock()
 
         from steamgiftbot.farm.gog import GOGPlatform
         from steamgiftbot.farm.indiegala import IndieGalaPlatform
@@ -819,34 +828,118 @@ class FarmManager:
 
     # ---- won keys --------------------------------------------------------------
 
+    # The key as pasted: Steam keys in capitals, a gift link or another
+    # shop's code untouched (see asf.normalizeKey).
     def setWinKey(self, key, moment, name, value):
-        value = ' '.join(str(value or '').split()).upper()
-        if not self.state.updateWin(key, moment, name, cdkey=value):
-            raise ValueError("выигрыш не найден")
-        if value and self.farmSettings().get('auto_redeem'):
-            self.redeemWin(key, moment, name)
-        return value
-
-    def redeemWin(self, key, moment, name):
+        value = normalizeKey(value)
         win = self.state.findWin(key, moment, name)
         if win is None:
             raise ValueError("выигрыш не найден")
-        if not win.get('cdkey'):
-            raise ValueError("у этого выигрыша нет ключа: вставьте его в таблице")
-        kind, words = self.asf.redeem(win['cdkey'], bot=self.keyBotFor(key))
-        changes = {'redeem': words}
-        if kind in ('ok', 'owned'):
-            changes['status'] = 'activated'
-        self.state.updateWin(key, moment, name, **changes)
-        title = self.platforms[key].title if key in self.platforms else key
-        icon = {'ok': '✅', 'owned': '✅', 'retry': '⏳'}.get(kind, '⚠️')
-        heading = {'ok': 'КЛЮЧ АКТИВИРОВАН', 'owned': 'КЛЮЧ: ИГРА УЖЕ ЕСТЬ',
-                   'retry': 'КЛЮЧ: ПОВТОРИМ ПОЗЖЕ'}.get(kind, 'КЛЮЧ НЕ ПОДОШЁЛ')
-        self.notify(card=cards.Card(icon, heading, title, key, name, lines=[words],
-                                    buttons=[("Выигрыши", self.panelLink('/wins'))]))
-        if kind in ('ok', 'owned'):
+        keys = steamKeys(value)
+        # Keys of the old text that already went through stay done; a pending
+        # retry was for the old text.
+        kept = [item for item in win.get('redeemed') or [] if item in keys]
+        self.state.updateWin(key, moment, name, cdkey=value, redeemed=kept, redeemRetry=None)
+        if keys and self.farmSettings().get('auto_redeem'):
+            self.redeemWin(key, moment, name)
+        return value
+
+    # Sends every key of a win to ASF, one request per key, and says how it
+    # went overall. A 'retry' (Steam's rate limit, ASF or its bot away) is
+    # kept on the win and tried again by the clock (redeemTick); those
+    # automatic tries tell Telegram only once they come to an end.
+    def redeemWin(self, key, moment, name, auto=False):
+        with self.redeemLock:
+            win = self.state.findWin(key, moment, name)
+            if win is None:
+                raise ValueError("выигрыш не найден")
+            if not win.get('cdkey'):
+                raise ValueError("у этого выигрыша нет ключа: вставьте его в таблице")
+            keys = steamKeys(win['cdkey'])
+            if not keys:
+                raise ValueError("это ссылка на подарок, а не ключ Steam: "
+                                 "откройте её в браузере")
+            done = [item for item in win.get('redeemed') or [] if item in keys]
+            pending = win.get('redeemRetry') or {}
+            if auto:
+                todo = [item for item in pending.get('keys') or []
+                        if item in keys and item not in done]
+            else:
+                # A click sends what has not gone through yet, or everything
+                # again when it all has.
+                todo = [item for item in keys if item not in done] or keys
+            if not todo:
+                self.state.updateWin(key, moment, name, redeemRetry=None)
+                return 'owned', win.get('redeem') or ''
+            results = self.asf.redeemEach(todo, bot=self.keyBotFor(key))
+            done += [item for item, (kind, _words) in zip(todo, results, strict=True)
+                     if kind in ('ok', 'owned') and item not in done]
+            retry = [item for item, (kind, _words) in zip(todo, results, strict=True)
+                     if kind == 'retry']
+            kind, words = self.combineRedeem(keys, todo, results)
+            finished = all(item in done for item in keys)
+            changes = {'redeem': words, 'redeemed': done, 'redeemRetry': None}
+            if finished:
+                changes['status'] = 'activated'
+            # Automatic tries are counted; a click starts the count again.
+            tries = (pending.get('tries') or 0) + 1 if auto else 0
+            givenUp = bool(retry) and tries >= REDEEM_TRIES
+            if retry and not givenUp:
+                nextTry = time.time() + REDEEM_EVERY
+                changes['redeemRetry'] = {'keys': retry, 'tries': tries, 'nextTry': nextTry}
+                at = datetime.fromtimestamp(nextTry, self.zone()).strftime('%H:%M')
+                changes['redeem'] = f"{words} · повторю в {at}"
+            elif givenUp:
+                changes['redeem'] = f"{words} · повторы не помогли, активируйте вручную"
+            self.state.updateWin(key, moment, name, **changes)
+        # An automatic try that will be made again stays quiet; the last one
+        # is told as a failure, since nothing more happens on its own.
+        if not (auto and retry and not givenUp):
+            title = self.platforms[key].title if key in self.platforms else key
+            icon = {'ok': '✅', 'owned': '✅', 'retry': '⏳'}.get(
+                'fail' if givenUp else kind, '⚠️')
+            heading = {'ok': 'КЛЮЧ АКТИВИРОВАН', 'owned': 'КЛЮЧ: ИГРА УЖЕ ЕСТЬ',
+                       'retry': 'КЛЮЧ: ПОВТОРИМ ПОЗЖЕ'}.get('fail' if givenUp else kind,
+                                                        'КЛЮЧ НЕ ПОДОШЁЛ')
+            self.notify(card=cards.Card(icon, heading, title, key, name, lines=[words],
+                                        buttons=[("Выигрыши", self.panelLink('/wins'))]))
+        if finished and key in self.platforms:
             self.platforms[key].onWinStatus(win, 'activated')
-        return kind, words
+        return kind, changes['redeem']
+
+    # (kind, words) over the keys of one try. One key, or every key with the
+    # same answer, reads as one; otherwise each key by its place in the win
+    # ('2/3: неверный ключ'), never by the key itself, which is secret.
+    @staticmethod
+    def combineRedeem(keys, todo, results):
+        kinds = [kind for kind, _words in results]
+        kind = next((wanted for wanted in ('retry', 'fail', 'ok') if wanted in kinds), 'owned')
+        said = [words for _kind, words in results]
+        if len(set(said)) == 1:
+            return kind, said[0]
+        return kind, '; '.join(f"{keys.index(item) + 1}/{len(keys)}: {words}"
+                               for item, (_kind, words) in zip(todo, results, strict=True))
+
+    # Wins whose keys wait for another go (see redeemWin), once they are due.
+    # The clock calls it every minute; each win is tried at most every
+    # REDEEM_EVERY seconds. Returns how many were tried.
+    def redeemTick(self, now=None):
+        now = now or time.time()
+        due = []
+        for key in list(self.platforms):
+            for win in self.state.site(key).get('wins', []):
+                pending = win.get('redeemRetry')
+                if pending and (pending.get('nextTry') or 0) <= now:
+                    due.append((key, win['time'], win['name']))
+        for key, moment, name in due:
+            try:
+                self.redeemWin(key, moment, name, auto=True)
+            except Exception as error:
+                # The key was taken out meanwhile, or the try broke: drop it
+                # rather than fail the same way every minute.
+                log.warning(f"Повтор активации «{name}» не удался: {error}")
+                self.state.updateWin(key, moment, name, redeemRetry=None)
+        return len(due)
 
     # ---- daily report ----------------------------------------------------------
 
@@ -905,6 +998,10 @@ class FarmManager:
                     self.reportTick()
                 except Exception as error:
                     log.warning(f"Сводка не отправлена: {error}")
+                try:
+                    self.redeemTick()
+                except Exception as error:
+                    log.warning(f"Повтор активации ключей не удался: {error}")
         self.clock = threading.Thread(target=tick, name='farm-clock', daemon=True)
         self.clock.start()
 
