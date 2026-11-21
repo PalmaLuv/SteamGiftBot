@@ -12,7 +12,7 @@ from pathlib import Path
 from steamgiftbot import settings as sgSettings
 from steamgiftbot.console import startLogFile
 from steamgiftbot.logging_setup import LOG_PATTERNS, RedactFilter, privateLogHandler, tightenFiles
-from steamgiftbot.farm.manager import FarmManager
+from steamgiftbot.farm.manager import DataFileError, FarmManager
 from steamgiftbot.farm.web import serve
 
 BIND_RETRY_SECONDS = 15
@@ -48,6 +48,59 @@ def protectFiles(dataDir):
             + tightenFiles(dataDir / 'debug', ('*.html',)))
 
 
+# Holds the farm's log lines until configureLogging has given them somewhere
+# to go. FarmManager reads farm.json and the history before that, and its
+# warning about a broken file used to reach only the journal (through
+# logging.lastResort), never log/botfarm.log or the panel.
+class EarlyLog(logging.Handler):
+    def __init__(self):
+        super().__init__(logging.INFO)
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+def holdLog():
+    early = EarlyLog()
+    farmLogger = logging.getLogger('botfarm')
+    farmLogger.setLevel(logging.INFO)
+    farmLogger.addHandler(early)
+    return early
+
+
+# The held lines, in order, to the handlers there are now (stderr when none).
+def releaseLog(early):
+    farmLogger = logging.getLogger('botfarm')
+    farmLogger.removeHandler(early)
+    for record in early.records:
+        if farmLogger.handlers:
+            farmLogger.handle(record)
+        elif record.levelno >= logging.lastResort.level:
+            logging.lastResort.handle(record)
+    early.records = []
+
+
+# The farm with its log in place. restoreLogs runs before this run writes
+# anything, so the panel's log starts with the tail of the previous runs,
+# and only then come the lines held while the files were read.
+def openFarm(dataDir, config):
+    early = holdLog()
+    try:
+        manager = FarmManager(dataDir=dataDir, configPath=config)
+    except DataFileError:
+        try:
+            configureLogging(Path(dataDir or sgSettings.BASE_DIR))
+        except OSError:
+            pass
+        releaseLog(early)
+        raise
+    manager.restoreLogs()
+    configureLogging(manager.dataDir)
+    releaseLog(early)
+    return manager
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog='botfarm', description="Ферма раздач с веб-панелью")
     parser.add_argument('--host', default=os.environ.get('BOTFARM_HOST', '127.0.0.1'),
@@ -69,19 +122,28 @@ def main(argv=None):
     if dataDir is not None:
         dataDir.mkdir(parents=True, exist_ok=True)
     config = args.config or (dataDir / 'config.ini' if dataDir else sgSettings.DEFAULT_CONFIG_PATH)
-    manager = FarmManager(dataDir=dataDir, configPath=config)
+    log = logging.getLogger('botfarm')
 
     if args.set_password:
+        early = holdLog()
+        try:
+            manager = FarmManager(dataDir=dataDir, configPath=config)
+        except DataFileError as error:
+            print(error, file=sys.stderr)
+            return 1
+        finally:
+            releaseLog(early)
         password = os.environ.get('BOTFARM_PASSWORD') or getpass.getpass("Новый пароль панели: ")
         manager.setPassword(password)
         print("Пароль сохранён.")
         return 0
 
-    # Before this run writes anything: the panel's log starts with the tail of
-    # the previous runs instead of empty.
-    manager.restoreLogs()
-    configureLogging(manager.dataDir)
-    log = logging.getLogger('botfarm')
+    try:
+        manager = openFarm(dataDir, config)
+    except DataFileError as error:
+        # Better not to start than to start empty and save over the data.
+        log.error(str(error))
+        return 1
     protectFiles(manager.dataDir)
     manager.pruneCliLogs()
 

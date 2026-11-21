@@ -126,20 +126,131 @@ FARM_FIELDS = (
 CONFIG_FIELDS = ('telegram_token', 'telegram_chat', 'telegram_enabled')
 
 
+def backupPath(path):
+    path = Path(path)
+    return path.with_suffix(path.suffix + '.bak')
+
+
+# A power cut right after os.replace used to leave an empty or half-written
+# farm.json behind (the data was still in the page cache), and the farm then
+# started from nothing. Now the new text is on disk before it takes the
+# name, the rename itself is on disk after the directory is synced, and the
+# previous file stays as <name>.bak for readJSON to fall back on.
 def writePrivate(path, data):
     path = Path(path)
+    text = json.dumps(data, indent=2, ensure_ascii=False)
     temporary = path.with_suffix(path.suffix + '.tmp')
-    temporary.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
     if os.name != 'nt':
         os.chmod(temporary, 0o600)
+    if path.exists():
+        keepBackup(path)
     os.replace(temporary, path)
+    syncDirectory(path.parent)
 
 
-def readJSON(path, default):
+# The current file becomes <name>.bak without a moment when neither exists:
+# a hard link to it, renamed over the old backup. Where links are not
+# supported, a copy.
+def keepBackup(path):
+    backup = backupPath(path)
+    staging = path.with_suffix(path.suffix + '.bak.tmp')
     try:
-        return json.loads(Path(path).read_text(encoding='utf-8'))
-    except (OSError, ValueError):
+        staging.unlink(missing_ok=True)
+        os.link(path, staging)
+    except OSError:
+        shutil.copyfile(path, staging)
+    os.replace(staging, backup)
+
+
+def syncDirectory(directory):
+    if os.name == 'nt':
+        return
+    try:
+        descriptor = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    except OSError:
+        pass
+    finally:
+        os.close(descriptor)
+
+
+def parseJSON(path, default):
+    data = json.loads(Path(path).read_text(encoding='utf-8'))
+    # A file holding a list or null is as broken as half a file.
+    if not isinstance(data, type(default)):
+        raise ValueError(f"неверный тип данных: {type(data).__name__}")
+    return data
+
+
+class DataFileError(RuntimeError):
+    """A data file is there but cannot be read (no permission, a disk error)."""
+
+
+# <name>.corrupt-<date>-<time>-<ms>, and never over an earlier one: two quick
+# restarts within one second used to put the second broken file over the
+# first.
+def corruptPath(path):
+    moment = time.time()
+    stamp = (time.strftime('%Y%m%d-%H%M%S', time.localtime(moment))
+             + f"-{int(moment * 1000) % 1000:03d}")
+    aside = path.with_name(f"{path.name}.corrupt-{stamp}")
+    number = 1
+    while aside.exists():
+        number += 1
+        aside = path.with_name(f"{path.name}.corrupt-{stamp}-{number}")
+    return aside
+
+
+# A broken file used to be read as empty, and the next save wrote the empty
+# data over it: every setting and the whole history gone. Now the broken
+# file is put aside as <name>.corrupt-<time> and the last good copy
+# (<name>.bak) is used instead.
+def readJSON(path, default):
+    path = Path(path)
+    try:
+        return parseJSON(path, default)
+    except FileNotFoundError:
         return copy.deepcopy(default)
+    except OSError as error:
+        # The file is there and may be fine (chmod, a disk that came back):
+        # starting empty would move it to .bak on the first save and write
+        # the empty data over that on the second.
+        raise DataFileError(f"Не удалось прочитать {path}: {error}. Ферма не запущена, "
+                            "чтобы не затереть данные; исправьте доступ к файлу и "
+                            "запустите снова.") from error
+    except ValueError as error:
+        problem = error
+    aside = corruptPath(path)
+    try:
+        os.replace(path, aside)
+    except OSError as error:
+        log.warning(f"Не удалось отложить повреждённый файл: {path}: {error}")
+    backup = backupPath(path)
+    try:
+        data = parseJSON(backup, default)
+    except (OSError, ValueError):
+        log.warning("Повреждённый файл отложен, резервной копии нет, ферма начнёт с пустого: "
+                    f"{path} → {aside.name} ({problem})")
+        return copy.deepcopy(default)
+    log.warning("Повреждённый файл отложен, данные взяты из резервной копии: "
+                f"{path} → {aside.name}, {backup.name} ({problem})")
+    # Back under its own name at once, or a restart before the next save
+    # would find no file and start empty. (When the broken file could not be
+    # moved, saving would only make it the backup.)
+    if not path.exists():
+        try:
+            writePrivate(path, data)
+        except OSError as error:
+            log.warning(f"Не удалось сохранить {path}: {error}")
+    return data
 
 
 def hashPassword(password, salt=None):
@@ -194,15 +305,19 @@ class FarmState:
     def daily(self, key, day):
         return self.site(key).get('daily', {}).get(day) or {'e': 0, 's': 0, 'w': 0}
 
+    # Under the lock: a site's first look from the panel and its first entry
+    # could otherwise each make an empty record and one of them be lost.
     def site(self, key):
-        return self.data.setdefault(key, {'entries': [], 'wins': [], 'seen': [], 'flags': {},
-                                          'totalEntered': 0, 'totalSpent': 0})
+        with self.lock:
+            return self.data.setdefault(key, {'entries': [], 'wins': [], 'seen': [],
+                                              'flags': {}, 'totalEntered': 0, 'totalSpent': 0})
 
     def save(self):
-        try:
-            writePrivate(self.path, self.data)
-        except OSError as error:
-            log.warning(f"Не удалось сохранить {self.path}: {error}")
+        with self.lock:
+            try:
+                writePrivate(self.path, self.data)
+            except OSError as error:
+                log.warning(f"Не удалось сохранить {self.path}: {error}")
 
     def addEntry(self, key, entry):
         with self.lock:
@@ -258,7 +373,8 @@ class FarmState:
         return [win for win in self.site(key).get('wins', []) if not win.get('status')]
 
     def seen(self, key):
-        return self.seenSets.setdefault(key, set(self.site(key).get('seen', [])))
+        with self.lock:
+            return self.seenSets.setdefault(key, set(self.site(key).get('seen', [])))
 
     def markSeen(self, key, ident):
         with self.lock:
@@ -327,7 +443,16 @@ class FarmManager:
         self.dataDir    = Path(dataDir or sgSettings.BASE_DIR)
         self.configPath = Path(configPath or sgSettings.DEFAULT_CONFIG_PATH)
         self.farmPath   = self.dataDir / FARM_FILE
-        self.lock       = threading.Lock()
+        # Every change to self.farm happens under this lock, a whole
+        # read-modify-write at a time: the panel, Telegram and the sites'
+        # threads change it at once, and two blacklist additions made at the
+        # same moment used to keep only one. Reentrant, so a change can call
+        # another (addToList -> updateSettings -> savePlatformSettings).
+        self.lock       = threading.RLock()
+        # Keeps the saves in order; the newest copy wins.
+        self.writeLock  = threading.Lock()
+        self.farmVersion = 0
+        self.writtenVersion = 0
         self.accountsLock = threading.Lock()
         self.farm       = readJSON(self.farmPath, {})
         self.farm.setdefault('web', {})
@@ -399,19 +524,20 @@ class FarmManager:
         return values
 
     def updateFarmSettings(self, incoming):
-        values = applySettings(FARM_FIELDS, self.farmSettings(), incoming)
-        if values['report_hour'] is not None and values['report_hour'] > 23:
-            raise ValueError("Час отправки сводки: от 0 до 23")
-        config = self.loadConfig()
-        if config is not None and any(name in incoming for name in CONFIG_FIELDS):
-            for name in CONFIG_FIELDS:
-                value = values[name]
-                setattr(config, name, sgSettings.CONVERTERS[name](value)
-                        if name != 'telegram_enabled' else bool(value))
-            sgSettings.save(config, self.configPath)
-        self.farm['settings'] = {key: value for key, value in values.items()
-                                 if key not in CONFIG_FIELDS}
-        self.saveFarm()
+        with self.lock:
+            values = applySettings(FARM_FIELDS, self.farmSettings(), incoming)
+            if values['report_hour'] is not None and values['report_hour'] > 23:
+                raise ValueError("Час отправки сводки: от 0 до 23")
+            config = self.loadConfig()
+            if config is not None and any(name in incoming for name in CONFIG_FIELDS):
+                for name in CONFIG_FIELDS:
+                    value = values[name]
+                    setattr(config, name, sgSettings.CONVERTERS[name](value)
+                            if name != 'telegram_enabled' else bool(value))
+                sgSettings.save(config, self.configPath)
+            self.farm['settings'] = {key: value for key, value in values.items()
+                                     if key not in CONFIG_FIELDS}
+            self.saveFarm()
         self.steam.cache.clear()
         return values
 
@@ -456,8 +582,10 @@ class FarmManager:
         return 'Steam: ' + ', '.join(parts)
 
     def logoutEverywhere(self):
-        self.farm['web']['secret'] = secrets.token_hex(32)
-        self.saveFarm()
+        with self.lock:
+            self.farm['web']['secret'] = secrets.token_hex(32)
+            self.farm['web'].pop('revoked', None)
+            self.saveFarm()
 
     def zone(self):
         try:
@@ -596,16 +724,17 @@ class FarmManager:
         return {name: stored.get(name, default) for name, (default, _check) in UI_FIELDS.items()}
 
     def updateUi(self, incoming):
-        values = self.uiSettings()
-        for name, raw in (incoming or {}).items():
-            if name not in UI_FIELDS:
-                continue
-            _default, check = UI_FIELDS[name]
-            if not check(raw):
-                raise ValueError(f"оформление: недопустимое значение {name}")
-            values[name] = raw
-        self.farm['ui'] = values
-        self.saveFarm()
+        with self.lock:
+            values = self.uiSettings()
+            for name, raw in (incoming or {}).items():
+                if name not in UI_FIELDS:
+                    continue
+                _default, check = UI_FIELDS[name]
+                if not check(raw):
+                    raise ValueError(f"оформление: недопустимое значение {name}")
+                values[name] = raw
+            self.farm['ui'] = values
+            self.saveFarm()
         return values
 
     # ---- the panel's overview ------------------------------------------------
@@ -779,9 +908,21 @@ class FarmManager:
         self.clock = threading.Thread(target=tick, name='farm-clock', daemon=True)
         self.clock.start()
 
+    # A deep copy taken under the lock is what gets written, so a change made
+    # by another thread meanwhile cannot break the dump ('dictionary changed
+    # size during iteration') or end up half in the file. The slow part, the
+    # write and fsync, runs outside the lock; a copy older than the one
+    # already on disk is dropped.
     def saveFarm(self):
         with self.lock:
-            writePrivate(self.farmPath, self.farm)
+            self.farmVersion += 1
+            version = self.farmVersion
+            snapshot = copy.deepcopy(self.farm)
+        with self.writeLock:
+            if version <= self.writtenVersion:
+                return
+            writePrivate(self.farmPath, snapshot)
+            self.writtenVersion = version
 
     # ---- several accounts of one site ---------------------------------------
 
@@ -825,24 +966,26 @@ class FarmManager:
         with self.accountsLock:
             if any(item['name'].lower() == name.lower() for item in self.farm['profiles']):
                 raise ValueError(f"учётка «{name}» уже есть")
-            seq = self.farm.get('profileSeq', 1) + 1
-            self.farm['profileSeq'] = seq
-            item = {'id': f'p{seq}', 'name': name, 'asf_bot': str(asfBot or '').strip()}
-            self.farm['profiles'].append(item)
-            self.saveFarm()
+            with self.lock:
+                seq = self.farm.get('profileSeq', 1) + 1
+                self.farm['profileSeq'] = seq
+                item = {'id': f'p{seq}', 'name': name, 'asf_bot': str(asfBot or '').strip()}
+                self.farm['profiles'].append(item)
+                self.saveFarm()
         return item
 
     def updateProfile(self, ident, name=None, asfBot=None):
-        item = self.profile(ident)
-        if name is not None:
-            name = self.cleanName(name)
-            if any(other is not item and other['name'].lower() == name.lower()
-                   for other in self.farm['profiles']):
-                raise ValueError(f"учётка «{name}» уже есть")
-            item['name'] = name
-        if asfBot is not None:
-            item['asf_bot'] = str(asfBot or '').strip()
-        self.saveFarm()
+        with self.lock:
+            item = self.profile(ident)
+            if name is not None:
+                name = self.cleanName(name)
+                if any(other is not item and other['name'].lower() == name.lower()
+                       for other in self.farm['profiles']):
+                    raise ValueError(f"учётка «{name}» уже есть")
+                item['name'] = name
+            if asfBot is not None:
+                item['asf_bot'] = str(asfBot or '').strip()
+            self.saveFarm()
         self.retitle()
         return item
 
@@ -853,8 +996,10 @@ class FarmManager:
         item = self.profile(ident)
         for key in [key for key in self.platforms if self.profileOf(key) == ident]:
             self.removeAccount(key)
-        self.farm['profiles'] = [other for other in self.farm['profiles'] if other is not item]
-        self.saveFarm()
+        with self.lock:
+            self.farm['profiles'] = [other for other in self.farm['profiles']
+                                     if other is not item]
+            self.saveFarm()
         self.retitle()
 
     def publicProfiles(self):
@@ -902,8 +1047,7 @@ class FarmManager:
     def rememberAccount(self, platform, found):
         account = str((found or {}).get('account') or '').strip()
         if account:
-            self.platformEntry(platform.key)['account'] = account
-            self.saveFarm()
+            self.updatePlatformEntry(platform.key, account=account)
             self.retitle()
 
     # Checks the pasted cookie on a new instance and keeps it only if the site
@@ -921,9 +1065,8 @@ class FarmManager:
             found = self.checkAccount(primary, values)
             primary.updateSettings({name: values[name] for name in primary.connectFields
                                     if name in values})
-            self.platformEntry(kind)['connected'] = True
+            self.updatePlatformEntry(kind, connected=True)
             self.rememberAccount(primary, found)
-            self.saveFarm()
             self.retitle()
             return primary, found
         for key, other in self.platforms.items():
@@ -933,17 +1076,19 @@ class FarmManager:
         with self.accountsLock:
             used = [platform.number for platform in self.platforms.values()
                     if platform.kind == kind]
-            number = max(used + [self.farm.setdefault('accountSeq', {}).get(kind, 1)]) + 1
+            number = max(used + [self.farm.get('accountSeq', {}).get(kind, 1)]) + 1
             key = f"{kind}-{number}"
             platform = cls(self, key=key)
+            # The site is asked outside self.lock: it can take seconds.
             found = self.checkAccount(platform, values)
-            self.farm['accountSeq'][kind] = number
-            self.farm['accounts'].append({'key': key, 'kind': kind})
-            entry = self.platformEntry(key)
-            entry['connected'] = True
-            entry['profile'] = profile
-            if found.get('account'):
-                entry['account'] = str(found['account']).strip()
+            with self.lock:
+                self.farm.setdefault('accountSeq', {})[kind] = number
+                self.farm['accounts'].append({'key': key, 'kind': kind})
+                entry = self.platformEntry(key)
+                entry['connected'] = True
+                entry['profile'] = profile
+                if found.get('account'):
+                    entry['account'] = str(found['account']).strip()
             self.platforms[key] = platform
             self.sortPlatforms()
             platform.updateSettings({name: values[name] for name in platform.connectFields
@@ -963,17 +1108,17 @@ class FarmManager:
         platform.forget()
         with self.accountsLock:
             self.platforms.pop(key, None)
-            self.farm['accounts'] = [item for item in self.farm['accounts']
-                                     if item.get('key') != key]
-            self.farm['platforms'].pop(key, None)
-            self.saveFarm()
+            with self.lock:
+                self.farm['accounts'] = [item for item in self.farm['accounts']
+                                         if item.get('key') != key]
+                self.farm['platforms'].pop(key, None)
+                self.saveFarm()
             self.retitle()
         shutil.rmtree(self.accountDir(key), ignore_errors=True)
 
     def renameAccount(self, key, label):
         label = ' '.join(str(label or '').split())[:40]
-        self.platformEntry(key)['label'] = label
-        self.saveFarm()
+        self.updatePlatformEntry(key, label=label)
         self.retitle()
         return self.platforms[key].title
 
@@ -989,27 +1134,33 @@ class FarmManager:
             return ''
 
     def setKeyBot(self, key, bot):
-        self.platformEntry(key)['asf_bot'] = str(bot or '').strip()
-        self.saveFarm()
+        self.updatePlatformEntry(key, asf_bot=str(bot or '').strip())
 
     # ---- per site settings -------------------------------------------------
 
+    # The site's record in farm.json, made on first use. Read it freely; to
+    # change it, use updatePlatformEntry (or hold self.lock).
     def platformEntry(self, key):
-        return self.farm['platforms'].setdefault(key, {'autostart': False, 'settings': {}})
+        with self.lock:
+            return self.farm['platforms'].setdefault(key, {'autostart': False, 'settings': {}})
+
+    def updatePlatformEntry(self, key, **changes):
+        with self.lock:
+            self.platformEntry(key).update(changes)
+            self.saveFarm()
 
     def platformSettings(self, key):
-        return dict(self.platformEntry(key).get('settings', {}))
+        with self.lock:
+            return copy.deepcopy(self.platformEntry(key).get('settings', {}))
 
     def savePlatformSettings(self, key, values):
-        self.platformEntry(key)['settings'] = values
-        self.saveFarm()
+        self.updatePlatformEntry(key, settings=values)
 
     def autostart(self, key):
         return bool(self.platformEntry(key).get('autostart'))
 
     def setAutostart(self, key, value):
-        self.platformEntry(key)['autostart'] = bool(value)
-        self.saveFarm()
+        self.updatePlatformEntry(key, autostart=bool(value))
 
     # ---- web panel password ------------------------------------------------
 
@@ -1019,19 +1170,39 @@ class FarmManager:
     def setPassword(self, password):
         if len(password) < 6:
             raise ValueError("пароль короче 6 символов")
-        self.farm['web']['password'] = hashPassword(password)
-        # New password, new sessions: everyone signed in before is signed out.
-        self.farm['web']['secret'] = secrets.token_hex(32)
-        self.saveFarm()
+        stored = hashPassword(password)
+        with self.lock:
+            self.farm['web']['password'] = stored
+            # New password, new sessions: everyone signed in before is signed out.
+            self.farm['web']['secret'] = secrets.token_hex(32)
+            self.farm['web'].pop('revoked', None)
+            self.saveFarm()
 
     def checkPassword(self, password):
         return checkPassword(password, self.farm['web'].get('password'))
 
-    def sessionSecret(self):
-        if not self.farm['web'].get('secret'):
-            self.farm['web']['secret'] = secrets.token_hex(32)
+    # Sessions signed out with 'Выйти': signature -> expiry. The cookie was
+    # only dropped by the browser before, so a copy of it (another tab, a
+    # stolen one) stayed good for 30 days. Kept until the session would have
+    # expired anyway; a new secret makes them all moot.
+    def revokedSessions(self):
+        return self.farm['web'].get('revoked') or {}
+
+    def revokeSession(self, signature, expires):
+        with self.lock:
+            now = time.time()
+            revoked = {name: until for name, until in self.revokedSessions().items()
+                       if until > now}
+            revoked[signature] = int(expires)
+            self.farm['web']['revoked'] = revoked
             self.saveFarm()
-        return self.farm['web']['secret']
+
+    def sessionSecret(self):
+        with self.lock:
+            if not self.farm['web'].get('secret'):
+                self.farm['web']['secret'] = secrets.token_hex(32)
+                self.saveFarm()
+            return self.farm['web']['secret']
 
     # ---- running -----------------------------------------------------------
 

@@ -88,9 +88,7 @@ class SteamFreePlatform(Platform):
 
     def disconnect(self):
         self.stop(wait=10)
-        self.manager.platformEntry(self.key)['connected'] = False
-        self.manager.setAutostart(self.key, False)
-        self.manager.saveFarm()
+        self.manager.updatePlatformEntry(self.key, connected=False, autostart=False)
 
     # ---- the work ---------------------------------------------------------------
 

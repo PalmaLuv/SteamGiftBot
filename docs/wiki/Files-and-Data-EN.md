@@ -8,6 +8,8 @@ All files live in the project folder, or, if the farm was started with
 | `farm.json` | the panel password hash, the session signing key, the settings of the farm and of every site (cookies included), autostart | no |
 | `config.ini` | SteamGifts and Telegram settings, shared with the command-line bot | no |
 | `botfarm-state.json` | entry and win history, per-day counters, giveaways already seen, internal flags | no |
+| `farm.json.bak`, `botfarm-state.json.bak` | the previous good version of the file, in case the current one turns out broken; `farm.json.bak` holds the same secrets as `farm.json` | no |
+| `farm.json.corrupt-<time>`, `botfarm-state.json.corrupt-<time>` | a broken file found at start: the farm puts it aside instead of writing over it | no |
 | `steamgiftbot-state.json` | which SteamGifts wins have already been reported | no |
 | `accounts/<key>/` | files of SteamGifts cards in other [profiles](Multiple-Profiles-EN.md): their own `config.ini` with the cookie and their own `steamgiftbot-state.json` | no |
 | `log/botfarm.log` | the farm log, up to 5 MB, plus three older files | no |
@@ -62,6 +64,25 @@ the last summary sent.
 The file is rewritten in full after every change, atomically: it is first
 written to a temporary file, which then replaces the old one. So even a sudden
 power-off will not leave it half-written.
+
+## The backup copy and broken files
+
+`farm.json` and `botfarm-state.json` reach the disk before they replace the
+old file, and the old one stays next to them as `<name>.bak`.
+
+If a file turns out broken at start (cut short, not JSON), the farm renames
+it to `<name>.corrupt-<date>-<time>-<ms>`, takes the data from `<name>.bak`
+and writes a warning to `log/botfarm.log`. Without a backup copy the farm
+starts with an empty file, but the broken one stays next to it. The farm
+never deletes the files it put aside: once you are done with them, delete
+them yourself.
+
+If a file is there but cannot be read (no permission, a disk error), the farm
+does not start and says why: starting empty would, two saves later, write
+over both the file and its backup copy.
+
+`*.bak` and `*.corrupt-*` are in `.gitignore` and `.dockerignore`: they hold
+the same password, session key and cookies.
 
 ## Moving to another computer
 

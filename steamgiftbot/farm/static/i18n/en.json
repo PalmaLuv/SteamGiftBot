@@ -987,5 +987,13 @@
  "Строку под выигрышами можно скрыть кнопкой «Скрыть», а напоминания в Telegram отключаются в «Настройки» → «О ферме»": "The line under wins hides with “Hide”, and Telegram reminders are turned off in “Settings” → “About the farm”",
  "Удалено старых логов бота командной строки": "Old command-line bot logs deleted",
  "старше": "older than",
- "дней": "days"
+ "дней": "days",
+ "Повреждённый файл отложен, резервной копии нет, ферма начнёт с пустого": "Damaged file set aside, there is no backup copy, the farm starts empty",
+ "Повреждённый файл отложен, данные взяты из резервной копии": "Damaged file set aside, the data was taken from the backup copy",
+ "внутренняя ошибка панели, подробности в log/botfarm.log": "internal panel error, details in log/botfarm.log",
+ "Не удалось отложить повреждённый файл": "Could not set the damaged file aside",
+ "неверная длина запроса": "invalid request length",
+ "неверный тип данных": "wrong data type",
+ "Ферма не запущена, чтобы не затереть данные; исправьте доступ к файлу и запустите снова": "The farm was not started so as not to overwrite the data; fix access to the file and start it again",
+ "Не удалось прочитать": "Could not read"
 }

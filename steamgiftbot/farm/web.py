@@ -1,8 +1,9 @@
 """The web panel: one page plus a small JSON API, on the standard library so
 the farm needs nothing beyond what the bot already installs.
 
-Signing in sets an HttpOnly, SameSite=Strict cookie holding an expiry and an
-HMAC of it; changing the password changes the key, which signs everyone out.
+Signing in sets an HttpOnly, SameSite=Strict cookie holding an expiry, a
+random id and an HMAC of both; changing the password changes the key, which
+signs everyone out, and signing out puts the cookie on a revoked list.
 Every POST must also carry X-Requested-With, which a plain cross-site form
 cannot send."""
 import hashlib
@@ -10,6 +11,7 @@ import hmac
 import json
 import logging
 import re
+import secrets
 import threading
 import time
 
@@ -25,6 +27,13 @@ from steamgiftbot.farm.manager import FARM_FIELDS
 
 COOKIE_NAME     = 'botfarm_session'
 SESSION_SECONDS = 30 * 86400
+# Longest a connection may sit silent: a client that sends half a request
+# and stops used to keep one of the panel's threads waiting forever.
+REQUEST_TIMEOUT = 30
+# Longest a whole request (its first line, headers and body) may take to
+# arrive. The timeout above is per recv: a client sending a byte every 29 s
+# never tripped it and kept a thread for as long as it liked.
+REQUEST_DEADLINE = 60
 STATIC_DIR      = Path(__file__).resolve().parent / 'static'
 
 log = logging.getLogger('botfarm')
@@ -45,31 +54,115 @@ STATIC_FILES = {
 }
 
 
+# '<expires>.<random id>.<signature>'. The id makes every sign-in its own
+# session, so signing out on one device revokes that cookie and no other.
 def makeToken(secret, expires=None):
     expires = int(expires or time.time() + SESSION_SECONDS)
-    signature = hmac.new(secret.encode(), str(expires).encode(), hashlib.sha256).hexdigest()
-    return f"{expires}.{signature}"
+    payload = f"{expires}.{secrets.token_hex(8)}"
+    signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}.{signature}"
 
 
-def tokenValid(secret, token):
+# (signed part, expires, signature) of a token, or None when it is not one.
+# Cookies from before the id ('<expires>.<signature>') still read.
+def tokenParts(token):
     try:
-        expires, signature = token.split('.', 1)
-        if int(expires) < time.time():
-            return False
+        payload, signature = token.rsplit('.', 1)
+        expires = int(payload.split('.', 1)[0])
     except (ValueError, AttributeError):
+        return None
+    return payload, expires, signature
+
+
+def tokenValid(secret, token, revoked=()):
+    parts = tokenParts(token)
+    if parts is None:
         return False
-    expected = hmac.new(secret.encode(), expires.encode(), hashlib.sha256).hexdigest()
+    payload, expires, signature = parts
+    if expires < time.time() or signature in revoked:
+        return False
+    expected = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature)
+
+
+class DeadlineReader:
+    """The request's rfile with one deadline over everything read from it:
+    each wait on the socket is cut to what is left of it. Reads go one recv
+    at a time (peek, read1), so a slow trickle cannot stretch a single call."""
+
+    def __init__(self, stream, connection, timeout, seconds):
+        self.stream = stream
+        self.connection = connection
+        self.timeout = timeout
+        self.seconds = seconds
+        self.restart()
+
+    def restart(self):
+        self.deadline = time.monotonic() + self.seconds
+
+    def wait(self, method, size):
+        left = self.deadline - time.monotonic()
+        if left <= 0:
+            # handle_one_request() drops the connection on this.
+            raise TimeoutError('request deadline')
+        self.connection.settimeout(min(self.timeout, left) if self.timeout else left)
+        try:
+            return method(size)
+        finally:
+            # Writing the answer keeps the usual timeout.
+            self.connection.settimeout(self.timeout)
+
+    def read(self, size=-1):
+        chunks, got = [], 0
+        while size is None or size < 0 or got < size:
+            want = 65536 if size is None or size < 0 else size - got
+            chunk = self.wait(self.stream.read1, want)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            got += len(chunk)
+        return b''.join(chunks)
+
+    def readline(self, limit=-1):
+        chunks, got = [], 0
+        while limit is None or limit < 0 or got < limit:
+            peeked = self.wait(self.stream.peek, 1)
+            if not peeked:
+                break
+            want = len(peeked) if limit is None or limit < 0 else min(len(peeked), limit - got)
+            end = peeked.find(b'\n', 0, want)
+            chunk = self.stream.read(end + 1 if end >= 0 else want)
+            chunks.append(chunk)
+            got += len(chunk)
+            if end >= 0:
+                break
+        return b''.join(chunks)
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
 
 
 class Handler(BaseHTTPRequestHandler):
     server_version = 'BotFarm'
     manager = None            # set by serve()
+    # Put on the socket by StreamRequestHandler.setup(); a timed out request
+    # is dropped by handle_one_request().
+    timeout = REQUEST_TIMEOUT
+    deadline = REQUEST_DEADLINE
     failedLogins = {}
     loginLock = threading.Lock()
 
     def log_message(self, format, *args):
         pass
+
+    def setup(self):
+        super().setup()
+        self.rfile = DeadlineReader(self.rfile, self.connection, self.timeout, self.deadline)
+
+    # Each request on the connection gets the whole deadline anew.
+    def handle_one_request(self):
+        self.rfile.restart()
+        return super().handle_one_request()
 
     # ---- plumbing ----------------------------------------------------------
 
@@ -94,8 +187,20 @@ class Handler(BaseHTTPRequestHandler):
     def error(self, message, status=HTTPStatus.BAD_REQUEST):
         self.json({'error': message}, status)
 
+    # A 500 without the exception's text: it can hold paths, addresses or a
+    # piece of a cookie. The whole trace goes to log/botfarm.log.
+    def internalError(self):
+        log.exception("Ошибка в веб-панели")
+        return self.error("внутренняя ошибка панели, подробности в log/botfarm.log",
+                          HTTPStatus.INTERNAL_SERVER_ERROR)
+
     def body(self):
-        length = int(self.headers.get('Content-Length') or 0)
+        raw = (self.headers.get('Content-Length') or '0').strip()
+        # int() takes '-5' and '1_0'; a negative length made read() wait
+        # for the client to close the connection.
+        if not (raw.isascii() and raw.isdigit()):
+            raise ValueError("неверная длина запроса")
+        length = int(raw)
         if length > 1_000_000:
             raise ValueError("слишком большой запрос")
         raw = self.rfile.read(length) if length else b'{}'
@@ -107,10 +212,23 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("ожидался JSON-объект")
         return data
 
-    def signedIn(self):
+    def sessionToken(self):
         cookie = SimpleCookie(self.headers.get('Cookie') or '')
         morsel = cookie.get(COOKIE_NAME)
-        return morsel is not None and tokenValid(self.manager.sessionSecret(), morsel.value)
+        return morsel.value if morsel is not None else None
+
+    def signedIn(self):
+        token = self.sessionToken()
+        return token is not None and tokenValid(self.manager.sessionSecret(), token,
+                                                self.manager.revokedSessions())
+
+    # Signing out revokes the cookie itself, not only the browser's copy.
+    def logout(self):
+        token = self.sessionToken()
+        if token is not None and tokenValid(self.manager.sessionSecret(), token):
+            _payload, expires, signature = tokenParts(token)
+            self.manager.revokeSession(signature, expires)
+        return self.json({'ok': True}, headers={'Set-Cookie': self.sessionCookie('', 0)})
 
     def sessionCookie(self, token, maxAge):
         return (f"{COOKIE_NAME}={token}; Path=/; Max-Age={maxAge}; HttpOnly; "
@@ -119,6 +237,14 @@ class Handler(BaseHTTPRequestHandler):
     # ---- GET ---------------------------------------------------------------
 
     def do_GET(self):
+        try:
+            return self.get()
+        except (ConnectionError, TimeoutError):
+            raise
+        except Exception:
+            return self.internalError()
+
+    def get(self):
         url = urlparse(self.path)
         if url.path in ('/', '/index.html'):
             page = (STATIC_DIR / 'index.html').read_bytes()
@@ -181,7 +307,11 @@ class Handler(BaseHTTPRequestHandler):
         if platform is None:
             return self.error('не найдено', HTTPStatus.NOT_FOUND)
         if found['action'] == 'logs':
-            after = int((query.get('after') or ['0'])[0] or 0)
+            # A broken 'after' shows the whole log rather than a 500.
+            try:
+                after = int((query.get('after') or ['0'])[0] or 0)
+            except ValueError:
+                after = 0
             return self.json({'lines': platform.logLines(after)})
         if found['action'] == 'settings':
             try:
@@ -216,8 +346,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == '/api/login':
             return self.login(data)
         if url.path == '/api/logout':
-            return self.json({'ok': True},
-                             headers={'Set-Cookie': self.sessionCookie('', 0)})
+            return self.logout()
         if not self.signedIn():
             return self.error('нужно войти', HTTPStatus.UNAUTHORIZED)
 
@@ -226,10 +355,10 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, PlatformError) as error:
             # PlatformError here is a broken config.ini: say so, do not 500.
             return self.error(str(error))
-        except Exception as error:
-            log.exception("Ошибка в веб-панели")
-            return self.error(f"{type(error).__name__}: {error}",
-                              HTTPStatus.INTERNAL_SERVER_ERROR)
+        except (ConnectionError, TimeoutError):
+            raise
+        except Exception:
+            return self.internalError()
 
     def login(self, data):
         address = self.client_address[0]
@@ -350,8 +479,7 @@ class Handler(BaseHTTPRequestHandler):
         if action == 'settings':
             platform.updateSettings(data.get('values') or {})
             if data.get('connect'):
-                manager.platformEntry(platform.key)['connected'] = True
-                manager.saveFarm()
+                manager.updatePlatformEntry(platform.key, connected=True)
                 manager.retitle()
             if 'autostart' in data:
                 manager.setAutostart(platform.key, bool(data['autostart']))

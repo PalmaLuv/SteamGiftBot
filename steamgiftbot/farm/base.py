@@ -536,10 +536,11 @@ class Platform:
     # Forgets the account: stops the site and drops the connection secrets.
     def disconnect(self):
         self.stop(wait=10)
-        stored = self.manager.platformSettings(self.key)
-        for name in self.connectFields:
-            stored.pop(name, None)
-        self.manager.savePlatformSettings(self.key, stored)
+        with self.manager.lock:
+            stored = self.manager.platformSettings(self.key)
+            for name in self.connectFields:
+                stored.pop(name, None)
+            self.manager.savePlatformSettings(self.key, stored)
         self.manager.setAutostart(self.key, False)
 
     # The connection values merged over the saved settings, for check().
@@ -564,9 +565,12 @@ class Platform:
     def publicSettings(self):
         return publicValues(self.schema(), self.settings())
 
+    # Read, change and save under the farm's lock, so a change made at the
+    # same moment (the panel and a Telegram command) is not written over.
     def updateSettings(self, incoming):
-        current = applySettings(self.schema(), self.settings(), incoming)
-        self.manager.savePlatformSettings(self.key, current)
+        with self.manager.lock:
+            current = applySettings(self.schema(), self.settings(), incoming)
+            self.manager.savePlatformSettings(self.key, current)
         return current
 
     # The settings the schedule and the daily limits are read from.
@@ -585,10 +589,14 @@ class Platform:
             raise ValueError("у этой площадки нет такого списка")
         if not value:
             raise ValueError("пустое название")
-        current = list(self.settings().get(name) or [])
-        if any(item.lower() == value.lower() for item in current):
-            return False
-        self.updateSettings({name: current + [value]})
+        # One lock over the read and the write: two words added at once
+        # used to each start from the same list, and the second save dropped
+        # the first word.
+        with self.manager.lock:
+            current = list(self.settings().get(name) or [])
+            if any(item.lower() == value.lower() for item in current):
+                return False
+            self.updateSettings({name: current + [value]})
         return True
 
     # ---- log and history ---------------------------------------------------

@@ -324,33 +324,36 @@ class SteamGiftsPlatform(Platform):
         incoming = dict(incoming)
         if incoming.get('cookie') and not isinstance(incoming['cookie'], bool):
             incoming['cookie'] = self.sessionFrom(incoming['cookie']) or incoming['cookie']
-        extra = applySettings(self.EXTRA, self.extraSettings(), incoming)
-        config = self.loadConfig()
-        for item in self.FIELDS:
-            name = item['name']
-            if name not in incoming:
-                continue
-            raw = incoming[name]
-            if item['kind'] == 'secret' and (raw is None or raw == '' or raw is True):
-                continue
-            try:
-                value = coerce(item['kind'], raw, None)
-                if item['kind'] == 'list':
-                    value = tuple(value)
-                elif item['kind'] in ('text', 'secret', 'select'):
-                    value = sgSettings.CONVERTERS[name](value)
-            except ValueError as error:
-                raise ValueError(f"{item['label']}: {error}") from error
-            # The bot cannot start without these, so an empty box is refused
-            # here rather than written to config.ini and found broken later.
-            if name in sgSettings.REQUIRED and (value is None or value == ''):
-                raise ValueError(f"{item['label']}: обязательное поле")
-            # Empty numbers mean 'no limit', which config.ini spells as absent.
-            setattr(config, name, value)
-        if config.log_info is None:
-            config.log_info = True
-        self.saveConfig(config)
-        self.manager.savePlatformSettings(self.key, extra)
+        # config.ini and farm.json are read, changed and written under the
+        # farm's lock, so two changes at once cannot drop one another.
+        with self.manager.lock:
+            extra = applySettings(self.EXTRA, self.extraSettings(), incoming)
+            config = self.loadConfig()
+            for item in self.FIELDS:
+                name = item['name']
+                if name not in incoming:
+                    continue
+                raw = incoming[name]
+                if item['kind'] == 'secret' and (raw is None or raw == '' or raw is True):
+                    continue
+                try:
+                    value = coerce(item['kind'], raw, None)
+                    if item['kind'] == 'list':
+                        value = tuple(value)
+                    elif item['kind'] in ('text', 'secret', 'select'):
+                        value = sgSettings.CONVERTERS[name](value)
+                except ValueError as error:
+                    raise ValueError(f"{item['label']}: {error}") from error
+                # The bot cannot start without these, so an empty box is refused
+                # here rather than written to config.ini and found broken later.
+                if name in sgSettings.REQUIRED and (value is None or value == ''):
+                    raise ValueError(f"{item['label']}: обязательное поле")
+                # Empty numbers mean 'no limit', which config.ini spells as absent.
+                setattr(config, name, value)
+            if config.log_info is None:
+                config.log_info = True
+            self.saveConfig(config)
+            self.manager.savePlatformSettings(self.key, extra)
         return self.settings()
 
     def configured(self):

@@ -10,6 +10,17 @@ steamgiftbot-state.json
 log/
 *.log
 
+# The farm's own data: the panel password hash, the session key and the
+# sites' cookies must not end up in an image.
+farm.json
+botfarm-state.json
+*.bak
+*.corrupt-*
+*.tmp
+debug/
+backups/
+accounts/
+
 # Nothing below is needed to run the bot.
 .git/
 .github/
