@@ -8,6 +8,15 @@ Galasilver (iS). Read from the same JSON endpoints the site's own page uses:
                                            -> {"status": "ok", "silver_tot": N}
                                               or status = silver | level | ...
 
+Wins are not told: a finished giveaway waits in the library under 'Completed
+to check' until someone presses 'Check if you won'. The farm presses 'Check
+all' and then reads 'Completed won', where the key is:
+
+  POST /library/giveaways/check-if-winner-all
+                                           -> {"won": N, "checked": N}
+  GET  /library/giveaways/giveaways-completed/won[/<page>]
+                                           -> {"status": "ok", "html": "..."}
+
 Every call carries the Django CSRF token from the csrftoken cookie."""
 import json
 import re
@@ -15,14 +24,17 @@ import time
 
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 
 from bs4 import BeautifulSoup
 
 from steamgiftbot.farm import rules
+from steamgiftbot.farm.asf import STEAM_KEY, isSteamKey, steamKeys
 from steamgiftbot.farm.base import (DEFAULT_USER_AGENT, TIMEOUT, AuthError, Platform,
                                     PlatformError, RetryLater, buildSession, cookieGuide,
                                     cookieValue, field, grouped, parseCookies, presetFields,
                                     scheduleFields, userAgentFrom)
+from steamgiftbot.logging_setup import writePrivate
 
 BASE    = 'https://www.indiegala.com'
 DOMAIN  = '.indiegala.com'
@@ -32,6 +44,7 @@ JOIN_CALL = re.compile(r"joinGiveawayOrAuction\(\s*this\s*,\s*event\s*,\s*'([^']
                        r"\s*(\d+)\s*,\s*'([^']*)'\s*\)")
 NUMBER    = re.compile(r'\d[\d,]*')
 STEAM_APP = re.compile(r'/steam/apps/(\d+)/')
+CARD_ID   = re.compile(r'/giveaways/card/[^/]+/(\d+)')
 TIME_LEFT = re.compile(r'(\d+)\s*(second|minute|hour|day|week)', re.IGNORECASE)
 MINUTES   = {'second': 1 / 60, 'minute': 1, 'hour': 60, 'day': 1440, 'week': 10080}
 
@@ -54,6 +67,19 @@ SMART      = 'smart'
 # However many pages are full of giveaways already entered, stop here.
 MAX_PAGES = 40
 SORTS      = [SMART] + SITE_SORTS
+
+LIBRARY   = BASE + '/library'
+WON_LIST  = BASE + '/library/giveaways/giveaways-completed/won'
+CHECK_ALL = BASE + '/library/giveaways/check-if-winner-all'
+WON_PAGE  = re.compile(r"switchGivSectionPage\([^)]*'giveaways-completed-won'\s*,\s*'(\d+)'")
+NO_RESULTS = 'profile-private-page-library-no-results'
+
+# Finished giveaways are checked this often; each check is one 'Check all'.
+WIN_CHECK_EVERY = 3 * 3600
+# 'Check all' may take one page of the backlog at a time: pressed again while
+# it still finds something, up to this many times.
+CHECK_ROUNDS = 10
+WON_PAGES    = 10
 
 
 @dataclass
@@ -126,6 +152,55 @@ def parseListing(html):
     return tickets
 
 
+@dataclass
+class Won:
+    id     : str
+    name   : str
+    url    : str
+    serial : str = ''      # a Steam key, a gift link or another code, as given
+
+
+# Rows of 'Completed won'. The key sits in the row's text box, the same one
+# 'Check if you won' fills in; failing that, a key or a gift link in the row.
+def parseWon(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    found = {}
+    for row in soup.select('li.profile-private-sub-section-body'):
+        link = row.find('a', href=CARD_ID)
+        if link is None:
+            continue
+        ident = CARD_ID.search(link['href']).group(1)
+        url = link['href'] if link['href'].startswith('http') else BASE + link['href']
+        serial = ''
+        for box in row.find_all(['input', 'textarea']):
+            value = (box.get('value') or box.get_text() or '').strip()
+            if value:
+                serial = value
+                break
+        if not serial:
+            serial = ' '.join(dict.fromkeys(
+                m.group(0) for m in STEAM_KEY.finditer(row.get_text(' ', strip=True))
+                if isSteamKey(m.group(0))))
+        if not serial:
+            gifts = [a['href'] for a in row.find_all('a', href=True)
+                     if a is not link and a['href'].startswith('http')
+                     and re.search(r'gift|key|serial', a['href'], re.IGNORECASE)]
+            serial = gifts[0] if gifts else ''
+        found.setdefault(ident, Won(ident, link.get_text(strip=True) or ident, url, serial))
+    return list(found.values())
+
+
+def wonPages(html):
+    return max([int(number) for number in WON_PAGE.findall(html)] or [1])
+
+
+def number(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def lastPage(html):
     pages = [int(number) for number in re.findall(r'/giveaways/ajax/(\d+)/', html)]
     return max(pages) if pages else 1
@@ -148,6 +223,9 @@ class IndieGalaPlatform(Platform):
                   'из cURL берётся сам; иначе — того же браузера, откуда cookie'),
             field('level', 'Ваш уровень на IndieGala', 'int', 0,
                   'показываются только раздачи этого уровня'),
+            field('check_wins', 'Проверять выигрыши', 'bool', True,
+                  'раз в 3 часа ферма жмёт «Check all» в библиотеке IndieGala и '
+                  'сохраняет ключи выигрышей'),
         ]) + grouped('Баланс и приоритеты', [
             field('reserve', 'Не опускать баланс ниже (iS)', 'int', 0),
             field('priority', 'Приоритетные игры', 'list', [],
@@ -275,6 +353,101 @@ class IndieGalaPlatform(Platform):
                                          'Content-Type': 'application/json'})
         data = self.readJSON(response, 'вход в раздачу')
         return data.get('status'), data
+
+    # ---- wins ----------------------------------------------------------------
+
+    def libraryCall(self, method, url, what):
+        headers = self.csrfHeaders()
+        if method == 'POST':
+            headers['Content-Type'] = 'application/json'
+        data = self.readJSON(self.request(method, url, headers=headers), what)
+        if not isinstance(data, dict):
+            raise RetryLater(f"IndieGala ответила непонятно на {what}.")
+        if data.get('status') == 'login':
+            raise AuthError("IndieGala просит войти заново.")
+        if data.get('status') == 'banned':
+            raise PlatformError("аккаунт IndieGala заблокирован для раздач.")
+        return data
+
+    def wonPage(self, page=1):
+        url = WON_LIST if page == 1 else f"{WON_LIST}/{page}"
+        data = self.libraryCall('GET', url, 'список выигрышей')
+        if data.get('status') != 'ok':
+            raise RetryLater("IndieGala не отдала список выигрышей, попробую позже.")
+        return data.get('html') or ''
+
+    def wonList(self):
+        html = self.wonPage()
+        found = {win.id: win for win in parseWon(html)}
+        for page in range(2, min(wonPages(html), WON_PAGES) + 1):
+            if self.stopped:
+                break
+            for win in parseWon(self.wonPage(page)):
+                found.setdefault(win.id, win)
+        if not found and NO_RESULTS not in html:
+            self.keepForDebugging('won', html)
+            self.debug("Список выигрышей IndieGala не разобран: копия сохранена в debug/")
+        return list(found.values())
+
+    def keepForDebugging(self, name, html):
+        try:
+            folder = Path(self.manager.dataDir) / 'debug'
+            folder.mkdir(parents=True, exist_ok=True)
+            # A signed-in page: it may hold won keys.
+            writePrivate(folder / f'{self.key}-{name}.html', html)
+        except OSError:
+            pass
+
+    def winsDue(self):
+        last = self.manager.state.value(self.key, 'wins_checked_at') or 0
+        return time.time() - last >= WIN_CHECK_EVERY
+
+    # 'Check all', then whatever is new on 'Completed won'. The first look
+    # only learns what was won before, so old keys are not announced.
+    def checkWins(self):
+        state = self.manager.state
+        known = set(state.value(self.key, 'won_ids', []) or [])
+        if not state.flag(self.key, 'wins_seeded'):
+            known |= {win.id for win in self.wonList()}
+            state.setFlag(self.key, 'won_ids', sorted(known))
+            state.setFlag(self.key, 'wins_seeded')
+        checked = won = 0
+        for _round in range(CHECK_ROUNDS):
+            data = self.libraryCall('POST', CHECK_ALL, 'проверку выигрышей')
+            if not number(data.get('checked')):
+                break
+            checked += number(data.get('checked'))
+            won += number(data.get('won'))
+            if self.stopped or not self.pause(1, 2):
+                break
+        if checked:
+            self.info(f"Проверено законченных раздач: {checked}, выигрышей: {won}")
+        fresh = [win for win in self.wonList() if win.id not in known]
+        for win in fresh:
+            known.add(win.id)
+            state.setFlag(self.key, 'won_ids', sorted(known))
+            self.tellWin(win)
+        state.setFlag(self.key, 'wins_checked_at', time.time())
+        return fresh
+
+    # The card never shows the key itself: it goes to the panel's 'Выигрыши'.
+    def tellWin(self, win):
+        self.info(f"Выигрыш на IndieGala: {win.name}")
+        moment = self.recordWin(win.name, win.url)
+        if not win.serial:
+            note = "Ключ — в библиотеке IndieGala: Giveaways → Completed won."
+        elif steamKeys(win.serial) and self.manager.farmSettings().get('auto_redeem'):
+            note = "Ключ сохранён в разделе «Выигрыши», ферма отправит его в ASF."
+        else:
+            note = "Ключ сохранён в разделе «Выигрыши» панели."
+        self.notify('', '🎉', headline=win.name, link=win.url, note=note,
+                    buttons=[("Выигрыши", self.manager.panelLink('/wins')),
+                             ("Библиотека IndieGala", LIBRARY)])
+        if win.serial:
+            try:
+                self.manager.setWinKey(self.key, moment, win.name, win.serial)
+            except Exception as error:
+                self.warn(f"Ключ к «{win.name}» не сохранён: {error}")
 
     # ---- one pass ----------------------------------------------------------
 
@@ -450,6 +623,11 @@ class IndieGalaPlatform(Platform):
                 return
             self.connect(conf)
             entered = self.cycle(conf)
+            if conf['check_wins'] and not self.stopped and self.winsDue():
+                try:
+                    self.checkWins()
+                except RetryLater as error:
+                    self.warn(f"Выигрыши не проверены: {error}")
             self.lastCycle = time.time()
             self.finishPass(f"Проход окончен: вошёл в {entered}, баланс {self.balance} iS")
             reason = ''

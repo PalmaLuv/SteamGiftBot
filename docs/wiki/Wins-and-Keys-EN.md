@@ -6,7 +6,7 @@
 | --- | --- |
 | SteamGifts | checks the [won giveaways](https://www.steamgifts.com/giveaways/won) page after every run |
 | OpiumPulses | checks the [your keys](https://www.opiumpulses.com/user/giveawaykeys) page if "Track won keys" («Следить за выигранными ключами») is on |
-| IndieGala | not tracked yet. Wins are visible on the site and in IndieGala's emails; you can mark them in the panel by hand |
+| IndieGala | every 3 hours presses "Check all" in the [library](https://www.indiegala.com/library) and reads "Completed won", if "Check for wins" («Проверять выигрыши») is on; the key is saved with the win |
 | Free Steam games, GOG, itch.io | these are not wins: the games go straight into the library and are recorded in the entry history |
 
 When there is a new win:

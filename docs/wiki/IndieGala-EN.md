@@ -61,6 +61,22 @@ first), `price`, `participants`, `level`.
 - **"Allow spending the reserve on priority games" («На приоритетные можно
   тратить резерв»)**: for a priority game the farm will spend the reserve too.
 
+## Wins
+
+IndieGala does not tell you about a win: a finished giveaway waits in the
+library, under Giveaways → Completed to check, until someone presses "Check if
+you won". Every 3 hours the farm presses "Check all" there, then reads
+Completed won, and for each new win it:
+
+- records it under "Wins" in the panel together with the key (or the gift
+  link);
+- sends a card to Telegram, without the key itself;
+- sends the key to ASF if "Activate won keys immediately" («Активировать
+  выигранные ключи сразу») is on in the [farm settings](Farm-Settings-EN.md).
+
+On the first check the farm only remembers what was won before and does not
+announce old wins. Turn it off with "Check for wins" («Проверять выигрыши»).
+
 ## Settings
 
 **Account (Аккаунт)**
@@ -70,6 +86,7 @@ first), `price`, `participants`, `level`.
 | Cookie | — | indiegala.com/giveaways → F12 → Network → F5 → right-click the first request → Copy → Copy as cURL, paste all of it. A Cookie-Editor export or a Cookie line also works |
 | Browser User-Agent (User-Agent браузера) | `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36` | taken from cURL automatically; otherwise use the one from the browser the cookies came from |
 | Your IndieGala level | `0` | only giveaways of this level are shown |
+| Check for wins (Проверять выигрыши) | on | every 3 hours the farm presses “Check all” in the IndieGala library and saves the keys of your wins |
 
 **Balance and priorities (Баланс и приоритеты)**
 

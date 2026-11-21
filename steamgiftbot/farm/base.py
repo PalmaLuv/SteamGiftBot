@@ -753,8 +753,11 @@ class Platform:
         self.attachDetails(name, {key: value for key, value in details.items()
                                   if value not in (None, '')})
 
+    # Returns the win's time, which tells it apart later (setWinKey and the like).
     def recordWin(self, name, url=''):
-        self.manager.state.addWin(self.key, {'time': time.time(), 'name': name, 'url': url})
+        moment = time.time()
+        self.manager.state.addWin(self.key, {'time': moment, 'name': name, 'url': url})
+        return moment
 
     # One look for every message a site sends: a card (see cards.py) with
     # this site's name and code. text gives the plain lines under the headline.

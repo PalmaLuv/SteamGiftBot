@@ -1030,5 +1030,20 @@
  "Открыть подарок": "Open the gift",
  "остальные — в разделе «Выигрыши»": "the rest are in Wins",
  "КЛЮЧИ: НЕ ВСЕ АКТИВИРОВАНЫ": "KEYS: NOT ALL ACTIVATED",
- "Активировано ключей": "Keys activated"
+ "Активировано ключей": "Keys activated",
+ "раз в 3 часа ферма жмёт «Check all» в библиотеке IndieGala и сохраняет ключи выигрышей": "every 3 hours the farm presses “Check all” in the IndieGala library and saves the keys of your wins",
+ "Список выигрышей IndieGala не разобран: копия сохранена в debug": "Could not read the IndieGala wins list: a copy is saved in debug",
+ "Ключ сохранён в разделе «Выигрыши», ферма отправит его в ASF": "The key is saved under “Wins”, the farm will send it to ASF",
+ "Ключ — в библиотеке IndieGala: Giveaways → Completed won": "The key is in your IndieGala library: Giveaways → Completed won",
+ "IndieGala не отдала список выигрышей, попробую позже": "IndieGala did not return the wins list, will try later",
+ "Ключ сохранён в разделе «Выигрыши» панели": "The key is saved under “Wins” in the panel",
+ "IndieGala ответила непонятно на": "IndieGala gave an unclear answer to",
+ "Проверено законченных раздач": "Finished giveaways checked",
+ "Библиотека IndieGala": "IndieGala library",
+ "Выигрыш на IndieGala": "Won on IndieGala",
+ "Проверять выигрыши": "Check for wins",
+ "проверку выигрышей": "the wins check",
+ "список выигрышей": "the wins list",
+ "не сохранён": "not saved",
+ "Ключ к": "Key for"
 }
