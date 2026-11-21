@@ -20,6 +20,7 @@ all' and then reads 'Completed won', where the key is:
 Every call carries the Django CSRF token from the csrftoken cookie."""
 import json
 import re
+import statistics
 import time
 
 from collections import Counter
@@ -68,6 +69,13 @@ SMART      = 'smart'
 MAX_PAGES = 40
 SORTS      = [SMART] + SITE_SORTS
 
+# A giveaway's own pace counts once it has been watched this long; before
+# that, the typical pace of the others stands in.
+PACE_AFTER  = 20 * 60
+PACE_KEPT   = 3 * 86400
+# Tickets for the same game are counted over this window: one key is enough.
+PER_GAME_DAYS = 7
+
 LIBRARY   = BASE + '/library'
 WON_LIST  = BASE + '/library/giveaways/giveaways-completed/won'
 CHECK_ALL = BASE + '/library/giveaways/check-if-winner-all'
@@ -94,11 +102,16 @@ class Ticket:
     appid   : int | None = None
     minutesLeft : float | None = None
     guaranteed  : bool = False
+    # Entrants expected by the end (see forecast()); None when unknown.
+    expected    : float | None = None
 
     # Chance of winning per iS spent: fewer people and a cheaper ticket win.
+    # People still to come count too, when the farm has seen how fast this
+    # giveaway, or a typical one, fills up.
     @property
     def value(self):
-        return 1 / (((self.entries or 0) + 1) * max(1, self.price))
+        people = self.expected if self.expected is not None else (self.entries or 0)
+        return 1 / ((people + 1) * max(1, self.price))
 
 
 def minutesLeft(text):
@@ -239,6 +252,9 @@ class IndieGalaPlatform(Platform):
                   'пропускать раздачи с большим числом участников'),
             field('max_hours_left', 'Только кончающиеся в ближайшие N часов', 'int', None,
                   'к концу раздачи понятно, сколько будет соперников; пусто — любые'),
+            field('max_per_game', 'Билетов на одну игру', 'int', 3,
+                  'сколько раздач одной и той же игры брать за 7 дней: ключ всё равно нужен '
+                  'один. Пусто — без лимита; приоритетных игр не касается'),
             field('extra_odds', 'Брать доп. билеты (extra odds)', 'bool', False,
                   'повторные билеты в ту же раздачу'),
             field('whitelist', 'Белый список', 'list', [], 'если задан — только эти игры'),
@@ -467,7 +483,54 @@ class IndieGalaPlatform(Platform):
         if (conf['max_hours_left'] is not None and ticket.minutesLeft is not None
                 and ticket.minutesLeft > conf['max_hours_left'] * 60):
             return 'кончается не скоро'
+        if (conf.get('max_per_game') and not self.isPriority(conf, ticket)
+                and self.ticketsFor(ticket) >= conf['max_per_game']):
+            return 'хватит билетов на эту игру'
         return self.ruleReason(conf, ticket.name, ticket.appid, owned)
+
+    # ---- tickets per game ----------------------------------------------------
+
+    @staticmethod
+    def gameOf(ticket_or_name):
+        name = getattr(ticket_or_name, 'name', ticket_or_name)
+        return rules.normalizeTitle(name)
+
+    # Tickets bought for each game over PER_GAME_DAYS, from the history.
+    def countTickets(self):
+        since = time.time() - PER_GAME_DAYS * 86400
+        entries = self.manager.state.history(self.key, limit=100000)['entries']
+        self.perGame = Counter(self.gameOf(entry['name']) for entry in entries
+                               if entry['time'] > since)
+
+    def ticketsFor(self, ticket):
+        return getattr(self, 'perGame', Counter())[self.gameOf(ticket)]
+
+    def boughtFor(self, ticket):
+        self.perGame = getattr(self, 'perGame', Counter())
+        self.perGame[self.gameOf(ticket)] += 1
+
+    # ---- forecast ------------------------------------------------------------
+
+    # Entrants a giveaway will have by its end: its own pace (people per
+    # minute since the farm first saw it) or, until that is known, the
+    # median pace of the giveaways that are, times the minutes left.
+    def forecast(self, tickets, now=None):
+        now = now or time.time()
+        sightings = {ident: seen for ident, seen in getattr(self, 'sightings', {}).items()
+                     if now - seen[0] < PACE_KEPT}
+        paces = {}
+        for ticket in tickets:
+            if ticket.entries is None:
+                continue
+            first = sightings.setdefault(ticket.id, (now, ticket.entries))
+            if now - first[0] >= PACE_AFTER:
+                paces[ticket.id] = max(0, ticket.entries - first[1]) / ((now - first[0]) / 60)
+        typical = statistics.median(paces.values()) if paces else None
+        for ticket in tickets:
+            pace = paces.get(ticket.id, typical)
+            if ticket.entries is not None and ticket.minutesLeft is not None and pace is not None:
+                ticket.expected = ticket.entries + pace * ticket.minutesLeft
+        self.sightings = sightings
 
     def isPriority(self, conf, ticket):
         wished = getattr(self, 'wished', None)
@@ -496,6 +559,7 @@ class IndieGalaPlatform(Platform):
             page += 1
         tickets = list(found.values())
         if conf['sort'] == SMART:
+            self.forecast(tickets)
             tickets.sort(key=lambda t: (-t.value, t.minutesLeft if t.minutesLeft is not None
                                         else float('inf')))
         return sorted(tickets, key=lambda t: not self.isPriority(conf, t))
@@ -505,6 +569,7 @@ class IndieGalaPlatform(Platform):
         self.info(f"Аккаунт {self.account or '?'}, баланс {self.balance} iS")
         seen = self.manager.state.seen(self.key)
         owned = self.ownedGames(conf)
+        self.countTickets()
         skipped = Counter()
         entered = 0
         for ticket in self.collect(conf, seen):
@@ -545,7 +610,10 @@ class IndieGalaPlatform(Platform):
                 self.info(f"Вошёл: {'★ ' if priority else ''}{ticket.name} за {ticket.price} iS "
                           f"(участников {ticket.entries if ticket.entries is not None else '?'}, "
                           f"осталось {self.balance})")
+                self.boughtFor(ticket)
                 self.recordEntry(ticket.name, ticket.price, ticket.url, entries=ticket.entries,
+                                 expected=(round(ticket.expected) if ticket.expected is not None
+                                           else None),
                                  priority='да' if priority else None)
                 if not self.pause():
                     break
@@ -596,13 +664,15 @@ class IndieGalaPlatform(Platform):
         owned = self.ownedGames(conf)
         balance = box.balance
         entriesLeft, spendLeft = self.dailyLeft(conf)
+        box.countTickets()
         items = []
         for ticket in box.collect(conf, seen):
             priority = box.isPriority(conf, ticket)
-            reason = (self.skipReason(conf, ticket, seen, owned)
+            reason = (box.skipReason(conf, ticket, seen, owned)
                       or self.budgetReason(conf, ticket, priority, balance,
                                            entriesLeft, spendLeft))
             if reason is None:
+                box.boughtFor(ticket)
                 if balance is not None:
                     balance -= ticket.price
                 if entriesLeft is not None:
@@ -612,6 +682,8 @@ class IndieGalaPlatform(Platform):
             items.append({'name': ticket.name, 'url': ticket.url, 'cost': ticket.price,
                           'entries': ticket.entries, 'priority': priority,
                           'minutesLeft': ticket.minutesLeft,
+                          'expected': (round(ticket.expected) if ticket.expected is not None
+                                       else None),
                           'enter': reason is None, 'reason': reason or ''})
         return {'balance': box.balance, 'account': box.account, 'items': items,
                 'note': self.previewNote(conf)}

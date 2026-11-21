@@ -39,14 +39,33 @@ With the `smart` order, giveaways are ranked by the chance of winning per iS
 spent. A giveaway's value is calculated like this:
 
 ```
-value = 1 / ((participants + 1) × max(1, price in iS))
+value = 1 / ((participants by the end + 1) × max(1, price in iS))
 ```
 
-A 1 iS giveaway with 40 participants ranks above an 8 iS giveaway with 2500
-participants. When the value is equal, the one that ends sooner goes first.
+"Participants by the end" is a forecast: the people already in plus those
+still to come before the giveaway ends. The farm sees the same giveaways on
+every run and remembers how fast they fill up. A giveaway's own pace is known
+20 minutes after the farm first saw it; until then the typical pace of the
+others stands in. Right after a start there is no forecast yet, and only the
+current participants count.
+
+So a giveaway that ends in 10 minutes with 20 participants ranks above one with
+15 participants that still has two days to gather people. When the value is
+equal, the one that ends sooner goes first. The forecast shows in Preview («Что
+возьмёт», the arrow next to the participant count) and in the entry details in
+the log.
 
 The other orders repeat the site's own sorting: `expiry` (ending soonest
 first), `price`, `participants`, `level`.
+
+## Tickets per game
+
+Developers often give the same game away many times, and without a limit the
+farm took a ticket for each of those giveaways: 21 tickets for Puzzle Chambers
+in two days. One key is enough, so "Tickets per game" («Билетов на одну игру»,
+3 by default) limits how many giveaways of one game the farm enters over 7
+days. Titles are compared ignoring case and the ™ ® marks. Priority games are
+not limited, and an empty field removes the limit.
 
 ## Priority games and the reserve
 
@@ -104,6 +123,7 @@ announce old wins. Turn it off with "Check for wins" («Проверять вы�
 | Max ticket price (iS) (Макс. цена билета (iS)) | empty | empty means any |
 | Max participants (Макс. участников) | empty | skip giveaways with more participants |
 | Only ending within N hours (Только кончающиеся в ближайшие N часов) | empty | near the end of a giveaway you can tell how many rivals there will be; empty means any |
+| Tickets per game (Билетов на одну игру) | `3` | how many giveaways of the same game to enter over 7 days: one key is enough anyway. Empty means no limit; priority games are not limited |
 | Take extra tickets (extra odds) (Брать доп. билеты (extra odds)) | off | repeat tickets for the same giveaway |
 | Whitelist (Белый список) | empty | if set, only these games |
 | Blacklist (Чёрный список) | empty | words separated by commas |

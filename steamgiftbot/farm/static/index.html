@@ -1280,7 +1280,7 @@ async function runPreviewInto(box, p){
     const rows = r.items.filter(i => filter === 'all' || (filter === 'enter') === i.enter);
     $('#pvTable', box).innerHTML = rows.length ? `<table><thead><tr><th>Раздача</th><th class="n">Цена</th><th class="n">Участников</th><th>Решение</th><th><span class="sr">Действия</span></th></tr></thead><tbody>` +
       rows.map(i => `<tr><td>${extLink(i.url, esc(i.name))}${i.priority ? ` ${icon('star', 'приоритетная')}` : ''}</td>
-        <td class="n">${i.cost ?? '—'}</td><td class="n">${i.entries ?? '—'}</td><td class="${i.enter ? 'ok' : 'skip'}">${i.enter ? '✓ войдёт' : esc(i.reason)}</td><td class="act">${listButtons(p.key, i.name)}</td></tr>`).join('') + '</tbody></table>'
+        <td class="n">${i.cost ?? '—'}</td><td class="n">${i.entries ?? '—'}${i.expected != null && i.expected > (i.entries ?? 0) ? ` <span class="muted" title="Ожидается к концу">→ ≈${i.expected}</span>` : ''}</td><td class="${i.enter ? 'ok' : 'skip'}">${i.enter ? '✓ войдёт' : esc(i.reason)}</td><td class="act">${listButtons(p.key, i.name)}</td></tr>`).join('') + '</tbody></table>'
       : '<div class="empty">Здесь пусто.</div>';
     $$('#pvFilter button', box).forEach(b => b.classList.toggle('on', b.dataset.f === filter));
   };
@@ -1469,7 +1469,7 @@ async function pageJournal(view, {key}){
 }
 const ENTRY_LINE = /^(Вошёл|One more game|Would enter)/;
 // What the sites attach to a log line, in the panel's words.
-const DETAIL_LABEL = {cost: 'Цена', balance: 'Баланс после входа', entries: 'Участников', today: 'Входов за 24 ч', priority: 'Приоритетная', url: 'Ссылка'};
+const DETAIL_LABEL = {cost: 'Цена', balance: 'Баланс после входа', entries: 'Участников', expected: 'Ожидается к концу', today: 'Входов за 24 ч', priority: 'Приоритетная', url: 'Ссылка'};
 function detailList(d){
   return Object.entries(d).map(([k, v]) => `<span><b>${esc(DETAIL_LABEL[k] || k)}</b> ${k === 'url' ? extLink(v, esc(String(v).replace(/^https?:\/\/(www\.)?/i, ''))) : esc(v)}</span>`).join('');
 }

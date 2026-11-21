@@ -1050,5 +1050,9 @@
  "Ни одного входа за": "No entries in",
  "Причина ожидания": "Waiting because",
  "СТОИТ БЕЗ ВХОДОВ": "NO ENTRIES",
- "ч, проходов": "h, passes"
+ "ч, проходов": "h, passes",
+ "сколько раздач одной и той же игры брать за 7 дней: ключ всё равно нужен один. Пусто — без лимита; приоритетных игр не касается": "how many giveaways of the same game to enter over 7 days: one key is enough anyway. Empty means no limit; priority games are not limited",
+ "хватит билетов на эту игру": "enough tickets for this game",
+ "Билетов на одну игру": "Tickets per game",
+ "Ожидается к концу": "Expected by the end"
 }
