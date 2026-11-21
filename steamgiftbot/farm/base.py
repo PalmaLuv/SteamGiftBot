@@ -42,6 +42,11 @@ ERROR_RETRY_SECONDS = 15 * 60
 # Failed tries in a row before Telegram hears about it: about an hour.
 WATCH_AFTER = 4
 
+# Passes a giveaway may fail for a passing reason before it is given up on,
+# and how many such counters a site keeps at most.
+FAILED_TRIES = 3
+FAILED_KEPT  = 300
+
 STOPPED  = 'stopped'
 RUNNING  = 'running'
 SLEEPING = 'sleeping'
@@ -754,6 +759,35 @@ class Platform:
     def closedFor(self, conf):
         windows = rules.parseHours(conf.get('active_hours') or '')
         return rules.secondsUntilOpen(windows, self.manager.localNow())
+
+    # ---- giveaways that failed for now ---------------------------------------
+
+    # A site's final answer (entered, already in, ended): the giveaway is
+    # remembered and never asked about again.
+    def settle(self, ident):
+        state = self.manager.state
+        tries = state.value(self.key, 'tries') or {}
+        if ident in tries:
+            state.setFlag(self.key, 'tries', {k: v for k, v in tries.items() if k != ident})
+        state.markSeen(self.key, ident)
+
+    # A failure that may well pass next time (an HTTP error, an unconfirmed
+    # entry, a claim that did not go through). Marking it seen at once would
+    # bury the giveaway for good over one hiccup, so it is retried on later
+    # passes; after FAILED_TRIES failures it is settled after all, so one that
+    # always fails does not cost a request every pass. Returns the tries so far.
+    def failedTry(self, ident):
+        state = self.manager.state
+        tries = dict(state.value(self.key, 'tries') or {})
+        count = tries.pop(ident, 0) + 1
+        if count >= FAILED_TRIES:
+            state.setFlag(self.key, 'tries', tries)
+            state.markSeen(self.key, ident)
+            return count
+        tries[ident] = count
+        # Newest last; the oldest counters go first, the flags stay small.
+        state.setFlag(self.key, 'tries', dict(list(tries.items())[-FAILED_KEPT:]))
+        return count
 
     def gate(self):
         """Waits out the working hours and the daily limits before a pass and

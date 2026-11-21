@@ -11,19 +11,37 @@ claiming, since the list can lag a sale's end:
 The session is the 'itchio' cookie; the CSRF token is the 'itchio_token' one."""
 import time
 
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 
 from bs4 import BeautifulSoup
 
-from steamgiftbot.farm.base import (TIMEOUT, AuthError, Platform, PlatformError, RetryLater,
-                                    buildSession, cookieGuide, cookieValue, field, grouped,
-                                    parseCookies, presetFields, scheduleFields, userAgentFrom)
+from steamgiftbot.farm.base import (FAILED_TRIES, TIMEOUT, AuthError, Platform, PlatformError,
+                                    RetryLater, buildSession, cookieGuide, cookieValue, field,
+                                    grouped, parseCookies, presetFields, scheduleFields,
+                                    userAgentFrom)
 from steamgiftbot.farm.rules import containsAny, presetReason
 
 BASE    = 'https://itch.io'
 DOMAIN  = '.itch.io'
 ACTIVE  = 'https://itchclaim.tmbpeter.com/api/active.json'
 LIBRARY = BASE + '/my-purchases'
+# Words of a Cloudflare check page ('Just a moment...', 'Attention Required!').
+CHALLENGE = ('challenge-platform', 'cf-chl', 'cf_chl', 'just a moment', 'attention required',
+             'cf-browser-verification')
+
+
+def isChallenge(response):
+    """True for a Cloudflare check page rather than an answer from itch.io."""
+    if response.headers.get('cf-mitigated', '').lower() == 'challenge':
+        return True
+    if response.status_code not in (403, 429, 503):
+        return False
+    text = response.text[:20000].lower()
+    return any(word in text for word in CHALLENGE)
+
+
+def isLoginPage(response):
+    return urlparse(response.url or '').path.rstrip('/') == '/login'
 
 
 def activeSales(data, now=None):
@@ -91,14 +109,27 @@ class ItchPlatform(Platform):
             response = self.session.request(method, url, timeout=TIMEOUT, **kwargs)
         except Exception as error:
             raise RetryLater(f"itch.io недоступен: {error}") from error
+        # itch.io sits behind Cloudflare: its check page is not a verdict on
+        # the cookie, and new cookie with the same browser's User-Agent gets
+        # past it. The ItchClaim list is not itch.io; its own answer decides.
+        host = urlparse(url).hostname or ''
+        if (host == 'itch.io' or host.endswith(DOMAIN)) and isChallenge(response):
+            raise RetryLater("itch.io показал проверку Cloudflare. Обновите cookie из "
+                             "браузера (Copy as cURL) — вместе с ним подхватится и "
+                             "User-Agent того же браузера.")
         if response.status_code == 429:
             raise RetryLater("itch.io просит притормозить (HTTP 429).")
         return response
 
     def whoami(self):
         response = self.request('GET', LIBRARY + '?format=json')
-        if '/login' in response.url or response.status_code in (401, 403):
+        # Only being sent to the sign-in page says the cookie is dead; a bare
+        # 401/403 can be a proxy or a blip, not worth stopping the site over.
+        if isLoginPage(response):
             raise AuthError("itch.io не узнаёт cookie: войдите на сайт и подключите заново.")
+        if response.status_code in (401, 403):
+            raise RetryLater(f"itch.io ответил HTTP {response.status_code} на проверку входа. "
+                             "Если это повторяется, обновите cookie и User-Agent.")
         return True
 
     def check(self, values):
@@ -130,12 +161,19 @@ class ItchPlatform(Platform):
             return 'не в белом списке'
         return None
 
+    # True while the game is free, False once the sale is over, None when
+    # itch.io gave no answer to judge by (a 5xx, an HTML error page): that
+    # is no verdict on the sale and must not bury the game.
     def stillFree(self, url):
         response = self.request('GET', url.rstrip('/') + '/data.json')
+        if response.status_code != 200:
+            return None
         try:
             data = response.json()
         except ValueError:
-            return False
+            return None
+        if not isinstance(data, dict) or data.get('errors'):
+            return None
         sale = data.get('sale') or {}
         return sale.get('rate') == 100 or str(data.get('price', '')).strip('$0.') == ''
 
@@ -182,27 +220,42 @@ class ItchPlatform(Platform):
         return {'balance': None, 'account': '', 'items': items, 'note': ''}
 
     def cycle(self, conf):
-        state = self.manager.state
         limit, claimed = max(1, conf['per_pass'] or 15), 0
         for ident, name, url, reason in self.plan(conf):
             if self.stopped or claimed >= limit:
                 break
             if reason:
                 continue
-            if not self.stillFree(url):
-                state.markSeen(self.key, ident)
+            free = self.stillFree(url)
+            if free is False:
+                # The sale is over: a final answer.
+                self.settle(ident)
                 continue
-            if self.claim(url):
+            if free is None:
+                # No answer about the sale: asked again on later passes,
+                # given up after a few, like a failed claim.
+                self.failedClaim(ident, name, "itch.io не ответил, идёт ли ещё раздача")
+            elif self.claim(url):
                 claimed += 1
-                state.markSeen(self.key, ident)
+                self.settle(ident)
                 self.info(f"Вошёл: {name} — добавлено в библиотеку itch.io")
                 self.recordEntry(name, 0, url)
             else:
-                self.info(f"Не получилось забрать {name}")
-                state.markSeen(self.key, ident)
+                # A claim that did not go through is often itch.io being busy:
+                # tried again on later passes, given up after a few.
+                self.failedClaim(ident, name, "")
             if not self.pause(6, 12):
                 break
         return claimed
+
+    def failedClaim(self, ident, name, why):
+        tries = self.failedTry(ident)
+        why = f" ({why})" if why else ""
+        if tries >= FAILED_TRIES:
+            self.info(f"Не получилось забрать {name}{why}: не вышло уже {tries} раза, "
+                      "больше не пробую")
+        else:
+            self.info(f"Не получилось забрать {name}{why}, попробую в следующий проход")
 
     def run(self):
         while not self.stopped:

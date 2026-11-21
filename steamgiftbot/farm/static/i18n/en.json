@@ -995,5 +995,18 @@
  "неверная длина запроса": "invalid request length",
  "неверный тип данных": "wrong data type",
  "Ферма не запущена, чтобы не затереть данные; исправьте доступ к файлу и запустите снова": "The farm was not started so as not to overwrite the data; fix access to the file and start it again",
- "Не удалось прочитать": "Could not read"
+ "Не удалось прочитать": "Could not read",
+ "itch.io показал проверку Cloudflare. Обновите cookie из браузера (Copy as cURL) — вместе с ним подхватится и User-Agent того же браузера": "itch.io showed a Cloudflare check. Refresh the cookie from your browser (Copy as cURL) — the same browser's User-Agent comes with it",
+ "OpiumPulses прячет все раздачи: фильтры, выбранные на самом сайте, не пропускают ни одной. Сбросьте их на opiumpulses.com/giveaways": "OpiumPulses hides every giveaway: the filters chosen on the site itself let none through. Reset them at opiumpulses.com/giveaways",
+ "фильтры на самом сайте прячут все раздачи, ферме нечего брать. Сбросьте их на opiumpulses.com/giveaways": "the filters on the site itself hide every giveaway, the farm has nothing to take. Reset them at opiumpulses.com/giveaways",
+ "на проверку входа. Если это повторяется, обновите cookie и User-Agent": "to the sign-in check. If this keeps happening, refresh the cookie and User-Agent",
+ "попробую снова в следующий проход": "will try again next run",
+ "попробую в следующий проход": "will try next run",
+ "itch.io ответил HTTP": "itch.io answered HTTP",
+ "itch.io не ответил, идёт ли ещё раздача": "itch.io did not say whether the giveaway is still on",
+ "раза, больше не пробую": "times, giving up",
+ "не вышло уже": "failed",
+ "Сбросьте фильтры на странице раздач, иначе ферме нечего брать": "Clear the filters on the giveaways page, or the farm has nothing to enter",
+ "Фильтры сайта прячут все раздачи": "The site's filters hide every giveaway",
+ "Открыть раздачи": "Open giveaways"
 }
