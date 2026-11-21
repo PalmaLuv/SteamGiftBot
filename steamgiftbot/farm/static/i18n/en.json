@@ -1054,5 +1054,15 @@
  "сколько раздач одной и той же игры брать за 7 дней: ключ всё равно нужен один. Пусто — без лимита; приоритетных игр не касается": "how many giveaways of the same game to enter over 7 days: one key is enough anyway. Empty means no limit; priority games are not limited",
  "хватит билетов на эту игру": "enough tickets for this game",
  "Билетов на одну игру": "Tickets per game",
- "Ожидается к концу": "Expected by the end"
+ "Ожидается к концу": "Expected by the end",
+ "не входить, пока баланс не дорастёт до N P (сайт копит до 400), потом тратить по лучшему шансу до «Не опускать баланс ниже»: так в ход идут и дорогие раздачи. Пусто — входить сразу": "do not enter until the balance reaches N P (the site stops at 400), then spend on the best odds down to “Keep balance above”: this way the expensive giveaways get a chance too. Empty means enter right away",
+ "odds — сначала лучший шанс на поинт (копии, участники, цена) со всех страниц прохода; site — как на сайте, страница за страницей": "odds: best chance per point first (copies, entrants, price) across all pages of the run; site: as the site lists them, page by page",
+ "сайт сам убирает раздачи выше вашего уровня, дороже свободных поинтов и с лишними участниками: меньше страниц и запросов": "the site itself leaves out giveaways above your level, dearer than the points to spare or too crowded: fewer pages and requests",
+ "P. Следующая проверка через": "P. Next check in",
+ "P: трачу на лучшие шансы": "P: spending on the best odds",
+ "Фильтры на стороне сайта": "Site-side filters",
+ "Копит поинты": "Saving points",
+ "Копить до (P": "Save up to (P",
+ "Накоплено": "Saved up",
+ "копит до": "saving up to"
 }

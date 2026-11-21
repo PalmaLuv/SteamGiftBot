@@ -295,7 +295,7 @@ Those four are required. Everything below is optional.
 | Setting | Values | Meaning |
 | --- | --- | --- |
 | `cookie` | your `PHPSESSID` | session cookie from steamgifts.com |
-| `gift_type` | `All`, `WishList`, `Recommended`, `Copies`, `DLC`, `New` | which giveaways to walk through |
+| `gift_type` | `All`, `WishList`, `Recommended`, `Copies`, `DLC`, `New`, `Group` | which giveaways to walk through |
 | `pinned` | `yes` / `no` | also enter pinned giveaways |
 | `min_points` | number | stop entering once the balance falls below this; `0` spends everything |
 | `log_info` | `yes` / `no` | write a log file for each run, into `log/` |

@@ -36,7 +36,7 @@ way to check whether the cookie works.
 | `--once` | one run and exit, without waiting for points; for cron and the Task Scheduler |
 | `--dry-run` | show what it would enter, without spending anything |
 | `--cookie VALUE` | `PHPSESSID` |
-| `--type TYPE` | `All`, `WishList`, `Recommended`, `Copies`, `DLC`, `New` |
+| `--type TYPE` | `All`, `WishList`, `Recommended`, `Copies`, `DLC`, `New`, `Group` |
 | `--min-points N` | keep the balance above N |
 | `--pinned` / `--no-pinned` | whether to enter pinned giveaways |
 | `--points-wait SECONDS` | how long to wait for points (900 by default) |

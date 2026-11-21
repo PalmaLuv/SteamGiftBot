@@ -22,9 +22,19 @@ Cookies**.
 1. The farm reads the balance and checks for new wins.
 2. If "Wishlist games first" («Сначала игры из списка желаемого») is on (in
    the farm settings), the site's **Wishlist** section is visited first.
-3. Then the farm pages through the chosen section ("Giveaway type" («Тип
-   раздач»)) and decides for each giveaway whether to enter it. It pauses
-   3–7 seconds between entries.
+3. Then the farm opens the chosen section ("Giveaway type" («Тип раздач»))
+   and decides for each giveaway whether to enter it. It pauses 3–7 seconds
+   between entries.
+   - "Site-side filters" («Фильтры на стороне сайта», on by default): the
+     listing address carries SteamGifts' own filters — level no higher than
+     yours, price no higher than the points to spare (the balance minus "Keep
+     balance above"), entrants no more than "Max entries". Giveaways you
+     cannot enter never come back, and fewer pages are needed.
+   - The `odds` order (the default): the farm gathers every page of the run
+     first, then enters the best chance per point first:
+     `odds = min(1, copies / (entrants + 1)) / price`. A 10-copy giveaway with
+     300 entrants for 10 P ranks above a single copy with 4000 entrants for
+     5 P. The `site` order enters as the site lists them, page by page.
 4. If the balance drops below "Keep balance above" («Не опускать баланс
    ниже»), the farm waits about 15 minutes for points to accumulate.
 5. If it has looked through "Pages per run" («Страниц за проход») and found
@@ -34,7 +44,13 @@ Cookies**.
    balance has not grown by at least 10 P meanwhile, the pause grows to 30,
    then 60 minutes. Any entry, or the balance growing by 10 P, brings back
    15 minutes.
-6. These pauses are not exact on purpose: each is up to 20 % longer or
+6. "Save up to (P)" («Копить до (P)»): when set, the farm enters nothing
+   until the balance reaches that number (the site stops adding points at
+   400), then spends it on the best odds down to "Keep balance above", and
+   saves again. Without it, a balance just over the reserve only fits
+   giveaways of a couple of points. The log and the card show "Saving points:
+   120 of 300 P" («Копит поинты: 120 из 300 P»).
+7. These pauses are not exact on purpose: each is up to 20 % longer or
    shorter (the 60-minute one only shorter), so the farm does not visit the
    site with a robot's even rhythm.
 
@@ -73,7 +89,7 @@ not fit:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| Giveaway type | `All` | Options: `All`, `WishList`, `Recommended`, `Copies`, `DLC`, `New`. |
+| Giveaway type | `All` | Options: `All`, `WishList`, `Recommended`, `Copies`, `DLC`, `New`, `Group`. |
 | Keep balance above | `30` |  |
 | Max giveaway cost | empty | empty means no limit |
 | Max participants | empty | skip giveaways that already have more than N entries |
@@ -96,6 +112,9 @@ not fit:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
+| Order (Порядок) | `odds` | odds: best chance per point first (copies, entrants, price) across all pages of the run; site: as the site lists them, page by page |
+| Site-side filters (Фильтры на стороне сайта) | on | the site itself leaves out giveaways above your level, dearer than the points to spare or too crowded: fewer pages and requests |
+| Save up to (P) (Копить до (P)) | empty | do not enter until the balance reaches N P (the site stops at 400), then spend on the best odds down to “Keep balance above”: this way the expensive giveaways get a chance too. Empty means enter right away |
 | Pages per run | `10` | a page holds 50 giveaways; without a limit the bot would page through the whole catalogue |
 
 **Wins (Выигрыши)**

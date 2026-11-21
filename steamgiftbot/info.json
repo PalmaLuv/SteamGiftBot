@@ -18,6 +18,7 @@
         "Recommended"   : "search?page=%d&type=recommended",
         "Copies"        : "search?page=%d&copy_min=2",
         "DLC"           : "search?page=%d&dlc=true",
-        "New"           : "search?page=%d&type=new"
+        "New"           : "search?page=%d&type=new",
+        "Group"         : "search?page=%d&type=group"
     }
 }

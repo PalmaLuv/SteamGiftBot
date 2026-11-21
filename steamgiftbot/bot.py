@@ -261,42 +261,48 @@ class SteamGift :
             for item in game_list:
                 if not self.running:
                     return
-
-                if self.points == 0 or self.points < self.min_points:
-                    if self.once:
-                        log(f"Out of points: {self.points} left, {self.min_points} required. "
-                            "Finishing because a single run was requested.", "magenta")
-                        self.stop()
-                        return
-                    self.waitForPoints()
-                    return
-
                 giveaway = parseRow(item)
-                if giveaway is None:
-                    continue
-
-                reason = filters.reasonToSkip(giveaway, self.config, self.points,
-                                              hasCards=get_game_info)
-                if reason is None:
-                    reason = self.extraSkipReason(giveaway)
-                if reason is not None:
-                    self.skipped(giveaway, reason)
-                    if reason in (filters.NOT_ENOUGH, filters.NO_CARDS):
-                        log(f"Skipping {giveaway.name}: {reason}", "red")
-                    continue
-
-                if self.dryRun:
-                    # Spend the points on paper, so the rest of the walk behaves
-                    # the way a real run would.
-                    log(f"Would enter {giveaway.name} for {giveaway.cost}P", "cyan")
-                    self.points -= giveaway.cost
-                    self.stats.entry(giveaway.cost)
-                    continue
-
-                if self.entryGIFT(giveaway.code, giveaway.cost):
-                    log(f"One more game {giveaway.name}", "green")
-                    sleep(rand(*ENTRY_DELAY))
+                if not self.tryGiveaway(giveaway):
+                    return
             _page  += 1
+
+    # One giveaway of the walk: skipped, entered, or the walk ends because the
+    # points ran out (False). Shared with whoever walks in an order of its own.
+    def tryGiveaway(self, giveaway):
+        if self.points == 0 or self.points < self.min_points:
+            if self.once:
+                log(f"Out of points: {self.points} left, {self.min_points} required. "
+                    "Finishing because a single run was requested.", "magenta")
+                self.stop()
+                return False
+            self.waitForPoints()
+            return False
+
+        if giveaway is None:
+            return True
+
+        reason = filters.reasonToSkip(giveaway, self.config, self.points,
+                                      hasCards=get_game_info)
+        if reason is None:
+            reason = self.extraSkipReason(giveaway)
+        if reason is not None:
+            self.skipped(giveaway, reason)
+            if reason in (filters.NOT_ENOUGH, filters.NO_CARDS):
+                log(f"Skipping {giveaway.name}: {reason}", "red")
+            return True
+
+        if self.dryRun:
+            # Spend the points on paper, so the rest of the walk behaves
+            # the way a real run would.
+            log(f"Would enter {giveaway.name} for {giveaway.cost}P", "cyan")
+            self.points -= giveaway.cost
+            self.stats.entry(giveaway.cost)
+            return True
+
+        if self.entryGIFT(giveaway.code, giveaway.cost):
+            log(f"One more game {giveaway.name}", "green")
+            sleep(rand(*ENTRY_DELAY))
+        return True
 
     # Looks at the won page and announces anything that was not announced
     # before. Never raises: missing a win is bad, failing the run over it is

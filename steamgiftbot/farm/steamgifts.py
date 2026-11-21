@@ -14,6 +14,7 @@ from steamgiftbot.farm.base import (DEFAULT_USER_AGENT, AuthError, OwnLines, Pla
                                     cookieGuide, field, grouped, parseCookies, presetFields,
                                     scheduleFields, userAgentFrom)
 from steamgiftbot.giveaway import parseRow
+from steamgiftbot.console import log
 from steamgiftbot.logging_setup import LOGGER_NAME
 from steamgiftbot.state import defaultPath
 from steamgiftbot.steam_api import get_game_info
@@ -36,6 +37,36 @@ IDLE_GROWTH   = 10
 
 # Marks a giveaway SteamGifts refused for good, among the seen ids.
 REFUSED = 'no:'
+
+# The walk's order: 'odds' gathers the pass's pages first and enters the best
+# chance per point first; 'site' enters page by page, as the site lists them.
+ORDERS = ['odds', 'site']
+
+# SteamGifts stops adding points at this balance.
+POINTS_CAP = 400
+
+
+# Filters SteamGifts applies itself, added to the listing's address: the
+# giveaways above the account's level, dearer than the points to spare or
+# more crowded than allowed never come back, so fewer pages are walked.
+def siteQuery(config, conf, points, minPoints):
+    if not conf.get('site_filters', True):
+        return ''
+    parts = []
+    if config.contributor_level is not None:
+        parts.append(f"level_max={int(config.contributor_level)}")
+    if config.max_entries is not None:
+        parts.append(f"entry_max={int(config.max_entries)}")
+    spare = (points or 0) - (minPoints or 0)
+    if config.max_cost is not None:
+        spare = min(spare, int(config.max_cost))
+    if spare >= 1:
+        parts.append(f"point_max={spare}")
+    return ''.join('&' + part for part in parts)
+
+
+def listingRows(soup):
+    return soup.find_all('div', {'class': 'giveaway__row-inner-wrap'}) if soup else []
 
 # Refusals that only change if the user's account does. Anything else (not
 # enough points, a hiccup) is worth asking again later.
@@ -116,6 +147,44 @@ class FarmSteamGift(SteamGift):
     # the minimum only the cheapest giveaways fit, and that walk covered the
     # whole catalogue (150+ pages) every quarter hour. Stop after max_pages:
     # a missing page ends the walk, and the farm then waits for points.
+    # The walk with the site's own filters added, in the order the settings
+    # ask for. A filter that leaves nothing at all is not the error the bot
+    # raises for an empty first page: nothing suits, and the farm waits.
+    def getGameContent(self, page=1):
+        original = self.filterURL
+        query = siteQuery(self.config, self.platform.extra, self.points, self.min_points)
+        self.filterURL = {kind: url + query for kind, url in original.items()}
+        try:
+            if self.platform.extra.get('order', 'odds') == 'odds':
+                return self.walkByOdds()
+            return super().getGameContent(page)
+        except SteamGiftError as error:
+            if not query or 'Page is empty' not in str(error):
+                raise
+        finally:
+            self.filterURL = original
+
+    # Every page of the pass first, then the best chance per point first:
+    # copies shared among the people in, for what it costs.
+    def walkByOdds(self):
+        found, page = {}, 1
+        while self.running:
+            log(f"Getting games from page {page}", "magenta")
+            soup = self.GetSoupFromPage(f"{self.baseURL}/giveaways/"
+                                        f"{self.filterURL[self.type] % page}")
+            new = 0
+            for row in listingRows(soup):
+                giveaway = parseRow(row)
+                if giveaway is not None and giveaway.code not in found:
+                    found[giveaway.code] = giveaway
+                    new += 1
+            if not new:
+                break
+            page += 1
+        for giveaway in sorted(found.values(), key=lambda g: -g.odds):
+            if not self.running or not self.tryGiveaway(giveaway):
+                return
+
     def GetSoupFromPage(self, url):
         found = LISTING_PAGE.search(url)
         limit = self.platform.extra.get('max_pages') or DEFAULT_PAGES
@@ -206,6 +275,16 @@ class SteamGiftsPlatform(Platform):
         field('user_agent', 'User-Agent браузера', 'text', DEFAULT_USER_AGENT,
               'из cURL берётся сам; иначе — того же браузера, откуда cookie'),
     ]) + presetFields() + grouped('Обход', [
+        field('order', 'Порядок', 'select', 'odds', options=ORDERS,
+              help='odds — сначала лучший шанс на поинт (копии, участники, цена) со всех '
+                   'страниц прохода; site — как на сайте, страница за страницей'),
+        field('site_filters', 'Фильтры на стороне сайта', 'bool', True,
+              'сайт сам убирает раздачи выше вашего уровня, дороже свободных поинтов и с '
+                   'лишними участниками: меньше страниц и запросов'),
+        field('save_up_to', 'Копить до (P)', 'int', None,
+              'не входить, пока баланс не дорастёт до N P (сайт копит до 400), потом '
+              'тратить по лучшему шансу до «Не опускать баланс ниже»: так в ход идут и '
+              'дорогие раздачи. Пусто — входить сразу'),
         field('max_pages', 'Страниц за проход', 'int', DEFAULT_PAGES,
               'на странице 50 раздач; без предела бот листал весь каталог'),
     ]) + grouped('Выигрыши', [
@@ -226,6 +305,9 @@ class SteamGiftsPlatform(Platform):
         # started from; see idleWait().
         self.idlePasses = 0
         self.idleBalance = None
+        # With 'save up to' set: True from reaching the target until the
+        # points are spent down again.
+        self.spending = False
         # The main account shares config.ini with the command line bot; an
         # added one gets its own, and its own state file next to it.
         self.configPath = (manager.configPath if self.primary
@@ -480,38 +562,47 @@ class SteamGiftsPlatform(Platform):
         entriesLeft, spendLeft = self.dailyLeft(conf)
         seen = self.manager.state.seen(self.key)
         points, items = bot.points, []
+        query = siteQuery(config, conf, bot.points, bot.min_points)
+        found = {}
         for page in range(1, PREVIEW_PAGES + 1):
-            soup = bot.GetSoupFromPage(f"{bot.baseURL}/giveaways/"
-                                       f"{bot.filterURL[bot.type] % page}")
-            rows = soup.find_all('div', {'class': 'giveaway__row-inner-wrap'}) if soup else []
+            rows = listingRows(bot.GetSoupFromPage(f"{bot.baseURL}/giveaways/"
+                                                   f"{bot.filterURL[bot.type] % page}{query}"))
             if not rows:
                 break
             for row in rows:
                 giveaway = parseRow(row)
-                if giveaway is None:
-                    continue
-                if points <= 0 or points < bot.min_points:
-                    reason = f"баланс ниже минимума ({bot.min_points} P)"
-                else:
-                    reason = filters.reasonToSkip(giveaway, config, points,
-                                                  hasCards=get_game_info)
-                    reason = REASONS.get(reason, reason)
-                if reason is None and entriesLeft == 0:
-                    reason = 'дневной лимит входов'
-                if reason is None:
-                    reason = self.budgetReason(giveaway, points, bot.min_points, spendLeft,
-                                               seen)
-                if reason is None:
-                    reason = self.farmReason(conf, giveaway, library)
-                if reason is None:
-                    points -= giveaway.cost
-                    if entriesLeft is not None:
-                        entriesLeft -= 1
-                    if spendLeft is not None:
-                        spendLeft -= giveaway.cost
-                items.append({'name': giveaway.name, 'url': f"{URL}/giveaway/{giveaway.code}/",
-                              'cost': giveaway.cost, 'entries': giveaway.entries,
-                              'enter': reason is None, 'reason': reason or ''})
+                if giveaway is not None:
+                    found.setdefault(giveaway.code, giveaway)
+        giveaways = list(found.values())
+        if conf.get('order', 'odds') == 'odds':
+            giveaways.sort(key=lambda g: -g.odds)
+        target = min(int(conf['save_up_to']), POINTS_CAP) if conf.get('save_up_to') else None
+        saving = target is not None and not self.spending and bot.points < target
+        for giveaway in giveaways:
+            if saving:
+                reason = f"копит до {target} P"
+            elif points <= 0 or points < bot.min_points:
+                reason = f"баланс ниже минимума ({bot.min_points} P)"
+            else:
+                reason = filters.reasonToSkip(giveaway, config, points,
+                                              hasCards=get_game_info)
+                reason = REASONS.get(reason, reason)
+            if reason is None and entriesLeft == 0:
+                reason = 'дневной лимит входов'
+            if reason is None:
+                reason = self.budgetReason(giveaway, points, bot.min_points, spendLeft,
+                                           seen)
+            if reason is None:
+                reason = self.farmReason(conf, giveaway, library)
+            if reason is None:
+                points -= giveaway.cost
+                if entriesLeft is not None:
+                    entriesLeft -= 1
+                if spendLeft is not None:
+                    spendLeft -= giveaway.cost
+            items.append({'name': giveaway.name, 'url': f"{URL}/giveaway/{giveaway.code}/",
+                          'cost': giveaway.cost, 'entries': giveaway.entries,
+                          'enter': reason is None, 'reason': reason or ''})
         return {'balance': bot.points, 'account': '', 'items': items,
                 'note': self.previewNote(conf)}
 
@@ -603,6 +694,21 @@ class SteamGiftsPlatform(Platform):
         self.idlePasses = 0
         self.idleBalance = points
 
+    # The target while the farm is saving up, None once it may enter.
+    def savingFor(self, points, conf):
+        target = conf.get('save_up_to')
+        if not target:
+            self.spending = False
+            return None
+        target = min(int(target), POINTS_CAP)
+        if self.spending:
+            return None
+        if (points or 0) >= target:
+            self.spending = True
+            self.info(f"Накоплено {points} P: трачу на лучшие шансы.")
+            return None
+        return target
+
     def onStop(self):
         if self.bot is not None:
             self.bot.stop()
@@ -631,6 +737,17 @@ class SteamGiftsPlatform(Platform):
                 self.extra = conf
                 self.passEntered = self.sessionEntered
                 bot.waitedForPoints = False
+                target = self.savingFor(bot.points, conf)
+                if target:
+                    seconds = self.jittered(bot.pointsWait)
+                    self.info(f"Копит поинты: {bot.points} из {target} P. "
+                              f"Следующая проверка через {seconds // 60} мин.")
+                    if not self.wait(seconds, reason=f"Копит поинты: {bot.points} из {target} P"):
+                        break
+                    self.announce(bot)
+                    bot.updateInfo()
+                    self.balance = bot.points
+                    continue
                 try:
                     self.wishlistPass(bot, config)
                     bot.getGameContent()
@@ -656,6 +773,10 @@ class SteamGiftsPlatform(Platform):
                         # Out of points after entering: the next walk that
                         # finds nothing starts the back-off afresh.
                         self.idleReset(bot.points, bot.pointsWait, "Был вход")
+                    # Spent down to the reserve, or nothing left worth it:
+                    # back to saving.
+                    if bot.waitedForPoints or not entered:
+                        self.spending = False
                 if self.stopped or not bot.running:
                     break
                 self.lastCycle = self.manager.now()
