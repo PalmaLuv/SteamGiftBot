@@ -228,3 +228,35 @@ def test_the_clock_runs_the_retries(farm, monkeypatch):
     farm.startClock()
     farm.clock.join(5)
     assert ran.is_set()
+
+
+def test_a_key_activated_by_hand_is_not_sent_again(farm):
+    farm.asf.session.default = 53
+    farm.setWinKey('indiegala', *farm.win, 'AAAAA-BBBBB-CCCCC')
+    farm.redeemWin('indiegala', *farm.win)
+    sent, told = len(farm.asf.session.sent), len(farm.told)
+    farm.state.setWinStatus('indiegala', *farm.win, 'activated')
+    assert stored(farm).get('redeemRetry') is None
+    assert farm.redeemTick(now=10 ** 12) == 0
+    assert len(farm.asf.session.sent) == sent and len(farm.told) == told
+
+
+def test_a_retry_that_leaves_a_failed_key_says_not_all_are_done(farm):
+    session = farm.asf.session
+    session.plan = {'AAAAA-BBBBB-CCCCC': 14, 'DDDDD-EEEEE-FFFFF': 53}
+    farm.setWinKey('indiegala', *farm.win, 'AAAAA-BBBBB-CCCCC DDDDD-EEEEE-FFFFF')
+    farm.redeemWin('indiegala', *farm.win)
+    session.plan = {'AAAAA-BBBBB-CCCCC': 14}
+    farm.redeemTick(now=stored(farm)['redeemRetry']['nextTry'])
+    card = farm.cards[-1]
+    assert card.heading() == 'КЛЮЧИ: НЕ ВСЕ АКТИВИРОВАНЫ' and card.icon == '⚠️'
+    assert 'Активировано ключей: 1 из 2' in card.lines[1]
+    assert stored(farm)['status'] == ''
+
+
+def test_asf_refusing_the_password_is_not_retried(farm):
+    farm.asf.session.request = lambda *args, **kwargs: answer({}, 401)
+    farm.setWinKey('indiegala', *farm.win, 'AAAAA-BBBBB-CCCCC')
+    kind, words = farm.redeemWin('indiegala', *farm.win)
+    assert kind == 'fail' and 'пароль IPC' in words
+    assert stored(farm).get('redeemRetry') is None

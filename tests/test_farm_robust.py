@@ -364,3 +364,30 @@ def test_internal_error_text_stays_in_the_log(panel, manager, monkeypatch, caplo
     assert 'secret-path' not in json.dumps(data) and 'RuntimeError' not in json.dumps(data)
     assert any('secret-path' in (record.exc_text or '') or record.exc_info
                for record in caplog.records)
+
+
+def test_held_lines_reach_the_log_when_the_start_breaks_otherwise(tmp_path, monkeypatch):
+    path = tmp_path / 'farm.json'
+    writePrivate(path, {'settings': {}, 'web': {}, 'platforms': {}})
+    writePrivate(path, {'settings': {}, 'web': {}, 'platforms': {}})
+    path.write_text('{"settings": ', encoding='utf-8')
+
+    def broken(self):
+        raise RuntimeError('boom')
+    monkeypatch.setattr(farmMain.FarmManager, 'restoreLogs', broken)
+    farmLogger = logging.getLogger('botfarm')
+    saved = (list(farmLogger.handlers), farmLogger.level, farmLogger.propagate)
+    try:
+        with pytest.raises(RuntimeError):
+            farmMain.openFarm(tmp_path, tmp_path / 'config.ini')
+        for handler in farmLogger.handlers:
+            handler.flush()
+        text = (tmp_path / 'log' / 'botfarm.log').read_text(encoding='utf-8')
+    finally:
+        for handler in farmLogger.handlers:
+            if handler not in saved[0]:
+                handler.close()
+        farmLogger.handlers[:] = saved[0]
+        farmLogger.setLevel(saved[1])
+        farmLogger.propagate = saved[2]
+    assert 'данные взяты из резервной копии' in text

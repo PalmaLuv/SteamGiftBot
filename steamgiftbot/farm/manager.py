@@ -356,6 +356,9 @@ class FarmState:
             for win in self.site(key).get('wins', []):
                 if abs(win['time'] - float(moment)) < 0.001 and win['name'] == name:
                     win['status'] = status
+                    if status == 'activated':
+                        # Done by hand: the clock must not send it to ASF again.
+                        win.pop('redeemRetry', None)
                     self.save()
                     return True
         return False
@@ -477,7 +480,7 @@ class FarmManager:
         self.clockStop  = threading.Event()
         # One activation at a time: a retry by the clock and a click in the
         # panel must not send the same key twice.
-        self.redeemLock = threading.Lock()
+        self.redeemLock = threading.RLock()
 
         from steamgiftbot.farm.gog import GOGPlatform
         from steamgiftbot.farm.indiegala import IndieGalaPlatform
@@ -833,18 +836,22 @@ class FarmManager:
 
     # The key as pasted: Steam keys in capitals, a gift link or another
     # shop's code untouched (see asf.normalizeKey).
+    # Under redeemLock: a retry the clock is making for the old text would
+    # otherwise write its result over the new one.
     def setWinKey(self, key, moment, name, value):
         value = normalizeKey(value)
-        win = self.state.findWin(key, moment, name)
-        if win is None:
-            raise ValueError("выигрыш не найден")
-        keys = steamKeys(value)
-        # Keys of the old text that already went through stay done; a pending
-        # retry was for the old text.
-        kept = [item for item in win.get('redeemed') or [] if item in keys]
-        self.state.updateWin(key, moment, name, cdkey=value, redeemed=kept, redeemRetry=None)
-        if keys and self.farmSettings().get('auto_redeem'):
-            self.redeemWin(key, moment, name)
+        with self.redeemLock:
+            win = self.state.findWin(key, moment, name)
+            if win is None:
+                raise ValueError("выигрыш не найден")
+            keys = steamKeys(value)
+            # Keys of the old text that already went through stay done; a
+            # pending retry was for the old text.
+            kept = [item for item in win.get('redeemed') or [] if item in keys]
+            self.state.updateWin(key, moment, name, cdkey=value, redeemed=kept,
+                                 redeemRetry=None)
+            if keys and self.farmSettings().get('auto_redeem'):
+                self.redeemWin(key, moment, name)
         return value
 
     # Sends every key of a win to ASF, one request per key, and says how it
@@ -864,6 +871,9 @@ class FarmManager:
                                  "откройте её в браузере")
             done = [item for item in win.get('redeemed') or [] if item in keys]
             pending = win.get('redeemRetry') or {}
+            if auto and win.get('status') == 'activated':
+                self.state.updateWin(key, moment, name, redeemRetry=None)
+                return 'owned', win.get('redeem') or ''
             if auto:
                 todo = [item for item in pending.get('keys') or []
                         if item in keys and item not in done]
@@ -899,12 +909,18 @@ class FarmManager:
         # is told as a failure, since nothing more happens on its own.
         if not (auto and retry and not givenUp):
             title = self.platforms[key].title if key in self.platforms else key
-            icon = {'ok': '✅', 'owned': '✅', 'retry': '⏳'}.get(
-                'fail' if givenUp else kind, '⚠️')
+            told = 'fail' if givenUp else kind
+            lines = [words]
+            if not finished and told in ('ok', 'owned'):
+                # This try went well, an earlier one did not: not all done yet.
+                told = 'partial'
+                lines.append(f"Активировано ключей: {len(done)} из {len(keys)}; "
+                             f"остальные — в разделе «Выигрыши»")
+            icon = {'ok': '✅', 'owned': '✅', 'retry': '⏳'}.get(told, '⚠️')
             heading = {'ok': 'КЛЮЧ АКТИВИРОВАН', 'owned': 'КЛЮЧ: ИГРА УЖЕ ЕСТЬ',
-                       'retry': 'КЛЮЧ: ПОВТОРИМ ПОЗЖЕ'}.get('fail' if givenUp else kind,
-                                                        'КЛЮЧ НЕ ПОДОШЁЛ')
-            self.notify(card=cards.Card(icon, heading, title, key, name, lines=[words],
+                       'retry': 'КЛЮЧ: ПОВТОРИМ ПОЗЖЕ',
+                       'partial': 'КЛЮЧИ: НЕ ВСЕ АКТИВИРОВАНЫ'}.get(told, 'КЛЮЧ НЕ ПОДОШЁЛ')
+            self.notify(card=cards.Card(icon, heading, title, key, name, lines=lines,
                                         buttons=[("Выигрыши", self.panelLink('/wins'))]))
         if finished and key in self.platforms:
             self.platforms[key].onWinStatus(win, 'activated')
@@ -932,7 +948,8 @@ class FarmManager:
         for key in list(self.platforms):
             for win in self.state.site(key).get('wins', []):
                 pending = win.get('redeemRetry')
-                if pending and (pending.get('nextTry') or 0) <= now:
+                if pending and win.get('status') != 'activated' \
+                        and (pending.get('nextTry') or 0) <= now:
                     due.append((key, win['time'], win['name']))
         for key, moment, name in due:
             try:

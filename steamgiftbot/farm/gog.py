@@ -140,11 +140,11 @@ class GOGPlatform(Platform):
             kind, words = self.claim()
             if kind == 'claimed':
                 name = self.giveawayTitle() or 'Раздача GOG'
-                self.info(f"Вошёл: {name} — {words}")
                 self.recordEntry(name, 0, BASE + '/account')
                 self.announceClaims()
+                self.finishPass(f"Вошёл: {name} — {words}")
             else:
-                self.info(f"GOG: {words}")
+                self.finishPass(f"GOG: {words}")
             self.lastCycle = time.time()
             if not self.wait(max(30, conf['interval'] or 240) * 60):
                 return

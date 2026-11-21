@@ -111,6 +111,12 @@ def outcome(answer):
     return ('retry' if detail in RETRY_DETAILS else 'fail'), words
 
 
+# ASF answered but will not let the farm in (wrong IPC password, address not
+# allowed): unlike ASF being down, waiting does not help.
+class ASFRefused(ValueError):
+    pass
+
+
 class ASF:
     def __init__(self, manager, session=None):
         self.manager = manager
@@ -132,9 +138,9 @@ class ASF:
             raise ValueError(f"ASF недоступен по адресу {conf['url']}: проверьте, что он "
                              f"запущен и IPC включён") from error
         if response.status_code == 401:
-            raise ValueError("ASF не принял пароль IPC (IPCPassword в ASF.json)")
+            raise ASFRefused("ASF не принял пароль IPC (IPCPassword в ASF.json)")
         if response.status_code == 403:
-            raise ValueError("ASF не пускает этот адрес: задайте IPCPassword в ASF.json")
+            raise ASFRefused("ASF не пускает этот адрес: задайте IPCPassword в ASF.json")
         try:
             data = response.json()
         except ValueError as error:
@@ -188,6 +194,9 @@ class ASF:
                 continue
             try:
                 found.append(self.redeem(key, bot=bot))
+            except ASFRefused as error:
+                # A wrong IPC password does not fix itself: no retries.
+                found.append(('fail', str(error)))
             except ValueError as error:
                 # ASF down, timed out or without a bot online: try later.
                 found.append(('retry', str(error)))

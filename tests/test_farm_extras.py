@@ -377,3 +377,14 @@ def test_panel_logout_everywhere(panel, manager):  # noqa: F811
     assert call(panel + '/api/status', cookie=headers['Set-Cookie'].split(';')[0])[0] == 200
     status, data, _ = call(panel + '/api/farm/settings', cookie=headers['Set-Cookie'].split(';')[0])
     assert 'Europe/Kyiv' in data['info']['zones']
+
+
+def test_a_good_gog_pass_clears_the_failure_count(manager):  # noqa: F811
+    platform = manager.platforms['gog']
+    platform.failures = 3
+    platform.connect = platform.whoami = lambda *args: None
+    platform.claim = lambda: ('none', 'раздачи нет')
+    platform.gate = lambda: {'interval': 240}
+    platform.wait = lambda *args, **kwargs: False
+    platform.run()
+    assert platform.failures == 0

@@ -86,18 +86,21 @@ def releaseLog(early):
 # and only then come the lines held while the files were read.
 def openFarm(dataDir, config):
     early = holdLog()
+    configured = False
     try:
         manager = FarmManager(dataDir=dataDir, configPath=config)
-    except DataFileError:
-        try:
-            configureLogging(Path(dataDir or sgSettings.BASE_DIR))
-        except OSError:
-            pass
+        manager.restoreLogs()
+        configureLogging(manager.dataDir)
+        configured = True
+    finally:
+        # Whatever broke the start, the lines held so far (a broken file set
+        # aside, say) still reach the log before the error does.
+        if not configured:
+            try:
+                configureLogging(Path(dataDir or sgSettings.BASE_DIR))
+            except OSError:
+                pass
         releaseLog(early)
-        raise
-    manager.restoreLogs()
-    configureLogging(manager.dataDir)
-    releaseLog(early)
     return manager
 
 
