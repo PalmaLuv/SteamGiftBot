@@ -24,7 +24,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
 from steamgiftbot.farm import cards, rules
-from steamgiftbot.logging_setup import RedactFilter
+from steamgiftbot.logging_setup import RedactFilter, redactSecrets
 
 # A recent desktop Chrome. Sites behind Incapsula or Cloudflare tie their
 # cookies to the browser that earned them, so each site lets the user paste
@@ -1065,7 +1065,7 @@ class Platform:
             'keyBot': self.manager.keyBotFor(self.key),
             'profile': self.manager.profileOf(self.key),
             'description': self.description,
-            'state': self.state, 'error': self.lastError,
+            'state': self.state, 'error': redactSecrets(self.lastError),
             'balance': self.balance, 'account': self.account,
             'startedAt': self.startedAt, 'lastCycle': self.lastCycle,
             'nextCycle': self.nextCycle, 'reason': self.waitReason,

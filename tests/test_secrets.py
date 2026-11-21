@@ -276,3 +276,14 @@ def test_lines_restored_from_an_old_log_are_masked(manager):  # noqa: F811
     assert manager.restoreLogs() == 1
     text = manager.platforms['indiegala'].logLines()[-1]['text']
     assert KEY not in text and 'api_key=***&page=1' in text
+
+
+def test_telegram_cards_and_the_panel_mask_secrets_in_error_texts(manager):  # noqa: F811
+    from steamgiftbot.farm import cards
+    error = ("HTTPSConnectionPool: Max retries exceeded with url: "
+             "/IPlayerService/GetOwnedGames/v1/?key=ABCDEF0123456789&steamid=1")
+    card = manager.translateCard(cards.Card('⚠️', headline='x', lines=[error], block=[error]))
+    assert 'ABCDEF0123456789' not in card.html() and 'key=***' in card.html()
+    platform = manager.platforms['indiegala']
+    platform.lastError = error
+    assert 'ABCDEF0123456789' not in platform.snapshot()['error']

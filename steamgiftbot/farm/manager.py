@@ -1367,8 +1367,11 @@ class FarmManager:
         return '\n'.join(lines)
 
     # Every text of a card in the panel's language.
+    # In the panel's language, and with any secret an error text carried
+    # (a URL with ?key=…) masked, as the log masks it.
     def translateCard(self, card):
-        tr = self.translate
+        def tr(text):
+            return logging_setup.redactSecrets(self.translate(text))
         return cards.Card(card.icon, tr(card.heading()), card.site, card.key, tr(card.headline),
                           card.link, [tr(line) for line in card.lines],
                           [tr(line) for line in card.block], tr(card.note),

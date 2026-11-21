@@ -1402,12 +1402,16 @@ async function renderWinsTable(reload = true){
       <td>${winSelect(w)}</td></tr>`).join('') + '</tbody></table></div>';
 }
 const MASK = '•••••-•••••-•••••';
+// A won "key" that is only a gift link opens in the browser: ASF cannot take it.
+const LINKS = /https?:\/\/\S+/gi;
+const giftLink = text => { const t = String(text || ''); return t.replace(LINKS, '').trim() ? '' : (t.match(LINKS) || [''])[0]; };
 function keyCell(w){
   const attrs = `data-site="${w.key}" data-time="${w.time}" data-name="${esc(w.name)}"`;
   if (!w.cdkey) return `<form class="keyform" ${attrs} style="display:flex;gap:6px"><label class="sr" for="k${w.time}">Ключ для ${esc(w.name)}</label>
     <input id="k${w.time}" placeholder="Вставьте ключ, если он есть" style="min-height:32px;padding:4px 8px;font-size:12px;max-width:220px" autocomplete="off"><button style="min-height:32px">Сохранить</button></form>`;
   return `<span class="key" data-secret="${esc(w.cdkey)}">${MASK}</span> <button class="icon" data-reveal aria-label="Показать ключ">${icon('key')}</button><button class="icon" data-copy="${esc(w.cdkey)}" aria-label="Скопировать ключ">${icon('copy')}</button>
-    ${w.status !== 'activated' ? `<button data-redeem ${attrs} style="min-height:32px">Активировать в ASF</button>` : ''}${w.redeem ? `<div class="small muted">${esc(w.redeem)}</div>` : ''}`;
+    ${w.status === 'activated' ? '' : giftLink(w.cdkey) ? extLink(giftLink(w.cdkey), icon('ext') + 'Открыть подарок', 'btn')
+      : `<button data-redeem ${attrs} style="min-height:32px">Активировать в ASF</button>`}${w.redeem ? `<div class="small muted">${esc(w.redeem)}</div>` : ''}`;
 }
 document.addEventListener('submit', async e => {
   const f = e.target.closest('.keyform'); if (!f) return; e.preventDefault();
