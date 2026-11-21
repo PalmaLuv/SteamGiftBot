@@ -984,5 +984,8 @@
  "Скопировано": "Copied",
  "Адрес TON": "TON address",
  "Скрыть": "Hide",
- "Строку под выигрышами можно скрыть кнопкой «Скрыть», а напоминания в Telegram отключаются в «Настройки» → «О ферме»": "The line under wins hides with “Hide”, and Telegram reminders are turned off in “Settings” → “About the farm”"
+ "Строку под выигрышами можно скрыть кнопкой «Скрыть», а напоминания в Telegram отключаются в «Настройки» → «О ферме»": "The line under wins hides with “Hide”, and Telegram reminders are turned off in “Settings” → “About the farm”",
+ "Удалено старых логов бота командной строки": "Old command-line bot logs deleted",
+ "старше": "older than",
+ "дней": "days"
 }

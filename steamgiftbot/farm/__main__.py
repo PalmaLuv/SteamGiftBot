@@ -2,7 +2,6 @@
 import argparse
 import getpass
 import logging
-import logging.handlers
 import os
 import signal
 import sys
@@ -12,6 +11,7 @@ from pathlib import Path
 
 from steamgiftbot import settings as sgSettings
 from steamgiftbot.console import startLogFile
+from steamgiftbot.logging_setup import LOG_PATTERNS, RedactFilter, privateLogHandler, tightenFiles
 from steamgiftbot.farm.manager import FarmManager
 from steamgiftbot.farm.web import serve
 
@@ -22,11 +22,14 @@ def configureLogging(dataDir):
     logDir = dataDir / 'log'
     logDir.mkdir(parents=True, exist_ok=True)
     formatter = logging.Formatter('[%(levelname)s %(asctime)s %(name)s] %(message)s')
-    fileHandler = logging.handlers.RotatingFileHandler(
-        logDir / 'botfarm.log', maxBytes=5 * 1024 * 1024, backupCount=3, encoding='utf-8')
+    # Owner-only and with secrets masked: error texts carry URLs, and the
+    # journal gets the same lines as the file.
+    fileHandler = privateLogHandler(logDir / 'botfarm.log', maxBytes=5 * 1024 * 1024,
+                                    backupCount=3, encoding='utf-8')
     fileHandler.setFormatter(formatter)
     console = logging.StreamHandler(sys.stdout)
     console.setFormatter(logging.Formatter('[%(name)s] %(message)s'))
+    console.addFilter(RedactFilter())
     # The sites log DEBUG lines for the panel's 'Подробно' view; the file and
     # the journal stay at INFO.
     fileHandler.setLevel(logging.INFO)
@@ -36,6 +39,13 @@ def configureLogging(dataDir):
     farmLogger.propagate = False
     farmLogger.addHandler(fileHandler)
     farmLogger.addHandler(console)
+
+
+# Logs and the saved logged-in pages written before they were created
+# owner-only: take the other users' access away on every start.
+def protectFiles(dataDir):
+    return (tightenFiles(dataDir / 'log', LOG_PATTERNS)
+            + tightenFiles(dataDir / 'debug', ('*.html',)))
 
 
 def main(argv=None):
@@ -72,6 +82,8 @@ def main(argv=None):
     manager.restoreLogs()
     configureLogging(manager.dataDir)
     log = logging.getLogger('botfarm')
+    protectFiles(manager.dataDir)
+    manager.pruneCliLogs()
 
     # SteamGiftBot's own file log, as the command line version writes it.
     try:

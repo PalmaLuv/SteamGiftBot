@@ -23,6 +23,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
 from steamgiftbot.farm import cards, rules
+from steamgiftbot.logging_setup import RedactFilter
 
 # A recent desktop Chrome. Sites behind Incapsula or Cloudflare tie their
 # cookies to the browser that earned them, so each site lets the user paste
@@ -406,6 +407,9 @@ class RingHandler(logging.Handler):
     def __init__(self, platform):
         super().__init__()
         self.platform = platform
+        # The panel shows these lines as they are: mask secrets in error texts
+        # here as well, not only in the file and the journal.
+        self.addFilter(RedactFilter())
 
     def emit(self, record):
         try:

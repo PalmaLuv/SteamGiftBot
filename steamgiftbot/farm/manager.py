@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from steamgiftbot import notify
+from steamgiftbot import logging_setup, notify
 from steamgiftbot import settings as sgSettings
 from steamgiftbot.farm import cards, rules, support
 from steamgiftbot.farm.base import (HISTORY_LENGTH, actingFor, applySettings, field, grouped,
@@ -41,6 +41,8 @@ DAILY_DAYS = 120
 # The command line bot's log lines (log/log-*.log), in the server's local time.
 CLI_LINE    = re.compile(r'^\[INFO:(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)[,.]\d+\] ?(.*)$')
 CLI_ENTERED = 'One more game '
+# Its log files are deleted once this old (after the history import).
+CLI_LOG_DAYS = 30
 
 # The panel's dictionaries, also used for the Telegram messages.
 I18N_DIR = Path(__file__).resolve().parent / 'static' / 'i18n'
@@ -541,6 +543,18 @@ class FarmManager:
                      "(без трат: в логе их нет).")
         return entered
 
+    # The command line bot left a log file per start in log/. Old ones go,
+    # but only once importCliHistory has read them: they are the only record
+    # of what it entered before the farm. Never botfarm.log, see pruneRunLogs.
+    def pruneCliLogs(self, days=CLI_LOG_DAYS):
+        if not self.state.flag('steamgifts', 'cli_imported'):
+            return 0
+        removed = logging_setup.pruneRunLogs(self.dataDir / 'log', days)
+        if removed:
+            log.info(f"Удалено старых логов бота командной строки: {removed} "
+                     f"(старше {days} дней)")
+        return removed
+
     # The panel's log lives in memory, so it used to start empty after every
     # restart. Refill it from the tail of log/botfarm.log; those lines are
     # marked as restored.
@@ -563,7 +577,9 @@ class FarmManager:
                 moment = time.mktime(time.strptime(stamp, '%Y-%m-%d %H:%M:%S'))
             except ValueError:
                 continue
-            found.setdefault(key, []).append((level, moment, message))
+            # Lines written before the log masked secrets may still hold them.
+            found.setdefault(key, []).append((level, moment,
+                                              logging_setup.redactSecrets(message)))
         restored = 0
         for key, lines in found.items():
             for level, moment, message in lines[-perSite:]:

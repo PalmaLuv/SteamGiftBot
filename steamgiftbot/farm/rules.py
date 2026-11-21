@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 
 import requests
 
+from steamgiftbot.logging_setup import redactSecrets
+
 log = logging.getLogger('botfarm')
 
 # ---- word presets ------------------------------------------------------------
@@ -193,8 +195,8 @@ class SteamLibrary:
                 log.info(f"Список желаемого Steam: {len(apps)} игр")
             except Exception as error:
                 apps = cached[1] if cached else None
-                self.problem = str(error)
-                log.warning(f"Список желаемого не загружен: {error}")
+                self.problem = redactSecrets(str(error))
+                log.warning(f"Список желаемого не загружен: {self.problem}")
             self.wishCache[profile] = (time.time(), apps)
             return apps
 
@@ -212,8 +214,10 @@ class SteamLibrary:
                 log.info(f"Библиотека Steam: {len(games)} игр")
             except Exception as error:
                 games = cached[1] if cached else None
-                self.problem = str(error)
-                log.warning(f"Библиотека Steam не загружена: {error}")
+                # requests' error texts hold the URL, and the API key is in
+                # its query string; the panel shows this as steam_status.
+                self.problem = redactSecrets(str(error))
+                log.warning(f"Библиотека Steam не загружена: {self.problem}")
             self.cache[(key, profile)] = (time.time(), games)
             return games
 

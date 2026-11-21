@@ -21,6 +21,7 @@ from steamgiftbot.farm.base import (DEFAULT_USER_AGENT, TIMEOUT, AuthError, Plat
                                     PlatformError, RetryLater, buildSession, cookieGuide, field,
                                     grouped, parseCookies, presetFields, scheduleFields,
                                     userAgentFrom)
+from steamgiftbot.logging_setup import writePrivate
 
 BASE     = 'https://www.opiumpulses.com'
 DOMAIN   = '.opiumpulses.com'
@@ -214,7 +215,8 @@ class OpiumPulsesPlatform(Platform):
         try:
             folder = self.debugDir()
             folder.mkdir(parents=True, exist_ok=True)
-            (folder / f'opiumpulses-{name}.html').write_text(html, encoding='utf-8')
+            # A logged-in page: the account, its balance, form tokens.
+            writePrivate(folder / f'opiumpulses-{name}.html', html)
         except OSError:
             pass
 
