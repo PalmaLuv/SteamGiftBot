@@ -7,6 +7,7 @@ import logging
 import random
 import re
 import shlex
+import socket
 import threading
 import time
 import traceback
@@ -39,6 +40,27 @@ HISTORY_LENGTH = 2000
 # After an unexpected failure the worker waits this long and tries again.
 ERROR_RETRY_SECONDS = 15 * 60
 
+# The first tries after a failure come sooner: at boot the network (DNS) is
+# often not up yet, and a flat quarter hour cost every site its first pass.
+# Past these steps the worker waits ERROR_RETRY_SECONDS. watch() hears only
+# of the first failure and of tries a full ERROR_RETRY_SECONDS apart (see
+# retryDelay), so the quick steps do not bring its hourly alert forward.
+# Only a site that could not be reached gets them (see networkDown): one that
+# answered 429, a Cloudflare or Incapsula check or a 5xx has asked for time,
+# and coming back within a minute is what gets a bot blocked.
+RETRY_STEPS = (60, 2 * 60, 5 * 60)
+
+# What a network that is not up (yet) looks like: no DNS, refused or dropped
+# connections, no answer in time. A RetryError (urllib3 gave up on 429s or
+# 5xx) is the site answering, so it is not among them.
+NETWORK_ERRORS = (requests.ConnectionError, requests.Timeout,
+                  ConnectionError, TimeoutError, socket.gaierror)
+
+# Waits a site picks for itself (for points, 'nothing suits') vary by this
+# share either way: the same quarter hour to the second, day and night, is a
+# robot's rhythm.
+WAIT_JITTER = 0.2
+
 # Failed tries in a row before Telegram hears about it: about an hour.
 WATCH_AFTER = 4
 
@@ -67,6 +89,19 @@ class PlatformError(Exception):
 # Temporary trouble (site down, Cloudflare check): wait and try again.
 class RetryLater(Exception):
     pass
+
+
+# Whether `error` comes from a network that did not reach the site. Sites
+# raise RetryLater from the requests exception they caught, so the cause
+# chain tells an outage from a site that answered 'not now'.
+def networkDown(error):
+    seen = set()
+    while error is not None and id(error) not in seen:
+        if isinstance(error, NETWORK_ERRORS):
+            return True
+        seen.add(id(error))
+        error = error.__cause__
+    return False
 
 
 # One field of a settings form. kind: text, secret, int, bool, select, list,
@@ -484,6 +519,11 @@ class Platform:
         self.passClaims = []
         # Failed tries in a row (site or network down); see watch().
         self.failures = 0
+        # Where the worker is in RETRY_STEPS, and when the current try began.
+        self.retryStep = 0
+        self.triedAt = None
+        # Its own generator, so a test can put a predictable one in its place.
+        self.rng = random.Random()
 
     # ---- things a site fills in -------------------------------------------
 
@@ -676,6 +716,24 @@ class Platform:
                         headline=f"Не работает уже {minutes} мин",
                         note=f"Ферма пробует снова каждые {ERROR_RETRY_SECONDS // 60} мин.",
                         buttons=[("Журнал", self.manager.panelLink('/journal/log'))])
+
+    # How long to wait before trying again after a failure, counting it for
+    # watch() on the way. A new run of trouble starts with the quick steps:
+    # after a good pass (recovered() zeroes the failures, as start() does) or
+    # after a try that went on long enough to have been working. Only a
+    # `quick` failure (the site was not reached) takes them; any other one
+    # waits the full time and counts, and so does the rest of its run.
+    def retryDelay(self, error, quick=False):
+        if self.failures == 0 or (self.triedAt is not None
+                                  and time.time() - self.triedAt >= ERROR_RETRY_SECONDS):
+            self.retryStep = 0
+        if not quick:
+            self.retryStep = max(self.retryStep, len(RETRY_STEPS) + 1)
+        step = self.retryStep
+        self.retryStep += 1
+        if step == 0 or step > len(RETRY_STEPS):
+            self.watch(error)
+        return RETRY_STEPS[step] if step < len(RETRY_STEPS) else ERROR_RETRY_SECONDS
 
     def warn(self, text):
         self.logger.warning(text)
@@ -886,6 +944,10 @@ class Platform:
             self.state = RUNNING
         return not self.stopped
 
+    # `seconds`, give or take WAIT_JITTER of it.
+    def jittered(self, seconds):
+        return max(0, round(seconds * self.rng.uniform(1 - WAIT_JITTER, 1 + WAIT_JITTER)))
+
     # A short human pause between two entries.
     def pause(self, low=3, high=7):
         return self.wait(random.uniform(low, high), sleeping=False)
@@ -896,6 +958,7 @@ class Platform:
         while not self.stopped:
             try:
                 self.state = RUNNING
+                self.triedAt = time.time()
                 self.run()
                 break
             except AuthError as error:
@@ -918,20 +981,24 @@ class Platform:
             except RetryLater as error:
                 self.state = ERROR
                 self.lastError = str(error)
-                self.warn(f"{error} Повтор через {ERROR_RETRY_SECONDS // 60} мин.")
-                self.watch(error)
-                if not self.wait(ERROR_RETRY_SECONDS):
+                delay = self.retryDelay(error, quick=networkDown(error))
+                self.warn(f"{error} Повтор через {delay // 60} мин.")
+                if not self.wait(delay):
                     break
                 self.lastError = ''
             except Exception as error:
                 self.state = ERROR
                 self.lastError = f"{type(error).__name__}: {error}"
                 self.logger.error(f"Неожиданная ошибка: {self.lastError}")
-                self.watch(self.lastError)
+                # A bug or a connection a site did not catch: quick, but not
+                # when requests carries the site's own answer (urllib3 gave
+                # up on its 429s, an HTTP error status).
+                delay = self.retryDelay(self.lastError, quick=networkDown(error) or not
+                                        isinstance(error, requests.RequestException))
                 self.logger.debug(traceback.format_exc())
                 for line in traceback.format_exc().strip().splitlines()[-4:]:
                     self.logger.error("  " + line)
-                if not self.wait(ERROR_RETRY_SECONDS):
+                if not self.wait(delay):
                     break
                 self.lastError = ''
         self.state = STOPPED

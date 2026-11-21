@@ -31,8 +31,8 @@ with its own session, so it does not interfere with a run in progress.
 | --- | --- |
 | `AuthError` | stops the site, status "Sign-in required" («Нужен вход заново»), a message on Telegram |
 | `PlatformError` | stops the site with an error, a message on Telegram |
-| `RetryLater` | status "Error, retrying" («Ошибка, повтор»), a new attempt in 15 minutes |
-| anything else | the same as `RetryLater`, plus a traceback in the log |
+| `RetryLater` | status "Error, retrying" («Ошибка, повтор»), a new attempt in 15 minutes. Raised `from` a `requests.ConnectionError` or `Timeout` (the site was not reached at all), it is retried sooner: after 1, 2, 5 minutes, then every 15 |
+| anything else | the same as an unreached site (1, 2, 5, then 15 minutes), plus a traceback in the log |
 
 ## How to add a site
 

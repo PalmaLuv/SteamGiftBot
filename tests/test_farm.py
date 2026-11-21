@@ -708,6 +708,17 @@ def test_run_now_during_a_pass_skips_the_next_wait(manager):
     assert result == [True]
 
 
+class FixedRandom:
+    """Takes the place of a site's rng: the waits come out exact, or at the
+    edge of the jitter when `share` says so (-1 low, 1 high)."""
+
+    def __init__(self, share=0):
+        self.share = share
+
+    def uniform(self, low, high):
+        return (low + high) / 2 + self.share * (high - low) / 2
+
+
 class FakeSteamGiftBot:
     """Stands in for FarmSteamGift in SteamGiftsPlatform.run."""
 
@@ -739,6 +750,7 @@ def test_steamgifts_pauses_when_nothing_suits(manager, monkeypatch):
     from steamgiftbot.farm import steamgifts
     monkeypatch.setattr(steamgifts, 'FarmSteamGift', FakeSteamGiftBot)
     platform = manager.platforms['steamgifts']
+    platform.rng = FixedRandom()
     waits = []
 
     def wait(seconds, sleeping=True, reason=''):

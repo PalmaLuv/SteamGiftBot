@@ -85,6 +85,8 @@ class SteamGift :
         self.points     = 0
         self.xsrfToken  = None
         self.lastRejection = ''
+        # The exception behind the last page that did not load, if any.
+        self.lastNetworkError = None
         self.running    = True
         self.stats      = RunStats()
 
@@ -118,10 +120,12 @@ class SteamGift :
         self.running = False
 
     def GetSoupFromPage(self, url):
+        self.lastNetworkError = None
         try:
             res_soup = self.session.get(url, timeout=TIMEOUT)
         except requests.RequestException as error:
             log(f"Network error while loading the page: {error}", "red")
+            self.lastNetworkError = error
             return None
 
         if res_soup.status_code != 200:
@@ -136,7 +140,9 @@ class SteamGift :
     def updateInfo(self):
         soup = self.GetSoupFromPage(self.baseURL)
         if soup is None:
-            raise SteamGiftError("Could not reach SteamGifts.")
+            # Chained to the network error, if that was it: the farm retries a
+            # network that is not up sooner than a site that answered badly.
+            raise SteamGiftError("Could not reach SteamGifts.") from self.lastNetworkError
 
         token  = soup.find('input', {'name': 'xsrf_token'})
         points = soup.find('span', {'class': 'nav__points'})

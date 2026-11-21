@@ -19,14 +19,14 @@ its **Preview (Что возьмёт)** tab. The reason is almost always written
 | Message | What it means | What to do |
 | --- | --- | --- |
 | "Sign-in required" («Нужен вход заново»), "… does not recognise the cookies" («… не узнаёт cookie») | the cookies no longer work | **Reconnect (Подключить заново)** ([Connecting sites](Connecting-Sites-EN.md)) |
-| "Error, retrying" («Ошибка, повтор»), "… is unavailable" («… недоступна»), "HTTP 5xx" | the site is temporarily not responding | nothing: the farm retries in 15 minutes |
+| "Error, retrying" («Ошибка, повтор»), "… is unavailable" («… недоступна»), "HTTP 5xx" | the site is temporarily not responding | nothing: the farm retries in 15 minutes; if the site could not be reached at all (no network yet), after 1, 2, 5 minutes first |
 | "… asks to slow down (HTTP 429)" («… просит притормозить (HTTP 429)») | too many requests | nothing: the farm waits and continues |
 | "IndieGala showed an Incapsula check" («IndieGala показала проверку Incapsula») | the site's protection is not letting the farm in | open IndieGala in the same browser, pass the check and reconnect the site |
 | "SteamGifts answered with a Cloudflare check" | the same for SteamGifts | open the site in the browser; the farm retries later |
 | "Outside working hours, next run at 08:00" («Вне часов работы, следующий проход в 08:00») | working hours are set | that is by design; see [Rules and filters](Rules-and-Filters-EN.md#working-hours) |
 | "Daily limit reached" («Дневной лимит исчерпан») | the entry or spending limit was reached | that is by design; the limit is rolling, over 24 hours |
 | "Site stopped: …" («Площадка остановлена: …») | the site answered in a way that makes continuing impossible (for example, "account banned from giveaways") | read the message and sort it out on the site |
-| "Unexpected error" («Неожиданная ошибка») with a traceback | a bug in the farm | the farm retries in 15 minutes; if it keeps happening, open an issue with these log lines |
+| "Unexpected error" («Неожиданная ошибка») with a traceback | a bug in the farm | the farm retries by itself (after 1, 2, 5, then every 15 minutes); if it keeps happening, open an issue with these log lines |
 
 ## SteamGifts
 

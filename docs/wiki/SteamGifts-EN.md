@@ -26,11 +26,17 @@ Cookies**.
    раздач»)) and decides for each giveaway whether to enter it. It pauses
    3–7 seconds between entries.
 4. If the balance drops below "Keep balance above" («Не опускать баланс
-   ниже»), the farm waits 15 minutes for points to accumulate.
+   ниже»), the farm waits about 15 minutes for points to accumulate.
 5. If it has looked through "Pages per run" («Страниц за проход») and found
-   no giveaway it can afford with the current balance, the farm also waits 15
-   minutes. Without this limit it would page through the whole catalogue over
-   and over.
+   no giveaway it can afford with the current balance, the farm also waits
+   about 15 minutes. Without this limit it would page through the whole
+   catalogue over and over. If the next runs enter nothing either and the
+   balance has not grown by at least 10 P meanwhile, the pause grows to 30,
+   then 60 minutes. Any entry, or the balance growing by 10 P, brings back
+   15 minutes.
+6. These pauses are not exact on purpose: each is up to 20 % longer or
+   shorter (the 60-minute one only shorter), so the farm does not visit the
+   site with a robot's even rhythm.
 
 ## Why a giveaway was skipped
 
@@ -61,6 +67,7 @@ not fit:
 | --- | --- | --- |
 | Cookie PHPSESSID | — | the steamgifts.com request copied as cURL, or the PHPSESSID value itself (F12 → Application → Cookies) |
 | Your contributor level (Ваш contributor level) | empty | giveaways with a higher level are skipped without extra requests |
+| Browser User-Agent (User-Agent браузера) | `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36` | taken from cURL automatically; otherwise from the same browser the cookie came from |
 
 **What to enter (Что брать)**
 

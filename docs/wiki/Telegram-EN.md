@@ -52,8 +52,9 @@ unmarked wins.
 If Telegram refuses a button that links to a home address, the message still
 arrives, with the links written out under it.
 
-A single network blip does not send anything: the farm quietly tries again in
-15 minutes and only writes when the outage lasts about an hour.
+A single network blip does not send anything: the farm quietly tries again
+(after 1, 2 and 5 minutes when the site could not be reached at all, then every
+15 minutes) and only writes when the outage lasts about an hour.
 
 The "Send notifications" («Присылать уведомления») switch turns messages off
 without erasing the token.

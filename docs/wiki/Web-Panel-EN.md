@@ -30,7 +30,7 @@ screen. The data refreshes every 3 seconds.
 | Running (Работает) | a run is in progress |
 | Waiting · 15 min (Ждёт · 15 мин) | a pause until the next run. The reason is shown next to it: "Waiting for points: 21 of 30 P" («Ждёт поинты: 21 из 30 P»), "Outside working hours, opens at 08:00" («Вне часов работы, откроется в 08:00»), "Daily limit reached, resets at 14:20" («Дневной лимит исчерпан, сброс в 14:20»), "Out of iS" («Закончился iS») |
 | Stopped (Остановлена) | turned off by hand or never started |
-| Error, retrying (Ошибка, повтор) | the site did not answer or answered unexpectedly. The farm retries by itself in 15 minutes |
+| Error, retrying (Ошибка, повтор) | the site did not answer or answered unexpectedly. The farm retries by itself in 15 minutes, or after 1, 2, 5 minutes first if the site could not be reached at all |
 | Sign-in required (Нужен вход заново) | the cookies no longer work. Press "Reconnect" («Подключить заново») |
 | Not connected (Не подключена) | a site from the catalogue that has not been connected yet |
 

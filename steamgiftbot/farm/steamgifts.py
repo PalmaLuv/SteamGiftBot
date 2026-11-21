@@ -9,9 +9,10 @@ from steamgiftbot import filters
 from steamgiftbot import settings as sgSettings
 from steamgiftbot.bot import URL, SessionExpired, SteamGift, SteamGiftError
 from steamgiftbot.farm import rules
-from steamgiftbot.farm.base import (AuthError, OwnLines, Platform, PlatformError, RetryLater,
-                                    applySettings, coerce, cookieGuide, field, grouped,
-                                    parseCookies, presetFields, scheduleFields)
+from steamgiftbot.farm.base import (DEFAULT_USER_AGENT, AuthError, OwnLines, Platform,
+                                    PlatformError, RetryLater, applySettings, coerce,
+                                    cookieGuide, field, grouped, parseCookies, presetFields,
+                                    scheduleFields, userAgentFrom)
 from steamgiftbot.giveaway import parseRow
 from steamgiftbot.logging_setup import LOGGER_NAME
 from steamgiftbot.state import defaultPath
@@ -25,6 +26,13 @@ DEFAULT_PAGES = 10
 
 # How far a dry run looks: SteamGifts lists 50 giveaways a page.
 PREVIEW_PAGES = 3
+
+# Walks that enter nothing while the balance stands still back off: the
+# 'nothing suits' pause doubles each time up to IDLE_MAX_WAIT. Growing by
+# IDLE_GROWTH points may let a new giveaway fit, so it brings the usual
+# pause back, as does any entry.
+IDLE_MAX_WAIT = 60 * 60
+IDLE_GROWTH   = 10
 
 # Marks a giveaway SteamGifts refused for good, among the seen ids.
 REFUSED = 'no:'
@@ -66,15 +74,17 @@ class FarmSteamGift(SteamGift):
     def __init__(self, platform, config, statePath):
         self.platform = platform
         super().__init__(config, statePath=statePath)
+        platform.useAgent(self)
 
     def waitForPoints(self):
         self.waitedForPoints = True
         self.platform.endPass(self)
+        seconds = self.platform.jittered(self.pointsWait)
         self.platform.info(f"Мало поинтов: {self.points}, нужно минимум {self.min_points}. "
-                           f"Жду {self.pointsWait // 60} мин.")
+                           f"Жду {seconds // 60} мин.")
         self.platform.balance = self.points
-        if not self.platform.wait(self.pointsWait, reason=f"Ждёт поинты: {self.points} из "
-                                                          f"{self.min_points} P"):
+        if not self.platform.wait(seconds, reason=f"Ждёт поинты: {self.points} из "
+                                                  f"{self.min_points} P"):
             self.stop()
 
     def updateInfo(self):
@@ -190,7 +200,12 @@ class SteamGiftsPlatform(Platform):
 
     # Farm-only rules, kept in farm.json: config.ini stays what the command
     # line bot understands.
-    EXTRA = presetFields() + grouped('Обход', [
+    EXTRA = grouped('Аккаунт', [
+        # The command line bot keeps the User-Agent from info.json; the farm
+        # sends the browser's, which is what SteamGifts saw with this cookie.
+        field('user_agent', 'User-Agent браузера', 'text', DEFAULT_USER_AGENT,
+              'из cURL берётся сам; иначе — того же браузера, откуда cookie'),
+    ]) + presetFields() + grouped('Обход', [
         field('max_pages', 'Страниц за проход', 'int', DEFAULT_PAGES,
               'на странице 50 раздач; без предела бот листал весь каталог'),
     ]) + grouped('Выигрыши', [
@@ -207,6 +222,10 @@ class SteamGiftsPlatform(Platform):
         self.pendingCost = {}
         self.lastGiveaways = {}
         self.passEntered = 0
+        # Walks in a row that entered nothing, and the balance the run of them
+        # started from; see idleWait().
+        self.idlePasses = 0
+        self.idleBalance = None
         # The main account shares config.ini with the command line bot; an
         # added one gets its own, and its own state file next to it.
         self.configPath = (manager.configPath if self.primary
@@ -232,8 +251,18 @@ class SteamGiftsPlatform(Platform):
         sgLogger.setLevel(logging.INFO)
         sgLogger.propagate = False
 
+    # The User-Agent lives with the farm's settings but belongs in the form
+    # next to the cookie.
     def schema(self):
-        return self.FIELDS + self.EXTRA
+        fields = self.FIELDS + self.EXTRA
+        return ([item for item in fields if item['group'] == 'Аккаунт'] +
+                [item for item in fields if item['group'] != 'Аккаунт'])
+
+    # Sends the farm's User-Agent with a bot's requests; `agent` wins when given.
+    def useAgent(self, bot, agent=None):
+        agent = agent or self.extraSettings().get('user_agent') or DEFAULT_USER_AGENT
+        bot.session.headers['User-Agent'] = agent
+        return bot
 
     def limitSettings(self):
         return self.extraSettings()
@@ -298,12 +327,15 @@ class SteamGiftsPlatform(Platform):
         return parseCookies(text, bareName='PHPSESSID').get('PHPSESSID', '').strip()
 
     def check(self, values):
-        session = self.sessionFrom((values or {}).get('cookie'))
+        values = values or {}
+        session = self.sessionFrom(values.get('cookie'))
         if not session:
             raise ValueError("в тексте нет cookie PHPSESSID: скопируйте запрос как cURL целиком")
         config = self.loadConfig()
         config.cookie = session
-        bot = SteamGift(config, statePath=defaultPath(self.configPath))
+        bot = self.useAgent(SteamGift(config, statePath=defaultPath(self.configPath)),
+                            userAgentFrom(str(values.get('cookie') or '')) or
+                            values.get('user_agent'))
         try:
             bot.updateInfo()
         except SessionExpired as error:
@@ -323,6 +355,13 @@ class SteamGiftsPlatform(Platform):
     def updateSettings(self, incoming):
         incoming = dict(incoming)
         if incoming.get('cookie') and not isinstance(incoming['cookie'], bool):
+            # Only PHPSESSID is kept, so the browser's User-Agent is taken
+            # from a pasted cURL now or never. It wins over the form's field,
+            # which the panel sends back unchanged with every save, the way
+            # the other sites prefer the cURL's User-Agent to their field.
+            agent = userAgentFrom(str(incoming['cookie']))
+            if agent:
+                incoming['user_agent'] = agent
             incoming['cookie'] = self.sessionFrom(incoming['cookie']) or incoming['cookie']
         # config.ini and farm.json are read, changed and written under the
         # farm's lock, so two changes at once cannot drop one another.
@@ -429,7 +468,7 @@ class SteamGiftsPlatform(Platform):
             raise ValueError("не заполнены настройки: " + ', '.join(missing))
         config.once = True
         config.dry_run = True
-        bot = SteamGift(config, statePath=defaultPath(self.configPath))
+        bot = self.useAgent(SteamGift(config, statePath=defaultPath(self.configPath)))
         try:
             bot.updateInfo()
         except SessionExpired as error:
@@ -502,7 +541,8 @@ class SteamGiftsPlatform(Platform):
     # as the page would send it. Returns True when the site said success.
     def markReceived(self, code, pages=5):
         try:
-            bot = SteamGift(self.loadConfig(), statePath=defaultPath(self.configPath))
+            bot = self.useAgent(SteamGift(self.loadConfig(),
+                                          statePath=defaultPath(self.configPath)))
             bot.updateInfo()
             for page in range(1, pages + 1):
                 soup = bot.GetSoupFromPage(f"{URL}/giveaways/won/search?page={page}")
@@ -527,6 +567,42 @@ class SteamGiftsPlatform(Platform):
             self.warn(f"SteamGifts: не удалось отметить «получено»: {error}")
         return False
 
+    # The pause after a walk that found nothing to enter. With a balance just
+    # over the reserve nothing fits, and a walk of max_pages every quarter
+    # hour came to ~960 requests a day for no entry at all. So walks in a row
+    # that enter nothing while the balance grows by less than IDLE_GROWTH
+    # wait longer each time: 15 → 30 → 60 min. The pause comes back already
+    # jittered, so the log tells the wait it really is.
+    def idleWait(self, points, entered, base):
+        ceiling = max(base, IDLE_MAX_WAIT)
+        if entered:
+            self.idleReset(points, base, "Был вход")
+            return self.underCeiling(self.jittered(base), ceiling)
+        if self.idleBalance is not None and points - self.idleBalance >= IDLE_GROWTH:
+            self.idleReset(points, base, f"Баланс вырос на {points - self.idleBalance} P")
+        if self.idleBalance is None:
+            self.idleBalance = points
+        self.idlePasses += 1
+        # The exponent is capped so a week of idle walks stays a small number.
+        nominal = min(base * 2 ** min(self.idlePasses - 1, 10), ceiling)
+        seconds = self.underCeiling(self.jittered(nominal), ceiling)
+        if nominal > base:
+            self.info(f"Проходов подряд без входов: {self.idlePasses}, баланс не вырос на "
+                      f"{IDLE_GROWTH} P. Пауза увеличена до {seconds // 60} мин.")
+        return seconds
+
+    # The jitter folded back under the ceiling rather than cut at it: cut,
+    # every other longest pause would come out the same to the second.
+    @staticmethod
+    def underCeiling(seconds, ceiling):
+        return ceiling - (seconds - ceiling) if seconds > ceiling else seconds
+
+    def idleReset(self, points, base, why):
+        if self.idlePasses > 1:
+            self.info(f"{why}: пауза между проходами снова {max(1, base // 60)} мин.")
+        self.idlePasses = 0
+        self.idleBalance = points
+
     def onStop(self):
         if self.bot is not None:
             self.bot.stop()
@@ -541,6 +617,8 @@ class SteamGiftsPlatform(Platform):
 
         bot = FarmSteamGift(self, config, defaultPath(self.configPath))
         self.bot = bot
+        self.idlePasses = 0
+        self.idleBalance = None
         try:
             bot.updateInfo()
             self.balance = bot.points
@@ -561,17 +639,23 @@ class SteamGiftsPlatform(Platform):
                     if not self.wait(pause.seconds, reason=str(pause).rstrip('.')):
                         break
                 else:
+                    entered = self.sessionEntered - self.passEntered
                     # The walk reached the end of the listing with points to
                     # spare: nothing suits right now. Without this pause the
                     # bot would start over from page one at once, for ever.
                     if not bot.waitedForPoints and not self.stopped and bot.running:
                         self.endPass(bot)
-                        minutes = max(1, bot.pointsWait // 60)
+                        seconds = self.idleWait(bot.points, entered, bot.pointsWait)
+                        minutes = max(1, seconds // 60)
                         self.info(f"Подходящих раздач нет, баланс {bot.points}P. "
                                   f"Следующий проход через {minutes} мин.")
-                        if not self.wait(bot.pointsWait,
+                        if not self.wait(seconds,
                                          reason=f"Подходящих раздач нет, {bot.points} P"):
                             break
+                    elif entered:
+                        # Out of points after entering: the next walk that
+                        # finds nothing starts the back-off afresh.
+                        self.idleReset(bot.points, bot.pointsWait, "Был вход")
                 if self.stopped or not bot.running:
                     break
                 self.lastCycle = self.manager.now()
