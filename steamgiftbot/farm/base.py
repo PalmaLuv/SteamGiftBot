@@ -64,6 +64,11 @@ WAIT_JITTER = 0.2
 # Failed tries in a row before Telegram hears about it: about an hour.
 WATCH_AFTER = 4
 
+# A site that keeps making passes and enters nothing is told once: a day of
+# passes, at least IDLE_PASSES of them, without a single entry.
+IDLE_ALERT  = 24 * 3600
+IDLE_PASSES = 6
+
 # Passes a giveaway may fail for a passing reason before it is given up on,
 # and how many such counters a site keeps at most.
 FAILED_TRIES = 3
@@ -695,9 +700,50 @@ class Platform:
             seconds = int(time.time() - self.passStartedAt)
             took = f" · за {seconds // 60} мин {seconds % 60} с" if seconds >= 60 \
                 else f" · за {seconds} с"
-        self.passStartedAt = None
+        started, self.passStartedAt = self.passStartedAt, None
         self.info(text + took)
         self.recovered()
+        self.watchIdle(started)
+
+    # Counts passes in a row that entered nothing (see IDLE_ALERT). Free
+    # sources are left out: most of their passes find nothing new, and that
+    # is how they work.
+    def watchIdle(self, started):
+        if self.category != 'points' or started is None:
+            return
+        state = self.manager.state
+        now = time.time()
+        idle = dict(state.value(self.key, 'idle') or {})
+        if state.usage(self.key, now - started + 1)[0]:
+            if idle:
+                state.setFlag(self.key, 'idle', {})
+            return
+        idle['from'] = idle.get('from') or started
+        idle['passes'] = idle.get('passes', 0) + 1
+        due = (not idle.get('told') and idle['passes'] >= IDLE_PASSES
+               and now - idle['from'] >= IDLE_ALERT and not self.idleExplained())
+        if due:
+            idle['told'] = True
+        state.setFlag(self.key, 'idle', idle)
+        if due:
+            self.tellIdle(now - idle['from'], idle['passes'])
+
+    # True when the site has already said why nothing is entered.
+    def idleExplained(self):
+        return False
+
+    def tellIdle(self, seconds, passes):
+        lines = []
+        if self.waitReason:
+            lines.append(f"Причина ожидания: {self.waitReason}")
+        if self.balance is not None:
+            lines.append(f"Баланс: {self.balance} {self.unit}")
+        self.notify('\n'.join(lines), '⚠️', title='СТОИТ БЕЗ ВХОДОВ',
+                    headline=f"Ни одного входа за {int(seconds // 3600)} ч, проходов: {passes}",
+                    note="Проходы идут, но ферма ни во что не входит: проверьте баланс, "
+                         "резерв и фильтры. «Что возьмёт» покажет, почему раздачи пропускаются.",
+                    buttons=[("Что возьмёт", self.manager.panelLink(f'/site/{self.key}/preview')),
+                             ("Настройки", self.manager.panelLink(f'/site/{self.key}/settings'))])
 
     # A pass went through: if the site had been failing long enough to be
     # reported, say it works again.

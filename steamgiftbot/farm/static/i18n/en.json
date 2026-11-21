@@ -1045,5 +1045,10 @@
  "проверку выигрышей": "the wins check",
  "список выигрышей": "the wins list",
  "не сохранён": "not saved",
- "Ключ к": "Key for"
+ "Ключ к": "Key for",
+ "Проходы идут, но ферма ни во что не входит: проверьте баланс, резерв и фильтры. «Что возьмёт» покажет, почему раздачи пропускаются": "Passes keep running but the farm enters nothing: check the balance, the reserve and the filters. “Preview” shows why giveaways are skipped",
+ "Ни одного входа за": "No entries in",
+ "Причина ожидания": "Waiting because",
+ "СТОИТ БЕЗ ВХОДОВ": "NO ENTRIES",
+ "ч, проходов": "h, passes"
 }

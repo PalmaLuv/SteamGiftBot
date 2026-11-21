@@ -36,11 +36,12 @@ Get the key and mark it as received in the panel: SteamGifts requires it.
 
 | Title | When | Buttons |
 | --- | --- | --- |
-| 🎉 WIN | the farm noticed a win (SteamGifts, OpiumPulses) | Get key, Wins |
+| 🎉 WIN | the farm noticed a win (SteamGifts, IndieGala, OpiumPulses) | Get key, Wins |
 | 🔑 SIGN-IN NEEDED | the site stopped accepting the cookie; the site is stopped | Reconnect |
 | ⛔ SITE STOPPED | the farm cannot go on (no cookie, account banned, settings error) | Open the site |
 | ⚠️ NOT WORKING | the site could not be reached for about an hour | Log |
 | ✅ WORKING AGAIN | the first successful run after such an outage | — |
+| ⚠️ NO ENTRIES | a giveaway site went a day (and at least 6 runs) without entering anything; one message until it enters again | Preview, Settings |
 | 🎁 FREE | free games claimed (GOG, Steam, itch.io), one message per run | Site |
 | ✅ KEY ACTIVATED / ⏳ WILL RETRY LATER / ⚠️ KEY REJECTED | the ASF activation result | Wins |
 | 📊 DAILY SUMMARY | every day at the chosen hour | Open the panel, Wins |

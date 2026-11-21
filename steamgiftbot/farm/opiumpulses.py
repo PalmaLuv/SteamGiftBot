@@ -312,7 +312,12 @@ class OpiumPulsesPlatform(Platform):
         self.keepForDebugging('enter-unconfirmed', response.text)
         return False, 'вход не подтверждён (страница сохранена в debug/)'
 
+    # The filter warning above already says why nothing is entered.
+    def idleExplained(self):
+        return getattr(self, 'filteredNow', False)
+
     def cycle(self, conf):
+        self.filteredNow = False
         response = self.get(LISTING)
         if not isSignedIn(response.text):
             raise AuthError("OpiumPulses не узнаёт cookie: войдите на сайт "
@@ -405,6 +410,7 @@ class OpiumPulsesPlatform(Platform):
     # The user's own filters on opiumpulses.com hide every giveaway: the farm
     # can do nothing about it, so the user hears it, in Telegram once a day.
     def filteredOut(self):
+        self.filteredNow = True
         self.warn(FILTER_WARN)
         state = self.manager.state
         last = state.value(self.key, 'filter_notified_at') or 0
