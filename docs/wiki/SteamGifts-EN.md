@@ -168,8 +168,8 @@ not fit:
 so after a save, a preset or a game added to a list a running site restarts
 by itself. If it is waiting for the site to answer at that moment, the new
 start waits until that request is over: the site is not left stopped.
-"Stop" («Стоп») pressed meanwhile cancels the restart, and a stopped site
-stays stopped after a save.
+"Stop" («Стоп») pressed meanwhile answers at once and cancels the restart,
+and a stopped site stays stopped after a save.
 
 ## Wins
 

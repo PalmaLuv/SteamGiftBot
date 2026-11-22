@@ -73,6 +73,47 @@ def test_stop_pressed_while_the_restart_waits_wins(manager, monkeypatch):  # noq
     assert len(runs) == 1 and not platform.running and platform.state == base.STOPPED
 
 
+def test_stop_during_the_restart_wait_answers_at_once(manager, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(base, 'RESTART_WAIT', 3)
+    platform = manager.platforms['steamgifts']
+    runs, release = slowWorker(platform)
+    platform.start()
+    assert until(lambda: runs)
+    result = []
+    restarting = threading.Thread(target=lambda: result.append(platform.restart()))
+    restarting.start()
+    assert until(lambda: platform.restartPending)
+    # The panel's Stop (or Telegram /stop) does not wait out the restart's join.
+    began = time.time()
+    platform.stop()
+    assert time.time() - began < 1
+    release.set()
+    restarting.join(5)
+    assert result == [False]
+    time.sleep(0.1)
+    assert len(runs) == 1 and not platform.running and not platform.restartPending
+
+
+def test_start_during_the_restart_wait_starts_one_worker(manager, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(base, 'RESTART_WAIT', 3)
+    platform = manager.platforms['steamgifts']
+    runs, release = slowWorker(platform)
+    platform.start()
+    assert until(lambda: runs)
+    result = []
+    restarting = threading.Thread(target=lambda: result.append(platform.restart()))
+    restarting.start()
+    assert until(lambda: platform.restartPending)
+    assert platform.start() is True
+    release.set()
+    restarting.join(5)
+    assert result == [True]
+    assert until(lambda: len(runs) == 2 and platform.state == base.SLEEPING)
+    time.sleep(0.1)
+    assert len(runs) == 2 and not platform.restartPending
+    platform.stop(wait=2)
+
+
 def test_start_while_still_stopping_is_not_lost(manager):  # noqa: F811
     platform = manager.platforms['indiegala']
     runs, release = slowWorker(platform)

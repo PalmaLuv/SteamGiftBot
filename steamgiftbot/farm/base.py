@@ -521,6 +521,8 @@ class Platform:
         self.workerLock = threading.RLock()
         # A start asked for while the old worker was still winding down.
         self.restartPending = False
+        # Counts stops, so a restart waiting outside the lock sees one.
+        self.stopSeq = 0
         self.stopFlag = threading.Event()
         self.wakeFlag = threading.Event()
 
@@ -1003,6 +1005,7 @@ class Platform:
     def stop(self, wait=0):
         with self.workerLock:
             self.restartPending = False
+            self.stopSeq += 1
             self.stopFlag.set()
             self.wakeFlag.set()
             thread = self.thread
@@ -1017,11 +1020,26 @@ class Platform:
     # onlyIfRunning a stopped site stays stopped. True when it runs again
     # (or will, once the old worker ends).
     def restart(self, wait=None, onlyIfRunning=False):
+        wait = RESTART_WAIT if wait is None else wait
         with self.workerLock:
             if onlyIfRunning and not (self.running and
                                       (not self.stopped or self.restartPending)):
                 return False
-            self.stop(wait=RESTART_WAIT if wait is None else wait)
+            self.stop()
+            old = self.thread
+            if not wait or old is None or old is threading.current_thread():
+                return self.start()
+            # Pending while we wait, so a Start meanwhile does not queue one more.
+            self.restartPending = True
+            seq = self.stopSeq
+        # The join runs without the lock: a Stop (panel, Telegram, shutdown)
+        # pressed meanwhile answers at once instead of waiting it out.
+        old.join(wait)
+        with self.workerLock:
+            if self.stopSeq != seq:
+                # Stopped meanwhile (cancelled), or a newer restart took over.
+                return self.restartPending or (self.running and not self.stopped)
+            self.restartPending = False
             return self.start()
 
     def wakeUp(self):
