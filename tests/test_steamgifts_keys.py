@@ -35,8 +35,9 @@ def test_keys_are_read_from_the_copy_button_the_key_box_and_the_row():
     assert wonKeys(page()) == {
         'key101': 'AAAAA-BBBBB-CCCCC',
         'key103': 'https://www.humblebundle.com/gift?key=FAKEGIFT',
-        'key105': 'DDDDD-EEEEE-FFFFF',
+        'key105': 'D4DDD-E5EEE-F6FFF',
         'key106': 'GGGGG-HHHHH-IIIII JJJJJ-KKKKK-LLLLL',
+        'key109': 'https://www.gog.com/redeem/FAKEGOGCODE',
     }
 
 
@@ -45,6 +46,23 @@ def test_no_key_in_sight_reads_as_no_key():
     # 'View Key' not pressed yet; a game or user name shaped like a key, a key
     # in a comment, the store link and the sidebar are not keys.
     assert 'key102' not in found and 'key104' not in found and 'nav999' not in found
+
+
+def test_words_and_shop_pages_are_not_taken_for_keys():
+    found = wonKeys(page())
+    # A lowercase tag and a shouted title in the row's text are no Steam key;
+    # a shop's game page or the creator's site in the key box is no gift. A
+    # wrong key would stick: the real one never replaces it.
+    assert 'key107' not in found and 'key108' not in found
+    assert 'gog.com/game' not in found['key109']
+
+
+def test_a_link_from_the_copy_button_is_the_key():
+    row = BeautifulSoup('<div class="table__row-inner-wrap">'
+                        '<a class="table__column__heading" href="/giveaway/key110/x">X</a>'
+                        '<i data-clipboard-text="https://store.example.com/k/AbC9"></i>'
+                        '</div>', 'html.parser')
+    assert steamgifts.rowKey(row) == 'https://store.example.com/k/AbC9'
 
 
 def test_pages_without_keys_or_known_rows_give_nothing():
@@ -117,7 +135,7 @@ class WonBot:
 def test_announce_records_the_win_then_takes_its_key(manager):  # noqa: F811
     platform, cards = setUp(manager)
     platform.announce(WonBot())
-    assert winOf(manager, 'key105')['cdkey'] == 'DDDDD-EEEEE-FFFFF'
+    assert winOf(manager, 'key105')['cdkey'] == 'D4DDD-E5EEE-F6FFF'
 
 
 def test_the_bot_keeps_the_won_page_it_read(makeBot, tmp_path, monkeypatch):

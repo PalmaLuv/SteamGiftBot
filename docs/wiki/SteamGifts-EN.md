@@ -193,6 +193,13 @@ wins), it looks for a key there:
   link in the key box is saved on the win in [Wins](Wins-and-Keys-EN.md); the
   log says "Key for «…» taken from the SteamGifts won page" («Ключ к «…» взят
   со страницы выигрышей SteamGifts»);
+- a link shown in the key box counts only when it looks like a gift or
+  redeem link (`/gift`, `/redeem`, `/claim`, `key=`...): a shop's game page or
+  the creator's site there is not taken. A link behind the copy button is
+  taken as it is;
+- outside the key box, a key is taken from the row's text only as Steam
+  prints it: capitals and digits in groups of five, with at least one digit.
+  Words like `rogue-lite-deck` are not keys;
 - if "Activate won keys immediately" («Активировать выигранные ключи сразу») is on
   in the [farm settings](Farm-Settings-EN.md), a Steam key goes to ASF at once
   and the result arrives on Telegram. Otherwise a 🔑 KEY RECEIVED message

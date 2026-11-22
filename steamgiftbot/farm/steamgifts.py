@@ -84,32 +84,52 @@ KEY_CLASS = re.compile(r'key', re.IGNORECASE)
 NOT_A_GIFT = re.compile(r'steamgifts\.com|steampowered\.com|steamcommunity\.com',
                         re.IGNORECASE)
 
+# A link shown in a key box counts only when it reads as a gift or redeem
+# link: a shop's game page or the creator's site there is not the key, and a
+# wrong key once saved is never replaced by the real one.
+GIFT_LINK = re.compile(r'/gifts?(?=[/?#]|$)|/redeem|/claim|/activate|[?&](?:gift|key|code)=',
+                       re.IGNORECASE)
 
-# Steam keys and gift links in some text, as one string; '' for a button label
-# like 'View Key', so a key not shown yet reads as no key at all.
-def keyText(text, links=True):
-    found = [m.group(0).upper() for m in STEAM_KEY.finditer(LINK.sub(' ', text))
-             if isSteamKey(m.group(0))]
-    if links:
-        found += [link for link in LINK.findall(text) if not NOT_A_GIFT.search(link)]
-    return ' '.join(dict.fromkeys(found))
+# Outside a key box only a key as Steam prints it: capitals and digits in
+# groups of five, with a digit somewhere, so a tag like 'rogue-lite-deck' or
+# a shouted title is not taken for one.
+PRINTED_KEY = re.compile(r'(?<![0-9A-Za-z-])[A-Z0-9]{5}(?:-[A-Z0-9]{5}){2,4}(?![0-9A-Za-z-])')
+
+
+# Steam keys in some text; [] for a button label like 'View Key', so a key
+# not shown yet reads as no key at all.
+def keysIn(text, printed=False):
+    text = LINK.sub(' ', text)
+    if printed:
+        return [m.group(0) for m in PRINTED_KEY.finditer(text)
+                if any(c.isdigit() for c in m.group(0))]
+    return [m.group(0).upper() for m in STEAM_KEY.finditer(text) if isSteamKey(m.group(0))]
+
+
+def linksIn(text, giftOnly=False):
+    return [link for link in LINK.findall(text)
+            if not NOT_A_GIFT.search(link) and (not giftOnly or GIFT_LINK.search(link))]
 
 
 def rowKey(row):
-    texts = [box['data-clipboard-text']
-             for box in row.find_all(attrs={'data-clipboard-text': True})]
+    # What a copy button or a key field holds is the key itself, link or not;
+    # what the key box merely shows has to look like one.
+    copied = [box['data-clipboard-text']
+              for box in row.find_all(attrs={'data-clipboard-text': True})]
+    shown = []
     for box in row.find_all(class_=KEY_CLASS):
-        texts.append(box.get_text(' ', strip=True))
-        texts += [item.get('value') or '' for item in box.find_all(['input', 'textarea'])]
-        texts += [link['href'] for link in box.find_all('a', href=True)]
-    found = keyText(' '.join(texts))
+        copied += [item.get('value') or '' for item in box.find_all(['input', 'textarea'])]
+        shown.append(box.get_text(' ', strip=True))
+        shown += [link['href'] for link in box.find_all('a', href=True)]
+    found = (keysIn(' '.join(copied + shown)) + linksIn(' '.join(copied)) +
+             linksIn(' '.join(shown), giftOnly=True))
     if found:
-        return found
+        return ' '.join(dict.fromkeys(found))
     # Failing that, a Steam key in the row's own text. Never in a link: the
     # game's name ('STAR-WARS-EPIC') or a user name could look like one.
     loose = [text for text in row.find_all(string=True)
              if not isinstance(text, Comment) and not text.find_parent(['a', 'script', 'style'])]
-    return keyText(' '.join(loose), links=False)
+    return ' '.join(dict.fromkeys(keysIn(' '.join(loose), printed=True)))
 
 
 # {giveaway code: key} for the rows of the won page that show one. A page the
