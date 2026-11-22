@@ -442,11 +442,12 @@ class OpiumPulsesPlatform(Platform):
             known.add(ident)
             if not first:
                 self.info(f"Новый ключ на OpiumPulses: {name}")
-                self.recordWin(name, WON_KEYS)
+                moment = self.recordWin(name, WON_KEYS)
                 self.notify('', '🎉', headline=name, link=WON_KEYS,
                             note="Ключ лежит в разделе «Giveaway keys» на сайте.",
                             buttons=[("Забрать ключ", WON_KEYS),
-                                     ("Выигрыши", self.manager.panelLink('/wins'))])
+                                     ("Выигрыши", self.manager.panelLink('/wins'))],
+                            actions=self.manager.winActions(self.key, moment, name))
         if fresh or first:
             state.setFlag(self.key, 'won_keys', sorted(known))
         state.setFlag(self.key, 'wins_seeded')

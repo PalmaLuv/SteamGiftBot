@@ -28,6 +28,7 @@ TITLES = {
 }
 
 MAX_LINES = 30
+CALLBACK_LIMIT = 64     # bytes of callback_data Telegram takes
 
 
 def esc(text):
@@ -51,6 +52,10 @@ class Card:
     block: list = field(default_factory=list)       # monospace lines, under the headline
     note: str = ''              # a quiet last line, in italics
     buttons: list = field(default_factory=list)     # [(text, url)]
+    # [(text, callback_data)]: buttons the farm answers itself (telegram.py).
+    # Telegram sends back only the data, at most 64 bytes, so it names a
+    # thing by a short token and never carries a key or a secret.
+    actions: list = field(default_factory=list)
 
     def heading(self):
         return self.title or TITLES.get(self.icon, TITLES['ℹ️'])
@@ -88,14 +93,20 @@ class Card:
 
     def keyboard(self):
         row = [{'text': text, 'url': url} for text, url in self.buttons if safe(url)]
-        return {'inline_keyboard': [row[i:i + 2] for i in range(0, len(row), 2)]} if row else None
+        rows = [row[i:i + 2] for i in range(0, len(row), 2)]
+        pressed = [{'text': text, 'callback_data': data} for text, data in self.actions
+                   if 0 < len(data.encode()) <= CALLBACK_LIMIT]
+        if pressed:
+            rows.insert(0, pressed)
+        return {'inline_keyboard': rows} if rows else None
 
     # The same card with the buttons spelled out as links, for when Telegram
-    # refuses a button (it may not accept a LAN address in one).
+    # refuses a button (it may not accept a LAN address in one). The farm's
+    # own buttons stay: they carry no address.
     def withoutButtons(self):
         lines = self.lines + [f"{text}: {url}" for text, url in self.buttons if safe(url)]
         return Card(self.icon, self.title, self.site, self.key, self.headline, self.link,
-                    lines, self.block, self.note, [])
+                    lines, self.block, self.note, [], self.actions)
 
 
 def safe(url):

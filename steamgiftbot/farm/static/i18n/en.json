@@ -1079,5 +1079,12 @@
  "Копий": "Copies",
  "известно для": "known for",
  "Выигрыши на": "Wins on",
- "считаются по времени, с первого хранимого входа: в счёт идут и выигрыши входов, уже ушедших из истории, и раздач, куда входили вручную, так что выигрышей там больше, чем от хранимых входов": "are counted by time, from the oldest kept entry: this takes in the wins of entries that have already left the history and of giveaways entered by hand, so there are more wins there than the kept entries brought"
+ "считаются по времени, с первого хранимого входа: в счёт идут и выигрыши входов, уже ушедших из истории, и раздач, куда входили вручную, так что выигрышей там больше, чем от хранимых входов": "are counted by time, from the oldest kept entry: this takes in the wins of entries that have already left the history and of giveaways entered by hand, so there are more wins there than the kept entries brought",
+ "Кнопка устарела: отметьте выигрыш в панели, в разделе «Выигрыши»": "This button is out of date: mark the win in the panel, under «Wins»",
+ "Telegram: ответ на кнопку не принят": "Telegram: the answer to a button press was not accepted",
+ "Telegram: кнопки не убраны": "Telegram: the buttons were not removed",
+ "Отмечено: ключ получен": "Marked: key received",
+ "Отправляю ключ в ASF…": "Sending the key to ASF…",
+ "КЛЮЧ НЕ ОТПРАВЛЕН": "KEY NOT SENT",
+ "Уже отмечено": "Already marked"
 }

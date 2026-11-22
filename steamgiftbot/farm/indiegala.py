@@ -460,9 +460,13 @@ class IndieGalaPlatform(Platform):
             note = "Ключ сохранён в разделе «Выигрыши», ферма отправит его в ASF."
         else:
             note = "Ключ сохранён в разделе «Выигрыши» панели."
+        # The key is saved after the card (with auto_redeem that sends it to
+        # ASF, whose answer should come second), so say whether there is one.
         self.notify('', '🎉', headline=win.name, link=win.url, note=note,
                     buttons=[("Выигрыши", self.manager.panelLink('/wins')),
-                             ("Библиотека IndieGala", LIBRARY)])
+                             ("Библиотека IndieGala", LIBRARY)],
+                    actions=self.manager.winActions(self.key, moment, win.name,
+                                                    steamKey=bool(steamKeys(win.serial or ''))))
         if win.serial:
             try:
                 self.manager.setWinKey(self.key, moment, win.name, win.serial)

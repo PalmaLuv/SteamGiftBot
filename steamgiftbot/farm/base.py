@@ -814,11 +814,11 @@ class Platform:
     # One look for every message a site sends: a card (see cards.py) with
     # this site's name and code. text gives the plain lines under the headline.
     def notify(self, text='', icon='ℹ️', title='', headline='', link='', note='',
-               buttons=None):
+               buttons=None, actions=None):
         self.manager.notify(card=cards.Card(
             icon, title, self.title, self.key, headline, link,
             [line for line in (text or '').split('\n') if line], note=note,
-            buttons=list(buttons or [])))
+            buttons=list(buttons or []), actions=list(actions or [])))
 
     # Free games taken this pass, in one message rather than one per game.
     def announceClaims(self):

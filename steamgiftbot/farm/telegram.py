@@ -3,7 +3,11 @@ also answers a few commands, and only in the chat it was set up with.
 
 Long polling (getUpdates) needs no open port, so this works behind the LAN
 firewall. Commands that were waiting while the farm was off are dropped on
-start rather than run late: a /pause from yesterday should not stop today."""
+start rather than run late: a /pause from yesterday should not stop today.
+
+The same loop answers the buttons under a win card ('Активировать в ASF',
+'Ключ получен'), pressed in that chat only. Keys and cookies are never taken
+from Telegram: they are pasted in the panel."""
 import logging
 import threading
 
@@ -187,12 +191,17 @@ class TelegramControl:
         return (conf['telegram_token'], str(conf['telegram_chat'])) if ready else (None, None)
 
     def process(self, token, chat, update):
+        if update.get('callback_query'):
+            return self.pressed(token, chat, update['callback_query'])
         message = update.get('message') or update.get('edited_message') or {}
         if str((message.get('chat') or {}).get('id')) != chat:
             return None
         card = self.reply(message.get('text'))
         if card is None:
             return None
+        return self.deliver(token, chat, card)
+
+    def deliver(self, token, chat, card):
         card = self.manager.translateCard(card)
         try:
             self.send(token, chat, card)
@@ -202,6 +211,81 @@ class TelegramControl:
             # A button Telegram will not take: the links written out instead.
             self.send(token, chat, card.withoutButtons())
         return card.plain()
+
+    # ---- buttons under a win card (manager.winActions) ---------------------------
+
+    # A press of 'Активировать в ASF' or 'Ключ получен'. Telegram waits for an
+    # answer to every press, so each gets one: a press from another chat an
+    # empty one, a token the history no longer knows (a win long gone) a
+    # word that the button is old. Returns what was done, for the tests.
+    def pressed(self, token, chat, query):
+        message = query.get('message') or {}
+        if str((message.get('chat') or {}).get('id')) != chat:
+            self.answer(token, query)
+            return None
+        parts = str(query.get('data') or '').split(':')
+        found = (self.manager.state.winByToken(parts[1])
+                 if len(parts) == 3 and parts[0] == 'win' and parts[2] in ('asf', 'got')
+                 else None)
+        if found is None:
+            self.answer(token, query, "Кнопка устарела: отметьте выигрыш в панели, "
+                                      "в разделе «Выигрыши».")
+            return 'stale'
+        key, win = found
+        status = win.get('status') or ''
+        if status == 'activated' or (parts[2] == 'got' and status == 'received'):
+            self.answer(token, query, "Уже отмечено.")
+            self.tidyButtons(token, message, parts[1], status)
+            return 'already'
+        if parts[2] == 'got':
+            self.manager.state.setWinStatus(key, win['time'], win['name'], 'received')
+            platform = self.manager.platforms.get(key)
+            if platform is not None:
+                platform.onWinStatus(win, 'received')
+            self.answer(token, query, "Отмечено: ключ получен.")
+            self.tidyButtons(token, message, parts[1], 'received')
+            return 'received'
+        # ASF may take a minute; the press is answered first, and the result
+        # comes as the usual 'КЛЮЧ АКТИВИРОВАН' card from redeemWin.
+        self.answer(token, query, "Отправляю ключ в ASF…")
+        try:
+            kind, _words = self.manager.redeemWin(key, win['time'], win['name'])
+        except Exception as error:
+            platform = self.manager.platforms.get(key)
+            self.deliver(token, chat, cards.Card(
+                '⚠️', 'КЛЮЧ НЕ ОТПРАВЛЕН', platform.title if platform else key, key,
+                win['name'], lines=[str(error)],
+                buttons=[("Выигрыши", self.manager.panelLink('/wins'))]))
+            return 'error'
+        self.tidyButtons(token, message, parts[1], win.get('status') or '')
+        return kind
+
+    def answer(self, token, query, text=''):
+        params = {'callback_query_id': query.get('id')}
+        if text:
+            params['text'] = self.manager.translate(text)[:200]
+        try:
+            self.call(token, 'answerCallbackQuery', **params)
+        except (RuntimeError, requests.RequestException, ValueError) as error:
+            # A press answered too late is only a spinner on the phone.
+            log.debug(f"Telegram: ответ на кнопку не принят: {error}")
+
+    # Takes away the buttons that have nothing left to do: 'Ключ получен'
+    # once it is, both once the key is activated. Links stay.
+    def tidyButtons(self, token, message, winToken, status):
+        done = {'received': ('got',), 'activated': ('got', 'asf')}.get(status, ())
+        gone = {f"win:{winToken}:{act}" for act in done}
+        rows = (message.get('reply_markup') or {}).get('inline_keyboard') or []
+        kept = [row for row in ([button for button in row
+                                 if button.get('callback_data') not in gone] for row in rows)
+                if row]
+        if not gone or kept == rows or not message.get('message_id'):
+            return
+        try:
+            self.call(token, 'editMessageReplyMarkup', chat_id=message['chat']['id'],
+                      message_id=message['message_id'], reply_markup={'inline_keyboard': kept})
+        except (RuntimeError, requests.RequestException, ValueError) as error:
+            log.debug(f"Telegram: кнопки не убраны: {error}")
 
     def send(self, token, chat, card):
         params = {'chat_id': chat, 'text': card.html()[:4000], 'parse_mode': 'HTML',
@@ -229,7 +313,8 @@ class TelegramControl:
         if token != self.token or self.manager.uiSettings().get('lang') != self.lang:
             self.prepare(token)
         updates = self.call(token, 'getUpdates', wait=POLL + 10, offset=self.offset,
-                            allowed_updates=['message'], timeout=POLL) or []
+                            allowed_updates=['message', 'callback_query'],
+                            timeout=POLL) or []
         for update in updates:
             self.offset = update['update_id'] + 1
             try:
