@@ -272,6 +272,53 @@ def checkPassword(password, stored):
     return hmac.compare_digest(attempt['hash'], stored['hash'])
 
 
+# A count kept in an entry, or None: entries from before the farm kept it
+# have none, and a bool or a word is not one either.
+def countOf(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        return None
+    return value
+
+
+# One entry's chance to win: its copies shared among the people in, the farm
+# being one more. IndieGala's forecast for the end ('expected') is closer to
+# the truth than the people seen at entry, who are only the first to come.
+# (chance, forecast used), or None when the entry never saw a count.
+def entryChance(entry):
+    people, forecast = countOf(entry.get('expected')), True
+    if people is None:
+        people, forecast = countOf(entry.get('entries')), False
+    if people is None:
+        return None
+    copies = countOf(entry.get('copies')) or 1
+    return min(1.0, copies / (people + 1)), forecast
+
+
+# Wins the kept history of entries should have brought against those that
+# came, and the site's currency per win. Only the wins since the oldest kept
+# entry count, so both sides cover the same stretch; the command line bot's
+# imported wins came before it. Entries with no count are left out of the
+# expectation (and counted, so the panel can say how many).
+def luckOf(entries, wins):
+    if not entries:
+        return None
+    since = min(entry['time'] for entry in entries)
+    expected, known, forecast = 0.0, 0, 0
+    for entry in entries:
+        chance = entryChance(entry)
+        if chance is None:
+            continue
+        expected += chance[0]
+        known += 1
+        forecast += chance[1]
+    won = sum(1 for win in wins if win['time'] >= since and not win.get('cli'))
+    spent = sum(entry.get('cost') or 0 for entry in entries)
+    return {'entries': len(entries), 'known': known, 'unknown': len(entries) - known,
+            'forecast': forecast, 'expected': round(expected, 2), 'wins': won,
+            'spent': spent, 'perWin': round(spent / won, 1) if won else None,
+            'avgCost': round(spent / len(entries), 1), 'since': since}
+
+
 class FarmState:
     """Entries, wins and seen ids per site. Saved after every change: the file
     is small and losing it only means a few repeated requests."""
@@ -777,8 +824,18 @@ class FarmManager:
                 'winsByDay': [day['w'] for day in series],
                 # Entries the command line bot made that day: their cost is unknown.
                 'importedByDay': [day.get('cli', 0) for day in series],
+                # Wins expected against wins had, for the sites that draw.
+                'luck': self.luck(platform),
             })
         return {'days': dates, 'sites': sites}
+
+    def luck(self, platform):
+        if platform.category != 'points':
+            return None
+        site = self.state.site(platform.key)
+        with self.state.lock:
+            entries, wins = list(site.get('entries', [])), list(site.get('wins', []))
+        return luckOf(entries, wins)
 
     def historyRows(self, kind='entries', site='', query=''):
         rows = []
@@ -988,6 +1045,7 @@ class FarmManager:
         card.lines.append(f"🎉 Выигрышей за сутки: {len(wins)}" +
                           (f" — {', '.join(win['name'] for _, win in wins[:8])}" if wins else ''))
         card.lines += problems
+        card.lines += [line for line in map(self.luckLine, self.platforms.values()) if line]
         waiting = self.openWins()
         if waiting:
             card.lines.append(f"🔔 Не отмечено, что ключ получен: {len(waiting)} "
@@ -997,6 +1055,24 @@ class FarmManager:
         if waiting:
             card.buttons.append(("Выигрыши", self.panelLink('/wins')))
         return card
+
+    # The report's line on a site's luck over its kept history, or '' for a
+    # free site or one that has entered nothing yet.
+    def luckLine(self, platform):
+        luck = self.luck(platform)
+        if not luck:
+            return ''
+        unit = f" {platform.unit}" if platform.unit else ''
+        line = f"🍀 {cards.code(platform.key)} за историю: выигрышей {luck['wins']}"
+        if luck['known']:
+            line += f", ожидалось ≈{luck['expected']:.1f}"
+            if luck['unknown']:
+                line += f" (известно для {luck['known']} из {luck['entries']} входов)"
+        else:
+            line += ", ожидание неизвестно"
+        if luck['perWin'] is not None:
+            line += f" · {round(luck['perWin'])}{unit} за выигрыш"
+        return line + f" · вход в среднем {luck['avgCost']:g}{unit}"
 
     # Sends the report once a day at the chosen hour. True when it went out.
     def reportTick(self):

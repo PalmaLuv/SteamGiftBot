@@ -31,7 +31,7 @@ Rules:
 | --- | --- |
 | `/api/session` | `{signedIn, hasPassword}`; works without signing in |
 | `/api/status` | `{platforms: [site snapshot…], wins: [unmarked wins], profiles: [{id, name, asfBot, main}], time}`; each site has `profile`, the profile id |
-| `/api/summary?days=30` | per-day series for the chart: `{days: [...], sites: [{key, title, unit, today, spentToday, entered, spent, wins, winsWeek, entries[], spentByDay[], winsByDay[]}]}` |
+| `/api/summary?days=30` | per-day series for the chart: `{days: [...], sites: [{key, title, unit, today, spentToday, entered, spent, wins, winsWeek, entries[], spentByDay[], winsByDay[], importedByDay[], luck}]}`; `luck` is `null` for free sites and before the first entry, else `{entries, known, unknown, forecast, expected, wins, spent, perWin, avgCost, since}` |
 | `/api/history?kind=entries&site=&q=&page=1&per=50` | `{rows, total, page, pages}`; `kind` is `entries` or `wins` |
 | `/api/history.csv?kind=entries&site=&q=` | the same selection as CSV |
 | `/api/farm/settings` | `{schema, values, info: {zones, panelURLs, startedAt, now, zone}}` |

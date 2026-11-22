@@ -135,6 +135,10 @@ svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .tile b{display:block;font-size:22px;color:var(--strong);font-variant-numeric:tabular-nums;line-height:1.25}
 .tile b.long{font-size:15px;padding:4px 0 2px}
 .tile small{color:var(--muted);font-size:12px}
+.tile.wide{grid-column:1/-1}
+.luck-row{display:flex;flex-wrap:wrap;gap:2px 6px;align-items:baseline;font-size:13px;margin:4px 0}
+.luck-row .dot-site{align-self:center}
+.luck-row strong{color:var(--strong);font-variant-numeric:tabular-nums}
 .chart{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;position:relative;min-width:0}
 .chart-head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:6px}
 .chart-head h2{margin-right:auto;font-size:14px}
@@ -956,12 +960,29 @@ function renderSummary(){
   $('#tiles').innerHTML = [
     [sum(S, s => s.today), 'входов сегодня'], [spent, 'потрачено сегодня'],
     [wins, `выигрышей, ${sum(S, s => s.winsWeek)} за 7 дней`], [luck, `выигрышей на ${drawn} входов в раздачи`],
-  ].map(([v, l]) => `<div class="tile"><b class="${String(v).length > 8 ? 'long' : ''}">${esc(v)}</b><small>${esc(l)}</small></div>`).join('');
+  ].map(([v, l]) => `<div class="tile"><b class="${String(v).length > 8 ? 'long' : ''}">${esc(v)}</b><small>${esc(l)}</small></div>`).join('') + luckTile(S);
   const shown = S.filter(s => s.entered || s.entries.some(Boolean));
   $('#legend').innerHTML = shown.map(s => `<span><i style="background:${SITE_COLOR(s.key)}"></i>${esc(s.title)}</span>`).join('');
   $$('#range button').forEach(b => b.classList.toggle('on', +b.dataset.days === days));
   $$('#chartMode button').forEach(b => b.classList.toggle('on', b.dataset.mode === chartMode));
   if (chartMode === 'table') renderChartTable(shown); else renderChart(shown);
+}
+// Wins had against wins expected from the entries, per giveaway site, over
+// the history the farm keeps (the server's luckOf).
+const oneDecimal = x => String(Math.round(x * 10) / 10);
+function luckTile(S){
+  const L = S.filter(s => s.luck);
+  if (!L.length) return '';
+  const row = s => {
+    const k = s.luck, unit = s.unit ? ' ' + s.unit : '';
+    const expected = k.known ? `ожидалось ≈${oneDecimal(k.expected)}${k.unknown ? ` (известно для ${k.known} из ${k.entries} входов)` : ''}` : 'ожидание неизвестно: у входов нет числа участников';
+    return `<div class="luck-row"><span class="dot-site" style="background:${SITE_COLOR(s.key)}"></span><span>${esc(s.title)}</span>
+      <span>выигрышей <strong>${k.wins}</strong>, ${expected}</span>
+      <span class="muted">· ${k.perWin != null ? `${Math.round(k.perWin)}${esc(unit)} за выигрыш · ` : ''}вход в среднем ${oneDecimal(k.avgCost)}${esc(unit)}</span></div>`;
+  };
+  const forecast = L.some(s => s.luck.forecast);
+  return `<div class="tile wide"><small>Удача против ожидания, с ${dt(Math.min(...L.map(s => s.luck.since)))}</small>${L.map(row).join('')}
+    <small>Ожидание — сумма «копий / (участников + 1)» по входам, где число участников известно. Участники прибывают и после входа фермы, а ещё идущие раздачи уже в счёте, так что ожидание завышено.${forecast ? ' Для IndieGala взят прогноз участников к концу раздачи, где он был.' : ''}</small></div>`;
 }
 const dayLabel = (d, long) => long ? new Date(d + 'T12:00').toLocaleDateString(LOCALE(), {weekday: 'short', day: 'numeric', month: 'long'}) : `${+d.slice(8)}.${d.slice(5, 7)}`;
 function niceStep(max){ const raw = max / 4, mag = 10 ** Math.floor(Math.log10(raw || 1)), n = raw / mag; return Math.max(1, (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag); }
@@ -1473,7 +1494,7 @@ async function pageJournal(view, {key}){
 }
 const ENTRY_LINE = /^(Вошёл|One more game|Would enter)/;
 // What the sites attach to a log line, in the panel's words.
-const DETAIL_LABEL = {cost: 'Цена', balance: 'Баланс после входа', entries: 'Участников', expected: 'Ожидается к концу', today: 'Входов за 24 ч', priority: 'Приоритетная', url: 'Ссылка'};
+const DETAIL_LABEL = {cost: 'Цена', balance: 'Баланс после входа', entries: 'Участников', copies: 'Копий', expected: 'Ожидается к концу', today: 'Входов за 24 ч', priority: 'Приоритетная', url: 'Ссылка'};
 function detailList(d){
   return Object.entries(d).map(([k, v]) => `<span><b>${esc(DETAIL_LABEL[k] || k)}</b> ${k === 'url' ? extLink(v, esc(String(v).replace(/^https?:\/\/(www\.)?/i, ''))) : esc(v)}</span>`).join('');
 }

@@ -1066,5 +1066,16 @@
  "копит до": "saving up to",
  "Правила SteamGifts не разрешают входить в раздачи скриптами и ботами, и за это аккаунт на сайте могут заблокировать (Steam это не касается). Ферма снижает риск: шлёт User-Agent вашего браузера, делает случайные паузы, не листает весь каталог и не просится туда, куда вам нельзя. Убрать риск совсем она не может: подключая SteamGifts, вы берёте его на себя. Чаще всего блокируют за неактивированные выигрыши — активируйте ключи и отмечайте «получено»": "SteamGifts' rules do not allow entering giveaways with scripts and bots, and the account on the site can be banned for it (your Steam account is not affected). The farm lowers the risk: it sends your browser's User-Agent, pauses at random, does not page through the whole catalogue and does not ask for giveaways you cannot enter. It cannot remove the risk entirely: by connecting SteamGifts you take it on yourself. Bans most often come for unactivated wins — activate the keys and mark them “received”",
  "⚠️ Риск для аккаунта": "⚠️ Risk to the account",
- "сколько раздач одной и той же игры брать за 7 дней, если важнее разнообразие. Билет выигрывает редко, так что лимит обычно уводит iS в раздачи похуже. Пусто — без лимита; приоритетных игр не касается": "how many giveaways of the same game to enter over 7 days, if variety matters more. A ticket rarely wins, so a limit usually sends the iS to worse giveaways. Empty means no limit; priority games are not limited"
+ "сколько раздач одной и той же игры брать за 7 дней, если важнее разнообразие. Билет выигрывает редко, так что лимит обычно уводит iS в раздачи похуже. Пусто — без лимита; приоритетных игр не касается": "how many giveaways of the same game to enter over 7 days, if variety matters more. A ticket rarely wins, so a limit usually sends the iS to worse giveaways. Empty means no limit; priority games are not limited",
+ "Ожидание — сумма «копий / (участников + 1)» по входам, где число участников известно. Участники прибывают и после входа фермы, а ещё идущие раздачи уже в счёте, так что ожидание завышено": "Expected = the sum of “copies / (entrants + 1)” over the entries whose entrant count is known. People keep joining after the farm enters, and giveaways still running are already counted, so the expectation runs high",
+ "Для IndieGala взят прогноз участников к концу раздачи, где он был": "For IndieGala the forecast of entrants by the end is used where there was one",
+ "ожидание неизвестно: у входов нет числа участников": "expectation unknown: the entries have no entrant count",
+ "Удача против ожидания, с": "Luck against expectation, since",
+ "за историю: выигрышей": "over the history: wins",
+ "ожидание неизвестно": "expectation unknown",
+ "вход в среднем": "average entry",
+ "ожидалось ≈": "expected ≈",
+ "за выигрыш": "per win",
+ "Копий": "Copies",
+ "известно для": "known for"
 }
