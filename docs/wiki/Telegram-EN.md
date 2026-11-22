@@ -43,6 +43,7 @@ Get the key and mark it as received in the panel: SteamGifts requires it.
 | ✅ WORKING AGAIN | the first successful run after such an outage | — |
 | ⚠️ NO ENTRIES | a giveaway site went a day (and at least 6 runs) without entering anything; one message until it enters again | Preview, Settings |
 | 🎁 FREE | free games claimed (GOG, Steam, itch.io), one message per run | Site |
+| 🔑 KEY RECEIVED | the farm found a win's key on the SteamGifts won page, and it does not go to ASF at once | Wins |
 | ✅ KEY ACTIVATED / ⏳ WILL RETRY LATER / ⚠️ KEY REJECTED | the ASF activation result | Wins |
 | 📊 DAILY SUMMARY | every day at the chosen hour | Open the panel, Wins |
 
@@ -65,7 +66,9 @@ without erasing the token.
 For each site: entries and spending in 24 hours, balance, wins and the last
 error, and at the end the total number of wins. If there are unmarked wins,
 the summary includes a reminder: SteamGifts requires you to mark received
-ones. The sending time is chosen in the "Summary hour" («Час отправки
+ones. Wins whose key is not activated yet get a line of their own, "🔑 Key in
+hand but not activated" («🔑 Ключ есть, но не активирован»): SteamGifts bans
+for those most often. The sending time is chosen in the "Summary hour" («Час отправки
 сводки») list and follows the farm's time zone. The "Send summary now"
 («Прислать сводку сейчас») button sends it right away.
 

@@ -92,6 +92,8 @@ class SteamGift :
 
         # Watching the won page is on unless it was turned off.
         self.checkWins = config.check_wins is not False
+        # The last won page read, for the farm to take keys from.
+        self.wonPage   = None
         self.state     = State(statePath or defaultPath(DEFAULT_CONFIG_PATH)).load()
 
         # Built once, up front: every request below goes through it.
@@ -308,6 +310,7 @@ class SteamGift :
     # before. Never raises: missing a win is bad, failing the run over it is
     # worse.
     def announceWins(self):
+        self.wonPage = None
         if not self.checkWins:
             return []
 
@@ -318,6 +321,7 @@ class SteamGift :
             return []
         if soup is None:
             return []
+        self.wonPage = soup
 
         found, recognised = wins.parseWonPage(soup)
         if not recognised:

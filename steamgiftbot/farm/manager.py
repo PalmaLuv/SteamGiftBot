@@ -993,8 +993,18 @@ class FarmManager:
             card.lines.append(f"🔔 Не отмечено, что ключ получен: {len(waiting)} "
                               f"({', '.join(win['name'] for win in waiting[:5])})")
             card.note = "SteamGifts требует отмечать полученные выигрыши."
+        # A key in hand but not in Steam: the win SteamGifts bans for most.
+        unused = [(platform, win) for platform in self.platforms.values()
+                  for win in self.state.site(platform.key).get('wins', [])
+                  if win.get('cdkey') and win.get('status') != 'activated']
+        if unused:
+            card.lines.append(f"🔑 Ключ есть, но не активирован: {len(unused)} "
+                              f"({', '.join(win['name'] for _, win in unused[:5])})")
+            if any(platform.kind == 'steamgifts' for platform, _ in unused):
+                card.note = "SteamGifts блокирует за неактивированные выигрыши: " \
+                            "активируйте ключи и отметьте полученные."
         card.buttons = [("Открыть панель", self.panelLink('/overview'))]
-        if waiting:
+        if waiting or unused:
             card.buttons.append(("Выигрыши", self.panelLink('/wins')))
         return card
 

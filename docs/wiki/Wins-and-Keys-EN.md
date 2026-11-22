@@ -4,7 +4,7 @@
 
 | Site | How |
 | --- | --- |
-| SteamGifts | checks the [won giveaways](https://www.steamgifts.com/giveaways/won) page after every run |
+| SteamGifts | checks the [won giveaways](https://www.steamgifts.com/giveaways/won) page after every run; a key the site shows there is saved with the win (see [SteamGifts](SteamGifts-EN.md#the-key-from-the-won-page)) |
 | OpiumPulses | checks the [your keys](https://www.opiumpulses.com/user/giveawaykeys) page if "Track won keys" («Следить за выигранными ключами») is on |
 | IndieGala | every 3 hours presses "Check all" in the [library](https://www.indiegala.com/library) and reads "Completed won", if "Check for wins" («Проверять выигрыши») is on; the key is saved with the win |
 | Free Steam games, GOG, itch.io | these are not wins: the games go straight into the library and are recorded in the entry history |
@@ -33,6 +33,10 @@ The filter at the top: "New" («Новые»), "Key received" («Ключ пол
   Overview and is included in the reminder in the daily summary.
 - **Key received**: you have taken the key from the site.
 - **Activated**: the key has been activated on Steam.
+
+A win that has a key but not the "Activated" status is in the daily summary
+too: "🔑 Key in hand but not activated" («🔑 Ключ есть, но не активирован»).
+Such wins are what SteamGifts bans for most often.
 
 The status is changed with the buttons on the banner or with the drop-down
 list in the table. For SteamGifts you can turn on the "Mark as received on
