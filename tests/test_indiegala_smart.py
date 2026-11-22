@@ -74,3 +74,14 @@ def test_a_pass_counts_its_own_tickets(manager):  # noqa: F811
     platform.cycle(conf)
     assert len(site.joined) == 3                            # three different games
     assert platform.ticketsFor(ticket('n', 1, 1, name='Grav Blazer Squared')) == 1
+
+
+def test_there_is_no_per_game_limit_unless_asked(manager):  # noqa: F811
+    # A ticket rarely wins: a limit sent the iS to crowded giveaways instead.
+    platform, conf = indiegala(manager, FakeIndieGala())
+    assert conf['max_per_game'] is None
+    now = time.time()
+    for _ in range(10):
+        manager.state.addEntry('indiegala', {'time': now, 'name': 'Puzzle Chambers', 'cost': 1})
+    platform.countTickets()
+    assert platform.skipReason(conf, ticket('p', 3, 60, name='Puzzle Chambers'), set()) is None

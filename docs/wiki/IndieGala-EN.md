@@ -60,12 +60,16 @@ first), `price`, `participants`, `level`.
 
 ## Tickets per game
 
-Developers often give the same game away many times, and without a limit the
-farm took a ticket for each of those giveaways: 21 tickets for Puzzle Chambers
-in two days. One key is enough, so "Tickets per game" («Билетов на одну игру»,
-3 by default) limits how many giveaways of one game the farm enters over 7
-days. Titles are compared ignoring case and the ™ ® marks. Priority games are
-not limited, and an empty field removes the limit.
+Developers often give the same game away many times, and the farm takes a
+ticket for each of those giveaways: 21 tickets for Puzzle Chambers in two
+days. "Tickets per game" («Билетов на одну игру») limits how many giveaways of
+one game the farm enters over 7 days. There is no limit by default, and here
+is why: a ticket rarely wins (usually with a chance of a few percent), so one
+more ticket for the same game is worth almost as much as one for another
+game. With a limit of 3 the farm dropped 39 cheap giveaways with few entrants
+and spent 16 iS on a giveaway with 2141 entrants. Set a limit only if variety
+matters more than the number of wins. Titles are compared ignoring case and
+the ™ ® marks, and priority games are not limited.
 
 ## Priority games and the reserve
 
@@ -123,7 +127,7 @@ announce old wins. Turn it off with "Check for wins" («Проверять вы�
 | Max ticket price (iS) (Макс. цена билета (iS)) | empty | empty means any |
 | Max participants (Макс. участников) | empty | skip giveaways with more participants |
 | Only ending within N hours (Только кончающиеся в ближайшие N часов) | empty | near the end of a giveaway you can tell how many rivals there will be; empty means any |
-| Tickets per game (Билетов на одну игру) | `3` | how many giveaways of the same game to enter over 7 days: one key is enough anyway. Empty means no limit; priority games are not limited |
+| Tickets per game (Билетов на одну игру) | empty | how many giveaways of the same game to enter over 7 days, if variety matters more. A ticket rarely wins, so a limit usually sends the iS to worse giveaways. Empty means no limit; priority games are not limited |
 | Take extra tickets (extra odds) (Брать доп. билеты (extra odds)) | off | repeat tickets for the same giveaway |
 | Whitelist (Белый список) | empty | if set, only these games |
 | Blacklist (Чёрный список) | empty | words separated by commas |

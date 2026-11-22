@@ -252,9 +252,13 @@ class IndieGalaPlatform(Platform):
                   'пропускать раздачи с большим числом участников'),
             field('max_hours_left', 'Только кончающиеся в ближайшие N часов', 'int', None,
                   'к концу раздачи понятно, сколько будет соперников; пусто — любые'),
-            field('max_per_game', 'Билетов на одну игру', 'int', 3,
-                  'сколько раздач одной и той же игры брать за 7 дней: ключ всё равно нужен '
-                  'один. Пусто — без лимита; приоритетных игр не касается'),
+            # Off by default: a ticket rarely wins, so one more for the same game
+            # is worth almost as much as one for another game, and a limit sent
+            # the iS to crowded giveaways instead (16 iS on 2141 entrants).
+            field('max_per_game', 'Билетов на одну игру', 'int', None,
+                  'сколько раздач одной и той же игры брать за 7 дней, если важнее '
+                  'разнообразие. Билет выигрывает редко, так что лимит обычно уводит iS в '
+                  'раздачи похуже. Пусто — без лимита; приоритетных игр не касается'),
             field('extra_odds', 'Брать доп. билеты (extra odds)', 'bool', False,
                   'повторные билеты в ту же раздачу'),
             field('whitelist', 'Белый список', 'list', [], 'если задан — только эти игры'),
