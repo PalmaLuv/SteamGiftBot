@@ -482,6 +482,9 @@ class Platform:
     # Whether a second account of this site can be added. Each account is
     # its own instance: key 'steamgifts-2', its own settings, limits, history.
     multiAccount = True
+    # True when a win keeps the same url as the entry that won it, so luck
+    # can count only the wins of kept entries instead of a time window.
+    winUrlIsEntryUrl = False
 
     def __init__(self, manager, key=None):
         self.manager = manager

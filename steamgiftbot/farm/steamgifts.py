@@ -244,6 +244,8 @@ class SteamGiftsPlatform(Platform):
     unit        = 'P'
     title       = 'SteamGifts'
     siteURL     = 'https://www.steamgifts.com'
+    # Both are f"{URL}/giveaway/{code}/" (wins.Win.url and enteredByName).
+    winUrlIsEntryUrl = True
     description = 'Раздачи за поинты (P), начисляются каждые ~15 минут.'
     risk = ("Правила SteamGifts не разрешают входить в раздачи скриптами и ботами, и за это "
             "аккаунт на сайте могут заблокировать (Steam это не касается). Ферма снижает риск: "
@@ -495,8 +497,11 @@ class SteamGiftsPlatform(Platform):
             # Entries are made one at a time, so the newest pending one is it.
             code, cost = self.pendingCost.popitem()
         giveaway = self.lastGiveaways.get(code)
+        # The people in and the copies: the panel's expected wins come from them.
+        # One copy, the usual, is not written down.
         self.recordEntry(name, cost, f"{URL}/giveaway/{code}/" if code else self.siteURL,
-                         entries=giveaway.entries if giveaway else None)
+                         entries=giveaway.entries if giveaway else None,
+                         copies=giveaway.copies if giveaway and giveaway.copies > 1 else None)
         self.lastGiveaways.clear()
 
     # 'Проход окончен' once per walk, whether it ended out of points or

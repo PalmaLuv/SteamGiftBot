@@ -14,6 +14,25 @@ screen. The data refreshes every 3 seconds.
 - **Last 24 hours (Цифры за сутки)**: entries in 24 hours, spending (in each
   site's currency), wins in total and over 7 days, and the share of wins
   among entries.
+- **Luck against expectation (Удача против ожидания)**: under the figures, one
+  line each for SteamGifts, IndieGala and OpiumPulses: how many wins came, how
+  many the entries made could be expected to bring, how much of the site's
+  currency went on one win and what an entry cost on average. It covers the
+  entry history the farm keeps (up to the last 2000 per site). On SteamGifts
+  only the wins of those kept entries count: a win has the same giveaway link
+  as its entry. IndieGala and OpiumPulses give a win another link, so there
+  the wins since the first kept entry count. That runs high the longer the
+  farm works: a giveaway is drawn days after the entry, so wins of entries
+  already gone from the history come in, and so do wins of giveaways entered
+  by hand on the site; the panel says so under the lines. Expected wins are the sum of "copies /
+  (entrants + 1)" over the entries: the farm notes the entrant count when it
+  enters, and the copies on SteamGifts. This runs high: people keep joining
+  after the farm, and giveaways that have not ended yet are already counted.
+  For IndieGala the forecast of entrants by the end (smart order) is used when
+  there is one. Entries with no entrant count (made before this version, and
+  every OpiumPulses entry, since its listing does not show one) are left out
+  of the expectation, and the panel says "known for N of M entries"
+  («известно для N из M входов»).
 - **Entries per day (Входы по дням)**: a chart over 7 or 30 days, each site in
   its own colour. Hovering over a bar shows the day's entries, spending and
   wins. The "Table" («Таблица») toggle shows the same data as a list.

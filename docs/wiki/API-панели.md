@@ -28,7 +28,7 @@ curl -b farm.cookie http://192.168.1.10:8092/api/status
 | --- | --- |
 | `/api/session` | `{signedIn, hasPassword}`; работает без входа |
 | `/api/status` | `{platforms: [снимок площадки…], wins: [неотмеченные выигрыши], profiles: [{id, name, asfBot, main}], time}`; у площадки есть `profile` — id учётки |
-| `/api/summary?days=30` | ряды по дням для графика: `{days: [...], sites: [{key, title, unit, today, spentToday, entered, spent, wins, winsWeek, entries[], spentByDay[], winsByDay[]}]}` |
+| `/api/summary?days=30` | ряды по дням для графика: `{days: [...], sites: [{key, title, unit, today, spentToday, entered, spent, wins, winsWeek, entries[], spentByDay[], winsByDay[], importedByDay[], luck}]}`; `luck` — `null` у бесплатных площадок и до первого входа, иначе `{entries, known, unknown, forecast, expected, wins, spent, perWin, avgCost, since}` |
 | `/api/history?kind=entries&site=&q=&page=1&per=50` | `{rows, total, page, pages}`; `kind` — `entries` или `wins` |
 | `/api/history.csv?kind=entries&site=&q=` | та же выборка в CSV |
 | `/api/farm/settings` | `{schema, values, info: {zones, panelURLs, startedAt, now, zone}}` |

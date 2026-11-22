@@ -63,7 +63,12 @@ without erasing the token.
 ### Daily summary
 
 For each site: entries and spending in 24 hours, balance, wins and the last
-error, and at the end the total number of wins. If there are unmarked wins,
+error, and at the end the total number of wins. For SteamGifts, IndieGala
+and OpiumPulses a luck line follows: "🍀 IG за историю: выигрышей 1,
+ожидалось ≈0.5 · 10 iS за выигрыш · вход в среднем 5 iS" (wins over the kept
+history, the wins expected, the currency per win and the average entry cost),
+the same as "Luck against expectation" on the panel's Overview
+([Web panel](Web-Panel-EN.md)). If there are unmarked wins,
 the summary includes a reminder: SteamGifts requires you to mark received
 ones. The sending time is chosen in the "Summary hour" («Час отправки
 сводки») list and follows the farm's time zone. The "Send summary now"
