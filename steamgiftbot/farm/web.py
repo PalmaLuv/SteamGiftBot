@@ -468,8 +468,7 @@ class Handler(BaseHTTPRequestHandler):
             platform.stop()
             return self.json({'ok': True})
         if action == 'restart':
-            platform.stop(wait=15)
-            return self.json({'started': platform.start()})
+            return self.json({'started': platform.restart()})
         if action == 'run-now':
             platform.wakeUp()
             return self.json({'ok': True})
@@ -537,11 +536,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
     # SteamGifts reads its settings once per start; the others every pass.
+    # A stop that takes longer than the wait still ends with the site running.
     @staticmethod
     def reloadSettings(platform):
-        if platform.kind == 'steamgifts' and platform.running:
-            platform.stop(wait=15)
-            return platform.start()
+        if platform.kind == 'steamgifts':
+            return platform.restart(onlyIfRunning=True)
         return False
 
 

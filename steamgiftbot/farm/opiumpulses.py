@@ -19,8 +19,8 @@ from requests.adapters import HTTPAdapter
 
 from steamgiftbot.farm.base import (DEFAULT_USER_AGENT, FAILED_TRIES, TIMEOUT, AuthError,
                                     Platform, PlatformError, RetryLater, buildSession,
-                                    cookieGuide, field, grouped, parseCookies, presetFields,
-                                    scheduleFields, userAgentFrom)
+                                    cookieGuide, dailyReason, field, grouped, parseCookies,
+                                    presetFields, scheduleFields, userAgentFrom)
 from steamgiftbot.logging_setup import writePrivate
 
 BASE     = 'https://www.opiumpulses.com'
@@ -473,10 +473,8 @@ class OpiumPulsesPlatform(Platform):
                 box.balance = balance = found
             for giveaway in giveaways:
                 reason = box.skipReason(conf, giveaway, seen, owned)
-                if reason is None and entriesLeft == 0:
-                    reason = 'дневной лимит входов'
-                if reason is None and spendLeft is not None and giveaway.cost > spendLeft:
-                    reason = 'дневной лимит трат'
+                if reason is None:
+                    reason = dailyReason(giveaway.cost, entriesLeft, spendLeft)
                 if reason is None:
                     if giveaway.cost and box.balance is not None:
                         box.balance -= giveaway.cost

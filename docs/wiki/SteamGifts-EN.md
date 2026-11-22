@@ -164,6 +164,13 @@ not fit:
 - **"Keep balance above" at 30–50** leaves a reserve of points for entering by
   hand.
 
+**When changes take effect.** SteamGifts reads its settings when it starts,
+so after a save, a preset or a game added to a list a running site restarts
+by itself. If it is waiting for the site to answer at that moment, the new
+start waits until that request is over: the site is not left stopped.
+"Stop" («Стоп») pressed meanwhile cancels the restart, and a stopped site
+stays stopped after a save.
+
 ## Wins
 
 The farm checks the [won giveaways](https://www.steamgifts.com/giveaways/won)
@@ -188,7 +195,7 @@ messages are in English:
 | Message | What it means |
 | --- | --- |
 | `Getting games from page N` | the farm is paging through page N |
-| `One more game X` | the farm entered giveaway X |
+| `One more game X` | the farm entered giveaway X. The entry goes into the history with its cost, participants and link from the site's answer, not from this line |
 | `Skipping X: not enough points` | not enough points for this giveaway |
 | `Not enough points: 13, need at least 30. Waiting 15 min.` (`Мало поинтов: 13, нужно минимум 30. Жду 15 мин.`) | the balance is below the minimum; the farm waits |
 | `Looked through 10 pages, not going further this run.` (`Просмотрено 10 стр., дальше в этом проходе не иду.`) | the "Pages per run" limit was reached |
