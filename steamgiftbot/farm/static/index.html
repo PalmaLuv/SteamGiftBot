@@ -981,8 +981,10 @@ function luckTile(S){
       <span class="muted">· ${k.perWin != null ? `${Math.round(k.perWin)}${esc(unit)} за выигрыш · ` : ''}вход в среднем ${oneDecimal(k.avgCost)}${esc(unit)}</span></div>`;
   };
   const forecast = L.some(s => s.luck.forecast);
+  // Sites whose wins cannot be matched to entries count them by time, which flatters luck.
+  const byTime = L.filter(s => !s.luck.byUrl).map(s => s.title).join(', ');
   return `<div class="tile wide"><small>Удача против ожидания, с ${dt(Math.min(...L.map(s => s.luck.since)))}</small>${L.map(row).join('')}
-    <small>Ожидание — сумма «копий / (участников + 1)» по входам, где число участников известно. Участники прибывают и после входа фермы, а ещё идущие раздачи уже в счёте, так что ожидание завышено.${forecast ? ' Для IndieGala взят прогноз участников к концу раздачи, где он был.' : ''}</small></div>`;
+    <small>Ожидание — сумма «копий / (участников + 1)» по входам, где число участников известно. Участники прибывают и после входа фермы, а ещё идущие раздачи уже в счёте, так что ожидание завышено.${forecast ? ' Для IndieGala взят прогноз участников к концу раздачи, где он был.' : ''}${byTime ? ` Выигрыши на ${esc(byTime)} считаются по времени, с первого хранимого входа: в счёт идут и выигрыши входов, уже ушедших из истории, и раздач, куда входили вручную, так что выигрышей там больше, чем от хранимых входов.` : ''}</small></div>`;
 }
 const dayLabel = (d, long) => long ? new Date(d + 'T12:00').toLocaleDateString(LOCALE(), {weekday: 'short', day: 'numeric', month: 'long'}) : `${+d.slice(8)}.${d.slice(5, 7)}`;
 function niceStep(max){ const raw = max / 4, mag = 10 ** Math.floor(Math.log10(raw || 1)), n = raw / mag; return Math.max(1, (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag); }

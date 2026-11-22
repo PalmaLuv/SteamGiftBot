@@ -295,14 +295,19 @@ def entryChance(entry):
 
 
 # Wins the kept history of entries should have brought against those that
-# came, and the site's currency per win. Only the wins since the oldest kept
-# entry count, so both sides cover the same stretch; the command line bot's
-# imported wins came before it. Entries with no count are left out of the
-# expectation (and counted, so the panel can say how many).
-def luckOf(entries, wins):
+# came, and the site's currency per win. With byUrl only the wins of kept
+# entries count: a giveaway is drawn days after the entry, so once the
+# history is trimmed a time window takes in wins of entries no longer kept,
+# and of giveaways entered by hand. Without it (the site's win and entry urls
+# differ) the wins since the oldest kept entry count, which runs high. The
+# command line bot's imported wins are never the farm's. Entries with no
+# count are left out of the expectation (and counted, so the panel can say
+# how many).
+def luckOf(entries, wins, byUrl=False):
     if not entries:
         return None
     since = min(entry['time'] for entry in entries)
+    urls = {entry['url'] for entry in entries if entry.get('url')}
     expected, known, forecast = 0.0, 0, 0
     for entry in entries:
         chance = entryChance(entry)
@@ -311,12 +316,13 @@ def luckOf(entries, wins):
         expected += chance[0]
         known += 1
         forecast += chance[1]
-    won = sum(1 for win in wins if win['time'] >= since and not win.get('cli'))
+    won = sum(1 for win in wins if not win.get('cli') and
+              (win.get('url') in urls if byUrl else win['time'] >= since))
     spent = sum(entry.get('cost') or 0 for entry in entries)
     return {'entries': len(entries), 'known': known, 'unknown': len(entries) - known,
             'forecast': forecast, 'expected': round(expected, 2), 'wins': won,
             'spent': spent, 'perWin': round(spent / won, 1) if won else None,
-            'avgCost': round(spent / len(entries), 1), 'since': since}
+            'avgCost': round(spent / len(entries), 1), 'since': since, 'byUrl': byUrl}
 
 
 class FarmState:
@@ -835,7 +841,7 @@ class FarmManager:
         site = self.state.site(platform.key)
         with self.state.lock:
             entries, wins = list(site.get('entries', [])), list(site.get('wins', []))
-        return luckOf(entries, wins)
+        return luckOf(entries, wins, byUrl=platform.winUrlIsEntryUrl)
 
     def historyRows(self, kind='entries', site='', query=''):
         rows = []

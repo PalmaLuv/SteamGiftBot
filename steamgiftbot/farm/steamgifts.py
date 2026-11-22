@@ -244,6 +244,8 @@ class SteamGiftsPlatform(Platform):
     unit        = 'P'
     title       = 'SteamGifts'
     siteURL     = 'https://www.steamgifts.com'
+    # Both are f"{URL}/giveaway/{code}/" (wins.Win.url and enteredByName).
+    winUrlIsEntryUrl = True
     description = 'Раздачи за поинты (P), начисляются каждые ~15 минут.'
     risk = ("Правила SteamGifts не разрешают входить в раздачи скриптами и ботами, и за это "
             "аккаунт на сайте могут заблокировать (Steam это не касается). Ферма снижает риск: "

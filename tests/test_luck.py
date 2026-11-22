@@ -11,6 +11,7 @@ from test_panel_page import function
 
 from steamgiftbot.farm.manager import entryChance, luckOf
 from steamgiftbot.giveaway import Giveaway
+from steamgiftbot.wins import Win
 
 
 def entry(moment, cost, **extra):
@@ -122,3 +123,42 @@ def test_overview_shows_luck_next_to_the_tiles():
     assert 'известно для ${k.known} из ${k.entries} входов' in tile
     assert re.search(r'Участники прибывают и после входа фермы.*ожидание завышено', tile)
     assert 'прогноз участников к концу раздачи' in tile
+
+
+def test_luck_by_url_counts_only_wins_of_kept_entries():
+    entries = [entry(100, 10, entries=9, url='https://sg/giveaway/aaa/'),
+               entry(200, 10, entries=9, url='https://sg/giveaway/bbb/'), entry(300, 10)]
+    wins = [{'time': 400, 'name': 'Kept', 'url': 'https://sg/giveaway/aaa/'},
+            # Entered long ago, drawn after the oldest kept entry: its entry is gone.
+            {'time': 150, 'name': 'Trimmed', 'url': 'https://sg/giveaway/old/'},
+            # Entered by hand on the site, so never in the history.
+            {'time': 500, 'name': 'By hand', 'url': 'https://sg/giveaway/zzz/'},
+            {'time': 600, 'name': 'Imported', 'url': 'https://sg/giveaway/bbb/', 'cli': True}]
+    luck = luckOf(entries, wins, byUrl=True)
+    assert luck['wins'] == 1 and luck['byUrl'] is True and luck['perWin'] == 30
+    # Without matching urls the time window takes in both strangers.
+    byTime = luckOf(entries, wins)
+    assert byTime['wins'] == 3 and byTime['byUrl'] is False
+
+
+def test_steamgifts_luck_matches_wins_to_entries(manager):  # noqa: F811
+    platform = manager.platforms['steamgifts']
+    platform.pendingCost['aaa'] = 10
+    platform.lastGiveaways['aaa'] = Giveaway('aaa', 'Kept', 10, entries=9)
+    platform.enteredByName('Kept')
+    platform.recordWin('Kept', Win('aaa', 'Kept').url)
+    platform.recordWin('By hand', Win('zzz', 'By hand').url)
+    luck = manager.luck(platform)
+    assert luck['byUrl'] is True and luck['wins'] == 1
+    # IndieGala's win links are not its entry links: it keeps the time window.
+    indiegala = manager.platforms['indiegala']
+    indiegala.recordEntry('A', 2, 'https://www.indiegala.com/giveaways/a', entries=1)
+    indiegala.recordWin('B', 'https://www.indiegala.com/library/b')
+    luck = manager.luck(indiegala)
+    assert luck['byUrl'] is False and luck['wins'] == 1
+
+
+def test_overview_says_which_sites_count_wins_by_time():
+    tile = function('luckTile')
+    assert 'L.filter(s => !s.luck.byUrl)' in tile
+    assert re.search(r'Выигрыши на \$\{esc\(byTime\)\} считаются по времени.*вручную', tile)

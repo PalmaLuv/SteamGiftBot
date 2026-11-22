@@ -18,8 +18,13 @@ screen. The data refreshes every 3 seconds.
   line each for SteamGifts, IndieGala and OpiumPulses: how many wins came, how
   many the entries made could be expected to bring, how much of the site's
   currency went on one win and what an entry cost on average. It covers the
-  entry history the farm keeps (up to the last 2000 per site) and the wins
-  since the first of those entries. Expected wins are the sum of "copies /
+  entry history the farm keeps (up to the last 2000 per site). On SteamGifts
+  only the wins of those kept entries count: a win has the same giveaway link
+  as its entry. IndieGala and OpiumPulses give a win another link, so there
+  the wins since the first kept entry count. That runs high the longer the
+  farm works: a giveaway is drawn days after the entry, so wins of entries
+  already gone from the history come in, and so do wins of giveaways entered
+  by hand on the site; the panel says so under the lines. Expected wins are the sum of "copies /
   (entrants + 1)" over the entries: the farm notes the entrant count when it
   enters, and the copies on SteamGifts. This runs high: people keep joining
   after the farm, and giveaways that have not ended yet are already counted.
