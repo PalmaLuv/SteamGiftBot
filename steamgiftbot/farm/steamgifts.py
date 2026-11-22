@@ -5,10 +5,14 @@ import logging
 import re
 import threading
 
+from bs4 import Comment
+
 from steamgiftbot import filters
 from steamgiftbot import settings as sgSettings
+from steamgiftbot import wins as sgWins
 from steamgiftbot.bot import URL, SessionExpired, SteamGift, SteamGiftError
 from steamgiftbot.farm import rules
+from steamgiftbot.farm.asf import LINK, STEAM_KEY, isSteamKey, steamKeys
 from steamgiftbot.farm.base import (DEFAULT_USER_AGENT, AuthError, OwnLines, Platform,
                                     PlatformError, RetryLater, applySettings, coerce,
                                     cookieGuide, field, grouped, parseCookies, presetFields,
@@ -67,6 +71,85 @@ def siteQuery(config, conf, points, minPoints):
 
 def listingRows(soup):
     return soup.find_all('div', {'class': 'giveaway__row-inner-wrap'}) if soup else []
+
+# ---- keys on the won page -----------------------------------------------------
+
+# Where a row of the won page may hold the key once the creator sent it: the
+# copy button's data-clipboard-text, or an element whose class speaks of a key
+# (view_key, table__column__key...). The won page is only served signed in, so
+# its markup is guessed, and a row with no key read is simply left alone.
+KEY_CLASS = re.compile(r'key', re.IGNORECASE)
+
+# Links in a key box that are the site's own or the game's store page, not a gift.
+NOT_A_GIFT = re.compile(r'steamgifts\.com|steampowered\.com|steamcommunity\.com',
+                        re.IGNORECASE)
+
+# A link shown in a key box counts only when it reads as a gift or redeem
+# link: a shop's game page or the creator's site there is not the key, and a
+# wrong key once saved is never replaced by the real one.
+GIFT_LINK = re.compile(r'/gifts?(?=[/?#]|$)|/redeem|/claim|/activate|[?&](?:gift|key|code)=',
+                       re.IGNORECASE)
+
+# Outside a key box only a key as Steam prints it: capitals and digits in
+# groups of five, with a digit somewhere, so a tag like 'rogue-lite-deck' or
+# a shouted title is not taken for one.
+PRINTED_KEY = re.compile(r'(?<![0-9A-Za-z-])[A-Z0-9]{5}(?:-[A-Z0-9]{5}){2,4}(?![0-9A-Za-z-])')
+
+
+# Steam keys in some text; [] for a button label like 'View Key', so a key
+# not shown yet reads as no key at all.
+def keysIn(text, printed=False):
+    text = LINK.sub(' ', text)
+    if printed:
+        return [m.group(0) for m in PRINTED_KEY.finditer(text)
+                if any(c.isdigit() for c in m.group(0))]
+    return [m.group(0).upper() for m in STEAM_KEY.finditer(text) if isSteamKey(m.group(0))]
+
+
+def linksIn(text, giftOnly=False):
+    return [link for link in LINK.findall(text)
+            if not NOT_A_GIFT.search(link) and (not giftOnly or GIFT_LINK.search(link))]
+
+
+def rowKey(row):
+    # What a copy button or a key field holds is the key itself, link or not;
+    # what the key box merely shows has to look like one.
+    copied = [box['data-clipboard-text']
+              for box in row.find_all(attrs={'data-clipboard-text': True})]
+    shown = []
+    for box in row.find_all(class_=KEY_CLASS):
+        copied += [item.get('value') or '' for item in box.find_all(['input', 'textarea'])]
+        shown.append(box.get_text(' ', strip=True))
+        shown += [link['href'] for link in box.find_all('a', href=True)]
+    found = (keysIn(' '.join(copied + shown)) + linksIn(' '.join(copied)) +
+             linksIn(' '.join(shown), giftOnly=True))
+    if found:
+        return ' '.join(dict.fromkeys(found))
+    # Failing that, a Steam key in the row's own text. Never in a link: the
+    # game's name ('STAR-WARS-EPIC') or a user name could look like one.
+    loose = [text for text in row.find_all(string=True)
+             if not isinstance(text, Comment) and not text.find_parent(['a', 'script', 'style'])]
+    return ' '.join(dict.fromkeys(keysIn(' '.join(loose), printed=True)))
+
+
+# {giveaway code: key} for the rows of the won page that show one. A page the
+# bot does not recognise gives nothing.
+def wonKeys(soup):
+    found = {}
+    for row in sgWins.findRows(soup):
+        win = sgWins.winFromRow(row)
+        if win is None or win.code in found:
+            continue
+        key = rowKey(row)
+        if key:
+            found[win.code] = key
+    return found
+
+
+def giveawayCode(url):
+    found = sgWins.GIVEAWAY_LINK.search(url or '')
+    return found.group(1) if found else None
+
 
 # Refusals that only change if the user's account does. Anything else (not
 # enough points, a hiccup) is worth asking again later.
@@ -516,9 +599,47 @@ class SteamGiftsPlatform(Platform):
                             f"баланс {bot.points} P")
 
     # The bot finds the wins; its tellWin (FarmSteamGift) records each and
-    # sends the card.
+    # sends the card. Then the keys the won page shows go onto the wins.
     def announce(self, bot):
         bot.announceWins()
+        self.keysFromWonPage(getattr(bot, 'wonPage', None))
+
+    # Unactivated wins are what SteamGifts bans for most. A key the creator
+    # sent shows on the won page: it goes onto the win (and to ASF when
+    # auto_redeem is on), and the daily report reminds until it is activated.
+    # A win that has a key already keeps it; an activated one is left alone.
+    def keysFromWonPage(self, soup):
+        if soup is None:
+            return 0
+        try:
+            found = wonKeys(soup)
+        except Exception as error:
+            self.warn(f"SteamGifts: не удалось прочитать ключи на странице выигрышей: {error}")
+            return 0
+        stored = 0
+        for win in list(self.manager.state.site(self.key).get('wins', [])):
+            serial = found.get(giveawayCode(win.get('url')))
+            if not serial or win.get('cdkey') or win.get('status') == 'activated':
+                continue
+            try:
+                self.manager.setWinKey(self.key, win['time'], win['name'], serial)
+            except Exception as error:
+                self.warn(f"Ключ к «{win['name']}» не сохранён: {error}")
+                continue
+            stored += 1
+            self.info(f"Ключ к «{win['name']}» взят со страницы выигрышей SteamGifts")
+            self.tellKey(win, serial)
+        return stored
+
+    # With auto_redeem on, a Steam key goes to ASF, which tells how it went.
+    def tellKey(self, win, serial):
+        if steamKeys(serial) and self.manager.farmSettings().get('auto_redeem'):
+            return
+        self.notify('', '🔑', title='КЛЮЧ ПОЛУЧЕН', headline=win['name'],
+                    link=win.get('url') or '',
+                    note="Ключ сохранён в разделе «Выигрыши». Активируйте его: "
+                         "SteamGifts блокирует за неактивированные выигрыши.",
+                    buttons=[("Выигрыши", self.manager.panelLink('/wins'))])
 
     # The farm's own rules, asked by the bot for every giveaway it would enter.
     def extraReason(self, giveaway, points=None, minPoints=None):

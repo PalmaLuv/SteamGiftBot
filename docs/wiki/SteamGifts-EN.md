@@ -174,11 +174,44 @@ message arrives on Telegram.
 button on the won page. Unmarked and unactivated keys can earn you a warning
 or a ban. Therefore:
 
-- the daily Telegram summary reminds you about wins that are not marked yet;
+- the daily Telegram summary reminds you about wins that are not marked yet,
+  and about wins whose key is not activated yet;
+- when the giveaway's creator has sent the key and SteamGifts shows it on the
+  won page, the farm puts the key on the win itself (see below);
 - the **"Mark as received on the site"** setting clicks that button itself
   when you mark a win in the panel. It is experimental and off by default:
   SteamGifts does not document this request anywhere. The result shows up in
   the SteamGifts log.
+
+### The key from the won page
+
+Unactivated wins are what SteamGifts bans for most often. So every time the
+farm checks the won page (its first page, the same one it reads for new
+wins), it looks for a key there:
+
+- a Steam key (`AAAAA-BBBBB-CCCCC`, several of them for a bundle) or a gift
+  link in the key box is saved on the win in [Wins](Wins-and-Keys-EN.md); the
+  log says "Key for «…» taken from the SteamGifts won page" («Ключ к «…» взят
+  со страницы выигрышей SteamGifts»);
+- a link shown in the key box counts only when it looks like a gift or
+  redeem link (`/gift`, `/redeem`, `/claim`, `key=`...): a shop's game page or
+  the creator's site there is not taken. A link behind the copy button is
+  taken as it is;
+- outside the key box, a key is taken from the row's text only as Steam
+  prints it: capitals and digits in groups of five, with at least one digit.
+  Words like `rogue-lite-deck` are not keys;
+- if "Activate won keys immediately" («Активировать выигранные ключи сразу») is on
+  in the [farm settings](Farm-Settings-EN.md), a Steam key goes to ASF at once
+  and the result arrives on Telegram. Otherwise a 🔑 KEY RECEIVED message
+  arrives (it never shows the key itself);
+- a key the win already has (pasted by hand or found earlier) is never
+  replaced. A win with the "Activated" status is left alone;
+- the farm presses nothing on the site: if the key is hidden behind the
+  "View Key" button, it is not on the page and nothing happens. Reveal the key
+  on the site yourself and the farm picks it up on the next check. Other codes
+  (not Steam keys and not links) are pasted by hand;
+- if the page does not look the way the farm expects, keys are simply not
+  read and everything else works as usual.
 
 ## Log messages
 

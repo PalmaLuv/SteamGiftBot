@@ -1086,5 +1086,11 @@
  "Отмечено: ключ получен": "Marked: key received",
  "Отправляю ключ в ASF…": "Sending the key to ASF…",
  "КЛЮЧ НЕ ОТПРАВЛЕН": "KEY NOT SENT",
- "Уже отмечено": "Already marked"
+ "Уже отмечено": "Already marked",
+ "Ключ сохранён в разделе «Выигрыши». Активируйте его: SteamGifts блокирует за неактивированные выигрыши": "The key is saved in Wins. Activate it: SteamGifts bans for unactivated wins",
+ "SteamGifts блокирует за неактивированные выигрыши: активируйте ключи и отметьте полученные": "SteamGifts bans for unactivated wins: activate the keys and mark them received",
+ "SteamGifts: не удалось прочитать ключи на странице выигрышей": "SteamGifts: could not read the keys on the won page",
+ "взят со страницы выигрышей SteamGifts": "taken from the SteamGifts won page",
+ "🔑 Ключ есть, но не активирован": "🔑 Key in hand but not activated",
+ "КЛЮЧ ПОЛУЧЕН": "KEY RECEIVED"
 }
