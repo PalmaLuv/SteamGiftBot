@@ -38,7 +38,9 @@ screen. The data refreshes every 3 seconds.
   wins. The "Table" («Таблица») toggle shows the same data as a list.
 - **Sites (Площадки)**: one row for each connected site: status, reason for
   waiting, balance, and the "Start/Stop" («Старт/Стоп») and "Run now"
-  («Пройти сейчас») buttons.
+  («Пройти сейчас») buttons. A site stops once its request to the site is
+  over; "Start" pressed before that is not lost, the site starts as soon as
+  it has stopped.
 - **Start all / Stop all (Запустить всё / Остановить всё)**: all connected
   sites at once.
 

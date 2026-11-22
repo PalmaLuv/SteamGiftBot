@@ -15,15 +15,13 @@ from steamgiftbot.farm import rules
 from steamgiftbot.farm.asf import LINK, STEAM_KEY, isSteamKey, steamKeys
 from steamgiftbot.farm.base import (DEFAULT_USER_AGENT, AuthError, OwnLines, Platform,
                                     PlatformError, RetryLater, applySettings, coerce,
-                                    cookieGuide, field, grouped, parseCookies, presetFields,
-                                    scheduleFields, userAgentFrom)
+                                    cookieGuide, dailyReason, field, grouped, parseCookies,
+                                    presetFields, scheduleFields, userAgentFrom)
 from steamgiftbot.giveaway import parseRow
 from steamgiftbot.console import log
 from steamgiftbot.logging_setup import LOGGER_NAME
 from steamgiftbot.state import defaultPath
 from steamgiftbot.steam_api import get_game_info
-
-ENTERED_LINE = re.compile(r'^One more game (.+)$')
 
 # A page of the giveaway listing, as the bot asks for it.
 LISTING_PAGE  = re.compile(r'/giveaways/search\?page=(\d+)')
@@ -187,6 +185,8 @@ class FarmSteamGift(SteamGift):
 
     def __init__(self, platform, config, statePath):
         self.platform = platform
+        # (code, cost) of the entry entryGIFT has just made; see tryGiveaway.
+        self.justEntered = None
         super().__init__(config, statePath=statePath)
         platform.useAgent(self)
 
@@ -208,9 +208,6 @@ class FarmSteamGift(SteamGift):
             self.platform.account = self.username
 
     def extraSkipReason(self, giveaway):
-        # Kept so the entry, announced later by name only, can say how many
-        # people were in and link to the giveaway itself.
-        self.platform.lastGiveaways[giveaway.code] = giveaway
         return self.platform.extraReason(giveaway, self.points, self.min_points)
 
     # Recorded here, before the card, so the card's buttons can name the win.
@@ -280,12 +277,26 @@ class FarmSteamGift(SteamGift):
             return None
         return super().GetSoupFromPage(url)
 
+    # The entry is counted from the bot's own answer, not from its log line:
+    # entryGIFT knows it went through and what it cost, tryGiveaway which
+    # giveaway it was. It is recorded once the bot has written 'One more game
+    # X', so the panel shows the details under that line. A dry run never
+    # gets here.
+    def tryGiveaway(self, giveaway):
+        self.justEntered = None
+        try:
+            return super().tryGiveaway(giveaway)
+        finally:
+            done, self.justEntered = self.justEntered, None
+            if done is not None and giveaway is not None and done[0] == giveaway.code:
+                self.platform.entered(giveaway, done[1])
+
     def entryGIFT(self, id, cost):
         self.lastRejection = ''
         done = super().entryGIFT(id, cost)
         if done:
             self.platform.balance = self.points
-            self.platform.pendingCost[id] = cost
+            self.justEntered = (id, cost)
         elif self.lastRejection and FINAL_REFUSAL.search(self.lastRejection):
             self.platform.manager.state.markSeen(self.platform.key, REFUSED + id)
         return done
@@ -312,26 +323,12 @@ class ForwardHandler(logging.Handler):
             self.handleError(record)
 
 
-class EntryWatcher(logging.Handler):
-    """The bot announces each entry by name only in its log line, so the
-    history is filled from there."""
-
-    def __init__(self, platform):
-        super().__init__()
-        self.platform = platform
-
-    def emit(self, record):
-        found = ENTERED_LINE.match(record.getMessage())
-        if found:
-            self.platform.enteredByName(found.group(1))
-
-
 class SteamGiftsPlatform(Platform):
     key         = 'steamgifts'
     unit        = 'P'
     title       = 'SteamGifts'
     siteURL     = 'https://www.steamgifts.com'
-    # Both are f"{URL}/giveaway/{code}/" (wins.Win.url and enteredByName).
+    # Both are f"{URL}/giveaway/{code}/" (wins.Win.url and entered).
     winUrlIsEntryUrl = True
     description = 'Раздачи за поинты (P), начисляются каждые ~15 минут.'
     risk = ("Правила SteamGifts не разрешают входить в раздачи скриптами и ботами, и за это "
@@ -393,8 +390,6 @@ class SteamGiftsPlatform(Platform):
         super().__init__(manager, key)
         self.bot = None
         self.extra = {}
-        self.pendingCost = {}
-        self.lastGiveaways = {}
         self.passEntered = 0
         # Walks in a row that entered nothing, and the balance the run of them
         # started from; see idleWait().
@@ -411,8 +406,8 @@ class SteamGiftsPlatform(Platform):
         self.attachLogger()
 
     # The bot logs through the package logger; mirror that into this site's
-    # panel log and pick the entries out of it. Called again whenever
-    # something (startLogFile) resets that logger's handlers.
+    # panel log. Called again whenever something (startLogFile) resets that
+    # logger's handlers.
     def attachLogger(self):
         sgLogger = logging.getLogger(LOGGER_NAME)
         for handler in list(sgLogger.handlers):
@@ -421,10 +416,8 @@ class SteamGiftsPlatform(Platform):
         # Forwarded into this site's own logger: from there a line reaches the
         # panel and log/botfarm.log, so it is still there after a restart.
         forward = ForwardHandler(self)
-        watcher = EntryWatcher(self)
-        for handler in (forward, watcher):
-            handler.addFilter(OwnLines(self))
-            sgLogger.addHandler(handler)
+        forward.addFilter(OwnLines(self))
+        sgLogger.addHandler(forward)
         sgLogger.setLevel(logging.INFO)
         sgLogger.propagate = False
 
@@ -578,18 +571,13 @@ class SteamGiftsPlatform(Platform):
         except PlatformError:
             return False
 
-    def enteredByName(self, name):
-        cost, code = 0, None
-        if self.pendingCost:
-            # Entries are made one at a time, so the newest pending one is it.
-            code, cost = self.pendingCost.popitem()
-        giveaway = self.lastGiveaways.get(code)
-        # The people in and the copies: the panel's expected wins come from them.
-        # One copy, the usual, is not written down.
-        self.recordEntry(name, cost, f"{URL}/giveaway/{code}/" if code else self.siteURL,
-                         entries=giveaway.entries if giveaway else None,
-                         copies=giveaway.copies if giveaway and giveaway.copies > 1 else None)
-        self.lastGiveaways.clear()
+    # An entry the bot has made (see FarmSteamGift.tryGiveaway). The people in
+    # and the copies: the panel's expected wins come from them. One copy, the
+    # usual, is not written down.
+    def entered(self, giveaway, cost):
+        self.recordEntry(giveaway.name, cost, f"{URL}/giveaway/{giveaway.code}/",
+                         entries=giveaway.entries,
+                         copies=giveaway.copies if giveaway.copies > 1 else None)
 
     # 'Проход окончен' once per walk, whether it ended out of points or
     # with nothing left to enter.
@@ -666,9 +654,8 @@ class SteamGiftsPlatform(Platform):
         if points is not None and minPoints and points - giveaway.cost < minPoints:
             return f'баланс опустится ниже {minPoints} P'
         # Over what is left of the daily spend: skip it, a cheaper one may fit.
-        if spendLeft is not None and giveaway.cost > spendLeft:
-            return 'дневной лимит трат'
-        return None
+        # The entry limit pauses the walk before this (see extraReason).
+        return dailyReason(giveaway.cost, None, spendLeft)
 
     @staticmethod
     def farmReason(conf, giveaway, library, ownedLabel='уже есть в Steam'):
@@ -723,8 +710,8 @@ class SteamGiftsPlatform(Platform):
                 reason = filters.reasonToSkip(giveaway, config, points,
                                               hasCards=get_game_info)
                 reason = REASONS.get(reason, reason)
-            if reason is None and entriesLeft == 0:
-                reason = 'дневной лимит входов'
+            if reason is None:
+                reason = dailyReason(giveaway.cost, entriesLeft, None)
             if reason is None:
                 reason = self.budgetReason(giveaway, points, bot.min_points, spendLeft,
                                            seen)

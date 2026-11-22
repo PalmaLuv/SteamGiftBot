@@ -69,6 +69,11 @@ WATCH_AFTER = 4
 IDLE_ALERT  = 24 * 3600
 IDLE_PASSES = 6
 
+# How long a restart (a SteamGifts settings save) waits for the old worker.
+# One still busy after that (a request that has not timed out) is left to
+# finish, and the new worker starts once it has.
+RESTART_WAIT = 15
+
 # Passes a giveaway may fail for a passing reason before it is given up on,
 # and how many such counters a site keeps at most.
 FAILED_TRIES = 3
@@ -131,6 +136,17 @@ def scheduleFields():
         field('daily_spend', 'Макс. трат за сутки', 'int', None,
               'в валюте площадки; пусто — без лимита'),
     ])
+
+
+# Why the daily limits rule out one more entry costing `cost`, given what
+# Platform.dailyLeft() says is left (None = no limit); None when it fits.
+# Shared so the real passes and the dry runs word it the same on every site.
+def dailyReason(cost, entriesLeft, spendLeft):
+    if entriesLeft == 0:
+        return 'дневной лимит входов'
+    if spendLeft is not None and cost > spendLeft:
+        return 'дневной лимит трат'
+    return None
 
 
 # Ready-made filters the sites share.
@@ -545,6 +561,13 @@ class Platform:
         self.lock    = threading.Lock()
 
         self.thread  = None
+        # start, stop and restart one at a time: a restart is a stop and a
+        # start that nothing else may come between.
+        self.workerLock = threading.RLock()
+        # A start asked for while the old worker was still winding down.
+        self.restartPending = False
+        # Counts stops, so a restart waiting outside the lock sees one.
+        self.stopSeq = 0
         self.stopFlag = threading.Event()
         self.wakeFlag = threading.Event()
 
@@ -893,6 +916,7 @@ class Platform:
         return None
 
     # (entries, spend) still allowed in the last 24 hours; None = no limit.
+    # dailyReason() words what they rule out.
     def dailyLeft(self, conf):
         count, spent, _oldest = self.manager.state.usage(self.key)
         entries = conf.get('daily_entries')
@@ -984,31 +1008,84 @@ class Platform:
         return self.thread is not None and self.thread.is_alive()
 
     def start(self):
-        if self.running:
-            return False
-        self.stopFlag.clear()
-        self.wakeFlag.clear()
-        self.lastError = ''
-        self.state     = RUNNING
-        self.startedAt = time.time()
-        self.failures = 0
-        self.passClaims = []
-        self.sessionEntered = 0
-        self.sessionSpent   = 0
-        self.forced = False
-        self.thread = threading.Thread(target=self.loop, name=f'farm-{self.key}', daemon=True)
-        self.thread.start()
-        return True
+        with self.workerLock:
+            if self.running:
+                if not self.stopped:
+                    return False
+                # Stopped, but the old worker has not ended yet: refusing here
+                # used to leave the site stopped. It starts once that one ends.
+                self.startWhenEnded()
+                return True
+            self.stopFlag.clear()
+            self.wakeFlag.clear()
+            self.lastError = ''
+            self.state     = RUNNING
+            self.startedAt = time.time()
+            self.failures = 0
+            self.passClaims = []
+            self.sessionEntered = 0
+            self.sessionSpent   = 0
+            self.forced = False
+            self.thread = threading.Thread(target=self.loop, name=f'farm-{self.key}',
+                                           daemon=True)
+            self.thread.start()
+            return True
+
+    def startWhenEnded(self):
+        if self.restartPending:
+            return
+        self.restartPending = True
+        old = self.thread
+
+        def later():
+            old.join()
+            with self.workerLock:
+                # A stop pressed meanwhile takes the start back.
+                if self.restartPending:
+                    self.restartPending = False
+                    self.start()
+
+        threading.Thread(target=later, name=f'farm-{self.key}-restart', daemon=True).start()
 
     def stop(self, wait=0):
-        self.stopFlag.set()
-        self.wakeFlag.set()
-        try:
-            self.onStop()
-        except Exception as error:
-            self.warn(f"Ошибка при остановке: {error}")
-        if wait and self.thread is not None:
-            self.thread.join(wait)
+        with self.workerLock:
+            self.restartPending = False
+            self.stopSeq += 1
+            self.stopFlag.set()
+            self.wakeFlag.set()
+            thread = self.thread
+            try:
+                self.onStop()
+            except Exception as error:
+                self.warn(f"Ошибка при остановке: {error}")
+        if wait and thread is not None and thread is not threading.current_thread():
+            thread.join(wait)
+
+    # Stop and start again, for settings read once per start. With
+    # onlyIfRunning a stopped site stays stopped. True when it runs again
+    # (or will, once the old worker ends).
+    def restart(self, wait=None, onlyIfRunning=False):
+        wait = RESTART_WAIT if wait is None else wait
+        with self.workerLock:
+            if onlyIfRunning and not (self.running and
+                                      (not self.stopped or self.restartPending)):
+                return False
+            self.stop()
+            old = self.thread
+            if not wait or old is None or old is threading.current_thread():
+                return self.start()
+            # Pending while we wait, so a Start meanwhile does not queue one more.
+            self.restartPending = True
+            seq = self.stopSeq
+        # The join runs without the lock: a Stop (panel, Telegram, shutdown)
+        # pressed meanwhile answers at once instead of waiting it out.
+        old.join(wait)
+        with self.workerLock:
+            if self.stopSeq != seq:
+                # Stopped meanwhile (cancelled), or a newer restart took over.
+                return self.restartPending or (self.running and not self.stopped)
+            self.restartPending = False
+            return self.start()
 
     def wakeUp(self):
         self.forced = True

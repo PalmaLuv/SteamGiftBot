@@ -32,8 +32,9 @@ from bs4 import BeautifulSoup
 from steamgiftbot.farm import rules
 from steamgiftbot.farm.asf import STEAM_KEY, isSteamKey, steamKeys
 from steamgiftbot.farm.base import (DEFAULT_USER_AGENT, TIMEOUT, AuthError, Platform,
-                                    PlatformError, RetryLater, cookieGuide, cookieValue, field,
-                                    grouped, parseCookies, presetFields, scheduleFields)
+                                    PlatformError, RetryLater, cookieGuide, cookieValue,
+                                    dailyReason, field, grouped, parseCookies, presetFields,
+                                    scheduleFields)
 from steamgiftbot.farm.sessions import KeptSession
 from steamgiftbot.logging_setup import writePrivate
 
@@ -652,10 +653,9 @@ class IndieGalaPlatform(KeptSession, Platform):
     # Balance and the daily limits, for a ticket that passed every filter.
     @staticmethod
     def budgetReason(conf, ticket, priority, balance, entriesLeft, spendLeft):
-        if entriesLeft == 0:
-            return 'дневной лимит входов'
-        if spendLeft is not None and ticket.price > spendLeft:
-            return 'дневной лимит трат'
+        reason = dailyReason(ticket.price, entriesLeft, spendLeft)
+        if reason:
+            return reason
         reserve = 0 if priority and conf['priority_reserve'] else (conf['reserve'] or 0)
         if balance is not None and (balance <= 0 or balance - ticket.price < reserve):
             return 'не хватает iS'

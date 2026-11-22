@@ -64,9 +64,7 @@ def test_luck_with_no_wins_or_no_entries():
 def test_steamgifts_keeps_people_and_copies(manager):  # noqa: F811
     platform = manager.platforms['steamgifts']
     for code, copies in (('aaa', 3), ('bbb', 1)):
-        platform.pendingCost[code] = 10
-        platform.lastGiveaways[code] = Giveaway(code, code, 10, entries=59, copies=copies)
-        platform.enteredByName(code)
+        platform.entered(Giveaway(code, code, 10, entries=59, copies=copies), 10)
     first, second = manager.state.site('steamgifts')['entries']
     assert first['entries'] == 59 and first['copies'] == 3
     # One copy is the usual and goes unwritten; it is still one.
@@ -143,9 +141,7 @@ def test_luck_by_url_counts_only_wins_of_kept_entries():
 
 def test_steamgifts_luck_matches_wins_to_entries(manager):  # noqa: F811
     platform = manager.platforms['steamgifts']
-    platform.pendingCost['aaa'] = 10
-    platform.lastGiveaways['aaa'] = Giveaway('aaa', 'Kept', 10, entries=9)
-    platform.enteredByName('Kept')
+    platform.entered(Giveaway('aaa', 'Kept', 10, entries=9), 10)
     platform.recordWin('Kept', Win('aaa', 'Kept').url)
     platform.recordWin('By hand', Win('zzz', 'By hand').url)
     luck = manager.luck(platform)

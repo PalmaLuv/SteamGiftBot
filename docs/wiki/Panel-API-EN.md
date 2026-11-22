@@ -82,7 +82,7 @@ a number: `steamgifts-2`, `indiegala-3`.
 
 | Action | Body | What it does |
 | --- | --- | --- |
-| `start`, `stop`, `restart` | — | start, stop, restart |
+| `start`, `stop`, `restart` | — | start, stop, restart. If the site is still stopping, `start` and `restart` start it as soon as it has stopped and answer `{started: true}` |
 | `run-now` | — | a run right now, ignoring the pause and working hours |
 | `autostart` | `{value: true}` | whether to start together with the farm |
 | `settings` | `{values, autostart?, connect?}` | save settings; secrets passed empty are left unchanged |
