@@ -1066,5 +1066,12 @@
  "копит до": "saving up to",
  "Правила SteamGifts не разрешают входить в раздачи скриптами и ботами, и за это аккаунт на сайте могут заблокировать (Steam это не касается). Ферма снижает риск: шлёт User-Agent вашего браузера, делает случайные паузы, не листает весь каталог и не просится туда, куда вам нельзя. Убрать риск совсем она не может: подключая SteamGifts, вы берёте его на себя. Чаще всего блокируют за неактивированные выигрыши — активируйте ключи и отмечайте «получено»": "SteamGifts' rules do not allow entering giveaways with scripts and bots, and the account on the site can be banned for it (your Steam account is not affected). The farm lowers the risk: it sends your browser's User-Agent, pauses at random, does not page through the whole catalogue and does not ask for giveaways you cannot enter. It cannot remove the risk entirely: by connecting SteamGifts you take it on yourself. Bans most often come for unactivated wins — activate the keys and mark them “received”",
  "⚠️ Риск для аккаунта": "⚠️ Risk to the account",
- "сколько раздач одной и той же игры брать за 7 дней, если важнее разнообразие. Билет выигрывает редко, так что лимит обычно уводит iS в раздачи похуже. Пусто — без лимита; приоритетных игр не касается": "how many giveaways of the same game to enter over 7 days, if variety matters more. A ticket rarely wins, so a limit usually sends the iS to worse giveaways. Empty means no limit; priority games are not limited"
+ "сколько раздач одной и той же игры брать за 7 дней, если важнее разнообразие. Билет выигрывает редко, так что лимит обычно уводит iS в раздачи похуже. Пусто — без лимита; приоритетных игр не касается": "how many giveaways of the same game to enter over 7 days, if variety matters more. A ticket rarely wins, so a limit usually sends the iS to worse giveaways. Empty means no limit; priority games are not limited",
+ "Кнопка устарела: отметьте выигрыш в панели, в разделе «Выигрыши»": "This button is out of date: mark the win in the panel, under «Wins»",
+ "Telegram: ответ на кнопку не принят": "Telegram: the answer to a button press was not accepted",
+ "Telegram: кнопки не убраны": "Telegram: the buttons were not removed",
+ "Отмечено: ключ получен": "Marked: key received",
+ "Отправляю ключ в ASF…": "Sending the key to ASF…",
+ "КЛЮЧ НЕ ОТПРАВЛЕН": "KEY NOT SENT",
+ "Уже отмечено": "Already marked"
 }

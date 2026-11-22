@@ -46,6 +46,9 @@ Get the key and mark it as received in the panel: SteamGifts requires it.
 | ✅ KEY ACTIVATED / ⏳ WILL RETRY LATER / ⚠️ KEY REJECTED | the ASF activation result | Wins |
 | 📊 DAILY SUMMARY | every day at the chosen hour | Open the panel, Wins |
 
+With [commands](#commands) on, a win also gets "Key received" and
+"Activate in ASF" buttons; see [Buttons under a win](#buttons-under-a-win).
+
 Command replies look the same: `/status` is a table of sites with state
 icons, `/preview` is "PREVIEW" with the list of giveaways, `/wins` lists the
 unmarked wins.
@@ -98,6 +101,39 @@ Steam games). Site names: `steamgifts`, `indiegala`, `opiumpulses`,
   from other chats.
 - Commands sent while the farm was off are skipped at startup rather than
   executed after the fact.
+- The farm never takes keys or cookies through Telegram: they are pasted in
+  the panel only.
+
+### Buttons under a win
+
+With commands on, the "🎉 WIN" message (SteamGifts, IndieGala, OpiumPulses)
+gets buttons the farm carries out itself:
+
+```
+🎉 WIN · IG IndieGala
+Pirate Guy 2 New Land
+The key is saved in the panel's Wins section.
+[ Activate in ASF ] [ Key received ]
+[ Wins ] [ IndieGala library ]
+```
+
+| Button | When it is there | What it does |
+| --- | --- | --- |
+| Activate in ASF («Активировать в ASF») | the win has a Steam key (IndieGala for now), ASF is set up (an IPC password is given, `~/asf/config/ASF.json` exists, another address is set or free Steam games are connected) and "Activate won keys immediately" is off | the same as the button in the Wins section: the key goes to ASF and the result comes as a separate "KEY ACTIVATED" (or similar) message |
+| Key received («Ключ получен») | always | sets the win's status to "Key received"; for SteamGifts with "Mark as received on the site" on, the mark goes to the site too |
+
+A pressed button with nothing left to do disappears: "Key received" once the
+win is marked, both once the key is activated. Links stay.
+
+- The buttons work only in the farm's chat; a press in another chat does
+  nothing.
+- A button carries neither the game's name nor the key, only a short random
+  id of the win. It is kept with the win, so the buttons keep working after
+  the farm restarts. If the win has already left the history, the bot answers
+  that the button is out of date.
+- Presses made while the farm was off are skipped, like commands.
+- Without commands, win messages stay as before, with link buttons only:
+  nobody would be there to take a press.
 
 ## If it does not work
 

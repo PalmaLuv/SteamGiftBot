@@ -130,12 +130,16 @@ class FarmSteamGift(SteamGift):
         self.platform.lastGiveaways[giveaway.code] = giveaway
         return self.platform.extraReason(giveaway, self.points, self.min_points)
 
+    # Recorded here, before the card, so the card's buttons can name the win.
     def tellWin(self, win):
-        self.platform.notify('', '🎉', headline=win.name, link=win.url,
-                             note="Заберите ключ и отметьте в панели, что он получен: "
-                                  "SteamGifts этого требует.",
-                             buttons=[("Забрать ключ", win.url),
-                                      ("Выигрыши", self.platform.manager.panelLink('/wins'))])
+        platform = self.platform
+        moment = platform.recordWin(win.name, win.url)
+        platform.notify('', '🎉', headline=win.name, link=win.url,
+                        note="Заберите ключ и отметьте в панели, что он получен: "
+                             "SteamGifts этого требует.",
+                        buttons=[("Забрать ключ", win.url),
+                                 ("Выигрыши", platform.manager.panelLink('/wins'))],
+                        actions=platform.manager.winActions(platform.key, moment, win.name))
 
     def skipped(self, giveaway, reason):
         super().skipped(giveaway, reason)
@@ -506,10 +510,10 @@ class SteamGiftsPlatform(Platform):
             self.finishPass(f"Проход окончен: вошёл в {self.sessionEntered - self.passEntered}, "
                             f"баланс {bot.points} P")
 
-    # The bot sends the Telegram message itself; the farm only keeps a record.
+    # The bot finds the wins; its tellWin (FarmSteamGift) records each and
+    # sends the card.
     def announce(self, bot):
-        for win in bot.announceWins():
-            self.recordWin(win.name, win.url)
+        bot.announceWins()
 
     # The farm's own rules, asked by the bot for every giveaway it would enter.
     def extraReason(self, giveaway, points=None, minPoints=None):

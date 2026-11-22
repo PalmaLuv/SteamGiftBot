@@ -14,7 +14,8 @@ When there is a new win:
 - a green banner appears on the Overview (Обзор);
 - a counter appears next to Wins (Выигрыши) in the menu, and 🎉 in the
   browser tab;
-- a message arrives on Telegram.
+- a message arrives on Telegram; with commands on, it has "Key received" and
+  "Activate in ASF" buttons (see [Telegram](Telegram-EN.md#buttons-under-a-win)).
 
 ## The Wins section
 

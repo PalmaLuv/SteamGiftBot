@@ -159,9 +159,11 @@ def send(config, text, session=None, card=None):
                     if not card.buttons:
                         raise
                     # A button Telegram will not take (a LAN address, say):
-                    # the same card with the links written out.
+                    # the same card with the links written out (the farm's
+                    # own buttons, which carry no address, stay).
                     bare = card.withoutButtons()
-                    sendTelegram(token, config.telegram_chat, bare.html(), session, html=True)
+                    sendTelegram(token, config.telegram_chat, bare.html(), session, html=True,
+                                 markup=bare.keyboard())
         except (requests.RequestException, NotifyError) as error:
             problems.append(hideToken(describeProblem('Telegram', error), token))
 

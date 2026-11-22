@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 
 from steamgiftbot import logging_setup, notify
 from steamgiftbot import settings as sgSettings
+from steamgiftbot.farm import asf as asfModule
 from steamgiftbot.farm import cards, rules, support
 from steamgiftbot.farm.asf import normalizeKey, steamKeys
 from steamgiftbot.farm.base import (HISTORY_LENGTH, actingFor, applySettings, field, grouped,
@@ -380,6 +381,31 @@ class FarmState:
 
     def openWins(self, key):
         return [win for win in self.site(key).get('wins', []) if not win.get('status')]
+
+    # A short random name for a win, kept on it, for the buttons under its
+    # Telegram card: they still work after a restart, and the callback data
+    # carries neither the game's name nor its key.
+    def winToken(self, key, moment, name):
+        with self.lock:
+            win = self.findWin(key, moment, name)
+            if win is None:
+                return None
+            if not win.get('tg'):
+                win['tg'] = secrets.token_urlsafe(6)
+                self.save()
+            return win['tg']
+
+    # (site key, win) for a token from winToken, or None once the win has
+    # left the history.
+    def winByToken(self, token):
+        with self.lock:
+            for key, site in self.data.items():
+                if not isinstance(site, dict) or key.startswith('_'):
+                    continue
+                for win in site.get('wins', []):
+                    if token and win.get('tg') == token:
+                        return key, win
+        return None
 
     def seen(self, key):
         with self.lock:
@@ -833,6 +859,39 @@ class FarmManager:
         return self.steam.wishlist(conf['steam_api_key'], conf['steam_profile'])
 
     # ---- won keys --------------------------------------------------------------
+
+    # The buttons the farm answers itself under a fresh win's Telegram card
+    # (see telegram.py), [(text, callback_data)]. Only when it reads its chat
+    # (telegram_commands): otherwise nobody would answer a press. ASF only
+    # for a Steam key it would not send on its own anyway (auto_redeem).
+    # steamKey: whether the win has one, when the key is saved after the card.
+    def winActions(self, key, moment, name, steamKey=None):
+        conf = self.farmSettings()
+        if not (conf.get('telegram_commands') and conf.get('telegram_token')
+                and conf.get('telegram_chat')):
+            return []
+        win = self.state.findWin(key, moment, name)
+        token = self.state.winToken(key, moment, name) if win is not None else None
+        if not token:
+            return []
+        if steamKey is None:
+            steamKey = bool(steamKeys(win.get('cdkey') or ''))
+        actions = []
+        if steamKey and not conf.get('auto_redeem') and self.asfConfigured():
+            actions.append(("Активировать в ASF", f"win:{token}:asf"))
+        actions.append(("Ключ получен", f"win:{token}:got"))
+        return actions
+
+    # Whether ArchiSteamFarm was set up at all: its IPC password given or in
+    # its usual place, another address than the default, or the free Steam
+    # games (which go through ASF) connected.
+    def asfConfigured(self):
+        conf = self.farmSettings()
+        url = (conf.get('asf_url') or asfModule.DEFAULT_URL).rstrip('/')
+        return bool(conf.get('asf_password') or url != asfModule.DEFAULT_URL
+                    or asfModule.LOCAL_CONFIG.exists()
+                    or any(platform.key.startswith('steamfree') and platform.configured()
+                           for platform in self.platforms.values()))
 
     # The key as pasted: Steam keys in capitals, a gift link or another
     # shop's code untouched (see asf.normalizeKey).
@@ -1392,7 +1451,8 @@ class FarmManager:
         return cards.Card(card.icon, tr(card.heading()), card.site, card.key, tr(card.headline),
                           card.link, [tr(line) for line in card.lines],
                           [tr(line) for line in card.block], tr(card.note),
-                          [(tr(text), url) for text, url in card.buttons])
+                          [(tr(text), url) for text, url in card.buttons],
+                          [(tr(text), data) for text, data in card.actions])
 
     # Telegram / Discord settings are the ones SteamGiftBot already has.
     # Pass a cards.Card, or a plain text for a one-line note.
@@ -1426,4 +1486,5 @@ class FarmManager:
         return cards.Card(card.icon, card.title, card.site, card.key, card.headline, card.link,
                           card.lines + ([card.note] if card.note else []), card.block, note,
                           card.buttons + [("Поддержать проект",
-                                           support.page(self.uiSettings()['lang']))])
+                                           support.page(self.uiSettings()['lang']))],
+                          card.actions)
