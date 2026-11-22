@@ -25,15 +25,20 @@ text and the User-Agent stay the same. Cookies the site refreshes on its own
 of the cookies that were in the pasted text are written to `farm.json` next to
 it (`sessionCookies` of the site); the text itself is left as it was. After a
 restart the farm puts them over the paste. A new paste starts from scratch, and
-disconnecting the site erases what was kept. The log only ever shows cookie
-names, never their values.
+disconnecting the site erases what was kept. When the site stops accepting the
+session (🔑 SIGN-IN NEEDED), what was kept is erased too: the next start,
+the Start («Старт») button in the panel included, begins from the pasted text
+again. The log only ever shows cookie names, never their values.
 
 When the expiry of the sign-in cookie (`auth` or `sessionid`) is known, the Connection
 («Подключение») tab shows it. A Cookie-Editor export (JSON) and cookies.txt
 carry it, and so does a Set-Cookie when the site renews the cookie itself; cURL
 and a Cookie line do not. 3 days before it, a running site sends one
 🔑 COOKIE EXPIRES SOON message with a Reconnect («Подключить заново») button.
-If the site renews the cookie, the farm reminds about the new date separately.
+If the site renews the cookie for a long time, the farm reminds about the new
+date separately. If the site only moves the date a little with every answer (a
+cookie for a day or two), there is no second reminder: such a cookie does not
+expire while the farm is running.
 
 ## How a run goes
 

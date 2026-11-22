@@ -256,19 +256,67 @@ def test_a_dry_run_sends_no_reminder(manager, told):  # noqa: F811
     assert told == []
 
 
-def test_a_pass_reminds_but_a_failed_one_only_keeps_the_cookies(manager, told):  # noqa: F811
+def test_a_sliding_cookie_is_told_about_once(manager, told):  # noqa: F811
+    # The site re-sends the sign-in cookie with a one-day Max-Age on every
+    # answer: each pass saves a slightly later expiry.
+    platform, conf = connected(manager)
+    now = time.time()
+    for step in range(40):
+        moment = now + step * 2 * 3600
+        platform.connect(conf)
+        siteSets(platform.session, 'auth', f'v{step}', expires=int(moment) + DAY)
+        platform.keepCookies()
+        platform.remindExpiry(moment)
+    assert len(told) == 1
+    # A renewal far ahead is a new expiry, told about when its time comes.
+    platform.connect(conf)
+    siteSets(platform.session, 'auth', 'renewed', expires=int(moment) + 30 * DAY)
+    platform.keepCookies()
+    assert not platform.remindExpiry(moment)
+    assert platform.remindExpiry(moment + 28 * DAY)
+    assert len(told) == 2
+
+
+def test_a_pass_reminds_and_another_failure_keeps_the_cookies(manager, told):  # noqa: F811
     platform, conf = connected(manager)
     platform.wait = lambda *args, **kwargs: False
 
-    def dead(conf):
+    def flaky(conf):
         siteSets(platform.session, 'auth', 'renewed', expires=int(time.time()) + DAY)
-        raise base.AuthError("IndieGala просит войти заново.")
+        raise base.RetryLater("IndieGala не отвечает.")
     platform.gate = iter([conf]).__next__
-    platform.cycle = dead
-    with pytest.raises(base.AuthError):
+    platform.cycle = flaky
+    with pytest.raises(base.RetryLater):
         platform.run()
     assert kept(manager)['values'] == {'auth': 'renewed'} and told == []
+    session = platform.session
     platform.gate = iter([conf, None]).__next__
     platform.cycle = lambda conf: 0
     platform.run()
+    assert platform.session is session
     assert [icon for icon, _card in told] == ['🔑']
+
+
+@pytest.mark.parametrize('key, cookie', [('indiegala', 'auth=old; csrftoken=tok'),
+                                         ('opiumpulses', 'PHPSESSID=old')])
+def test_a_turned_down_session_starts_again_from_the_paste(manager, key, cookie):  # noqa: F811
+    platform, conf = connected(manager, key, cookie=cookie)
+    name = cookie.split('=')[0]
+    domain = '.' + platform.sessionDomain.lstrip('.')
+    platform.wait = lambda *args, **kwargs: False
+    platform.connect(conf)
+    siteSets(platform.session, name, 'refreshed', domain=domain)
+    platform.keepCookies()
+    assert kept(manager, key)
+
+    def signedOut(conf):
+        siteSets(platform.session, name, '', domain=domain)
+        raise base.AuthError("Сайт просит войти заново.")
+    platform.gate = iter([conf]).__next__
+    platform.cycle = signedOut
+    with pytest.raises(base.AuthError):
+        platform.run()
+    # Neither the sign-out nor the values from before it are kept.
+    assert platform.session is None and kept(manager, key) is None
+    platform.connect(platform.settings())
+    assert base.cookieValue(platform.session.cookies, name) == 'old'

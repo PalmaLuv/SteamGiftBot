@@ -507,15 +507,13 @@ class OpiumPulsesPlatform(KeptSession, Platform):
             if conf is None:
                 return
             self.connect(conf)
-            try:
+            with self.keptPass():
                 entered = self.cycle(conf)
                 if conf['check_wins'] and not self.stopped:
                     try:
                         self.checkWins()
                     except RetryLater as error:
                         self.warn(f"Выигрыши не проверены: {error}")
-            finally:
-                self.afterPass()
             self.remindExpiry()
             self.lastCycle = time.time()
             self.finishPass(f"Проход окончен: вошёл в {entered}")

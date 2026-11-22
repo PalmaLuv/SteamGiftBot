@@ -11,14 +11,15 @@ no longer be what the user pasted), and put over the paste when a session has
 to be built again, after a restart. They belong to that one paste: a new one
 starts clean. When the sign-in cookie's expiry is known, the panel shows it
 and Telegram is told a few days before it."""
+import contextlib
 import hashlib
 import re
 import time
 
 from datetime import datetime
 
-from steamgiftbot.farm.base import (PlatformError, buildSession, cookieExpiries, parseCookies,
-                                    userAgentFrom)
+from steamgiftbot.farm.base import (AuthError, PlatformError, buildSession, cookieExpiries,
+                                    parseCookies, userAgentFrom)
 
 # The site's record in farm.json that keeps the refreshed cookies.
 KEPT = 'sessionCookies'
@@ -127,8 +128,10 @@ class KeptSession:
         return max(found) if found else None
 
     # One card per expiry, EXPIRY_NOTICE before it. An expiry the site moves
-    # forward (it renewed the cookie) is a new one and gets its own card when
-    # its time comes.
+    # far forward (a renewed sign-in) is a new one and gets its own card when
+    # its time comes. One that only creeps on (a cookie the site re-sends
+    # with a short Max-Age on every answer) is the one already told about:
+    # the remembered moment follows it without a new card each pass.
     def remindExpiry(self, now=None):
         if self.isSandbox:
             return False
@@ -137,7 +140,10 @@ class KeptSession:
         if not moment or moment <= now or moment - now > EXPIRY_NOTICE:
             return False
         state = self.manager.state
-        if state.value(self.key, 'cookie_expiry_told') == moment:
+        told = state.value(self.key, 'cookie_expiry_told')
+        if told and abs(moment - told) < EXPIRY_NOTICE:
+            if told != moment:
+                state.setFlag(self.key, 'cookie_expiry_told', moment)
             return False
         state.setFlag(self.key, 'cookie_expiry_told', moment)
         when = datetime.fromtimestamp(moment, self.manager.zone())
@@ -157,10 +163,31 @@ class KeptSession:
         except Exception as error:
             self.warn(f"Cookie не сохранены: {type(error).__name__}")
 
+    # The site no longer knows this session. What it set on the way (a
+    # sign-out, an emptied value) is not kept, and the next start, a Restart
+    # in the panel too, builds the session from the user's paste again.
+    def resetSession(self):
+        self.session = self.sessionId = self.sessionPaste = None
+        if not self.isSandbox:
+            self.dropKept()
+
+    # Wraps the work of one pass: the cookies are kept after it, unless the
+    # site turned the session down.
+    @contextlib.contextmanager
+    def keptPass(self):
+        try:
+            yield
+        except AuthError:
+            self.resetSession()
+            raise
+        except BaseException:
+            self.afterPass()
+            raise
+        self.afterPass()
+
     def disconnect(self):
         super().disconnect()
-        self.dropKept()
-        self.session = self.sessionId = self.sessionPaste = None
+        self.resetSession()
 
     def snapshot(self):
         data = super().snapshot()
