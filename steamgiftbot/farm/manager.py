@@ -960,7 +960,9 @@ class FarmManager:
     # shop's code untouched (see asf.normalizeKey).
     # Under redeemLock: a retry the clock is making for the old text would
     # otherwise write its result over the new one.
-    def setWinKey(self, key, moment, name, value):
+    # redeem=False keeps auto_redeem out of it: a key found for an old win is
+    # stored, not sent to ASF behind the user's back.
+    def setWinKey(self, key, moment, name, value, redeem=True):
         value = normalizeKey(value)
         with self.redeemLock:
             win = self.state.findWin(key, moment, name)
@@ -972,7 +974,7 @@ class FarmManager:
             kept = [item for item in win.get('redeemed') or [] if item in keys]
             self.state.updateWin(key, moment, name, cdkey=value, redeemed=kept,
                                  redeemRetry=None)
-            if keys and self.farmSettings().get('auto_redeem'):
+            if keys and redeem and self.farmSettings().get('auto_redeem'):
                 self.redeemWin(key, moment, name)
         return value
 
@@ -1119,7 +1121,8 @@ class FarmManager:
         # A key in hand but not in Steam: the win SteamGifts bans for most.
         unused = [(platform, win) for platform in self.platforms.values()
                   for win in self.state.site(platform.key).get('wins', [])
-                  if win.get('cdkey') and win.get('status') != 'activated']
+                  if win.get('cdkey') and win.get('status') != 'activated'
+                  and not win.get('cli')]
         if unused:
             card.lines.append(f"🔑 Ключ есть, но не активирован: {len(unused)} "
                               f"({', '.join(win['name'] for _, win in unused[:5])})")

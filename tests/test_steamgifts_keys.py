@@ -16,8 +16,11 @@ def page(name='won_keys.html'):
     return BeautifulSoup(fixture(name), 'html.parser')
 
 
-def setUp(manager, *wins):  # noqa: F811
+def setUp(manager, *wins, seeded=True):  # noqa: F811
     platform = manager.platforms['steamgifts']
+    if seeded:
+        # Past the first read after the upgrade, which stores keys quietly.
+        manager.state.setFlag('steamgifts', 'won_keys_seeded')
     cards = []
     platform.notify = lambda text='', icon='', **card: cards.append((icon, card))
     for code, name in wins:
@@ -175,3 +178,41 @@ def test_the_report_says_nothing_when_every_key_is_activated(manager):  # noqa: 
     manager.state.addWin('steamgifts', {'time': time.time(), 'name': 'Done', 'url': '',
                                         'status': 'activated', 'cdkey': 'DDDDD-EEEEE-FFFFF'})
     assert 'не активирован' not in manager.reportCard().plain()
+
+
+# ---- the first read and old wins -------------------------------------------------
+
+def test_the_first_read_stores_keys_quietly(manager, monkeypatch):  # noqa: F811
+    platform, cards = setUp(manager, ('key101', 'Hollow Knight'), seeded=False)
+    settings = manager.farmSettings()
+    monkeypatch.setattr(manager, 'farmSettings', lambda: {**settings, 'auto_redeem': True})
+    sent = []
+    monkeypatch.setattr(manager, 'redeemWin', lambda key, moment, name, auto=False:
+                        sent.append(name))
+    assert platform.keysFromWonPage(page()) == 1
+    assert winOf(manager, 'key101')['cdkey'] == 'AAAAA-BBBBB-CCCCC'
+    assert cards == [] and sent == []           # no card, nothing sent to ASF
+    assert manager.state.flag('steamgifts', 'won_keys_seeded')
+
+
+def test_wins_imported_from_the_command_line_bot_are_left_alone(manager):  # noqa: F811
+    platform, cards = setUp(manager)
+    manager.state.addWin('steamgifts', {'time': 1.0, 'name': 'Old', 'cli': True,
+                                        'status': 'received',
+                                        'url': 'https://www.steamgifts.com/giveaway/key101/'})
+    assert platform.keysFromWonPage(page()) == 0
+    assert not winOf(manager, 'key101').get('cdkey') and cards == []
+    # Nor nagged about, should one carry a key.
+    manager.state.updateWin('steamgifts', 1.0, 'Old', cdkey='AAAAA-BBBBB-CCCCC')
+    assert 'не активирован' not in manager.reportCard().plain()
+
+
+def test_the_key_card_offers_asf(manager, monkeypatch):  # noqa: F811
+    platform, cards = setUp(manager, ('key101', 'Hollow Knight'))
+    asked = []
+    monkeypatch.setattr(manager, 'winActions', lambda key, moment, name, steamKey=None:
+                        asked.append(steamKey) or [('Активировать в ASF', 'win:t:asf')])
+    platform.keysFromWonPage(page())
+    icon, card = cards[0]
+    assert icon == '🔑' and card['actions'] == [('Активировать в ASF', 'win:t:asf')]
+    assert asked == [True]

@@ -595,7 +595,10 @@ class SteamGiftsPlatform(Platform):
     # Unactivated wins are what SteamGifts bans for most. A key the creator
     # sent shows on the won page: it goes onto the win (and to ASF when
     # auto_redeem is on), and the daily report reminds until it is activated.
-    # A win that has a key already keeps it; an activated one is left alone.
+    # A win that has a key already keeps it; an activated one, or one imported
+    # from the command line bot's logs (the user dealt with those), is left
+    # alone. The first read after an upgrade stores keys quietly: no card, no
+    # ASF, as the other sites' first looks only learn what is there.
     def keysFromWonPage(self, soup):
         if soup is None:
             return 0
@@ -604,19 +607,25 @@ class SteamGiftsPlatform(Platform):
         except Exception as error:
             self.warn(f"SteamGifts: не удалось прочитать ключи на странице выигрышей: {error}")
             return 0
+        state = self.manager.state
+        first = not state.flag(self.key, 'won_keys_seeded')
         stored = 0
-        for win in list(self.manager.state.site(self.key).get('wins', [])):
+        for win in list(state.site(self.key).get('wins', [])):
             serial = found.get(giveawayCode(win.get('url')))
-            if not serial or win.get('cdkey') or win.get('status') == 'activated':
+            if (not serial or win.get('cdkey') or win.get('status') == 'activated'
+                    or win.get('cli')):
                 continue
             try:
-                self.manager.setWinKey(self.key, win['time'], win['name'], serial)
+                self.manager.setWinKey(self.key, win['time'], win['name'], serial,
+                                       redeem=not first)
             except Exception as error:
                 self.warn(f"Ключ к «{win['name']}» не сохранён: {error}")
                 continue
             stored += 1
             self.info(f"Ключ к «{win['name']}» взят со страницы выигрышей SteamGifts")
-            self.tellKey(win, serial)
+            if not first:
+                self.tellKey(win, serial)
+        state.setFlag(self.key, 'won_keys_seeded')
         return stored
 
     # With auto_redeem on, a Steam key goes to ASF, which tells how it went.
@@ -627,7 +636,9 @@ class SteamGiftsPlatform(Platform):
                     link=win.get('url') or '',
                     note="Ключ сохранён в разделе «Выигрыши». Активируйте его: "
                          "SteamGifts блокирует за неактивированные выигрыши.",
-                    buttons=[("Выигрыши", self.manager.panelLink('/wins'))])
+                    buttons=[("Выигрыши", self.manager.panelLink('/wins'))],
+                    actions=self.manager.winActions(self.key, win['time'], win['name'],
+                                                    steamKey=bool(steamKeys(serial))))
 
     # The farm's own rules, asked by the bot for every giveaway it would enter.
     def extraReason(self, giveaway, points=None, minPoints=None):

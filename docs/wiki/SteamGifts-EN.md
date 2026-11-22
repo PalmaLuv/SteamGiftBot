@@ -210,9 +210,14 @@ wins), it looks for a key there:
 - if "Activate won keys immediately" («Активировать выигранные ключи сразу») is on
   in the [farm settings](Farm-Settings-EN.md), a Steam key goes to ASF at once
   and the result arrives on Telegram. Otherwise a 🔑 KEY RECEIVED message
-  arrives (it never shows the key itself);
+  arrives (it never shows the key itself), with an "Activate in ASF" button
+  when Telegram commands are on;
 - a key the win already has (pasted by hand or found earlier) is never
-  replaced. A win with the "Activated" status is left alone;
+  replaced. A win with the "Activated" status is left alone, and so are the
+  wins brought over from the command-line bot's logs: you dealt with those,
+  and the summary does not remind about them;
+- the first read after the farm is upgraded only stores the keys it finds: no
+  messages and nothing sent to ASF, even with automatic activation on;
 - the farm presses nothing on the site: if the key is hidden behind the
   "View Key" button, it is not on the page and nothing happens. Reveal the key
   on the site yourself and the farm picks it up on the next check. Other codes
