@@ -38,6 +38,7 @@ Get the key and mark it as received in the panel: SteamGifts requires it.
 | --- | --- | --- |
 | 🎉 WIN | the farm noticed a win (SteamGifts, IndieGala, OpiumPulses) | Get key, Wins |
 | 🔑 SIGN-IN NEEDED | the site stopped accepting the cookie; the site is stopped | Reconnect |
+| 🔑 COOKIE EXPIRES SOON | the IndieGala or OpiumPulses sign-in cookie expires in 3 days; one message per expiry date | Reconnect |
 | ⛔ SITE STOPPED | the farm cannot go on (no cookie, account banned, settings error) | Open the site |
 | ⚠️ NOT WORKING | the site could not be reached for about an hour | Log |
 | ✅ WORKING AGAIN | the first successful run after such an outage | — |

@@ -32,9 +32,9 @@ from bs4 import BeautifulSoup
 from steamgiftbot.farm import rules
 from steamgiftbot.farm.asf import STEAM_KEY, isSteamKey, steamKeys
 from steamgiftbot.farm.base import (DEFAULT_USER_AGENT, TIMEOUT, AuthError, Platform,
-                                    PlatformError, RetryLater, buildSession, cookieGuide,
-                                    cookieValue, field, grouped, parseCookies, presetFields,
-                                    scheduleFields, userAgentFrom)
+                                    PlatformError, RetryLater, cookieGuide, cookieValue, field,
+                                    grouped, parseCookies, presetFields, scheduleFields)
+from steamgiftbot.farm.sessions import KeptSession
 from steamgiftbot.logging_setup import writePrivate
 
 BASE    = 'https://www.indiegala.com'
@@ -219,12 +219,15 @@ def lastPage(html):
     return max(pages) if pages else 1
 
 
-class IndieGalaPlatform(Platform):
+class IndieGalaPlatform(KeptSession, Platform):
     key         = 'indiegala'
     unit        = 'iS'
     title       = 'IndieGala'
     siteURL     = BASE + '/giveaways'
     description = 'Раздачи ключей за Galasilver (iS).'
+    sessionDomain = DOMAIN
+    # IndieGala's own sign-in cookie and Django's session.
+    signInCookie  = re.compile(r'auth|sessionid', re.IGNORECASE)
 
     def schema(self):
         return grouped('Аккаунт', [
@@ -299,13 +302,10 @@ class IndieGalaPlatform(Platform):
 
     # ---- talking to the site ---------------------------------------------
 
+    # The session of the last pass while the paste is the same (see sessions.py).
     def connect(self, conf):
-        cookies = parseCookies(conf['cookie'])
-        if not cookies:
-            raise PlatformError("не задан cookie")
-        self.session = buildSession(userAgentFrom(conf['cookie']) or conf['user_agent'],
-                                    cookies, DOMAIN)
-        self.session.headers.update({'Referer': BASE + '/giveaways', 'Origin': BASE})
+        if self.openSession(conf):
+            self.session.headers.update({'Referer': BASE + '/giveaways', 'Origin': BASE})
 
     def csrfHeaders(self):
         token = cookieValue(self.session.cookies, 'csrftoken') or ''
@@ -698,12 +698,16 @@ class IndieGalaPlatform(Platform):
             if conf is None:
                 return
             self.connect(conf)
-            entered = self.cycle(conf)
-            if conf['check_wins'] and not self.stopped and self.winsDue():
-                try:
-                    self.checkWins()
-                except RetryLater as error:
-                    self.warn(f"Выигрыши не проверены: {error}")
+            try:
+                entered = self.cycle(conf)
+                if conf['check_wins'] and not self.stopped and self.winsDue():
+                    try:
+                        self.checkWins()
+                    except RetryLater as error:
+                        self.warn(f"Выигрыши не проверены: {error}")
+            finally:
+                self.afterPass()
+            self.remindExpiry()
             self.lastCycle = time.time()
             self.finishPass(f"Проход окончен: вошёл в {entered}, баланс {self.balance} iS")
             reason = ''

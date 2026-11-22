@@ -9,6 +9,24 @@ giveaways are free; the rest cost OP, points the site awards for activity.
 site through Steam, open `opiumpulses.com/giveaways` and copy the first
 request as cURL.
 
+### Session and cookie expiry
+
+The farm keeps one session with the site from run to run while the pasted
+text and the User-Agent stay the same. Cookies the site refreshes on its own
+(bot protection, a renewed sign-in) are no longer lost that way. The new values
+of the cookies that were in the pasted text are written to `farm.json` next to
+it (`sessionCookies` of the site); the text itself is left as it was. After a
+restart the farm puts them over the paste. A new paste starts from scratch, and
+disconnecting the site erases what was kept. The log only ever shows cookie
+names, never their values.
+
+When the expiry of the sign-in cookie (`PHPSESSID` or the "remember me" cookie) is known, the Connection
+(«Подключение») tab shows it. A Cookie-Editor export (JSON) and cookies.txt
+carry it, and so does a Set-Cookie when the site renews the cookie itself; cURL
+and a Cookie line do not. 3 days before it, a running site sends one
+🔑 COOKIE EXPIRES SOON message with a Reconnect («Подключить заново») button.
+If the site renews the cookie, the farm reminds about the new date separately.
+
 ## How a run goes
 
 1. The farm opens the giveaway list and checks that you are signed in.

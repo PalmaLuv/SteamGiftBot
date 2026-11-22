@@ -340,9 +340,8 @@ def cookiesFromJSON(text):
     return None
 
 
-def cookiesFromNetscape(text):
+def netscapeRows(text):
     """cookies.txt: domain, flag, path, secure, expiry, name, value per line."""
-    jar = {}
     for line in text.splitlines():
         line = line.strip()
         if line.startswith('#HttpOnly_'):
@@ -351,8 +350,51 @@ def cookiesFromNetscape(text):
             continue
         columns = line.split('\t')
         if len(columns) >= 7 and columns[5]:
-            jar[columns[5]] = columns[6]
-    return jar
+            yield columns
+
+
+def cookiesFromNetscape(text):
+    return {columns[5]: columns[6] for columns in netscapeRows(text)}
+
+
+def expiryTime(value):
+    """Unix seconds from an export's expiry; None for a browser-session cookie.
+    Some extensions write milliseconds."""
+    try:
+        moment = float(value)
+    except (TypeError, ValueError):
+        return None
+    if moment <= 0:
+        return None
+    return int(moment / 1000 if moment > 1e11 else moment)
+
+
+def cookieExpiries(text):
+    """Name → when it expires (Unix seconds), for the cookies whose paste says
+    so: a Cookie-Editor JSON export ('expirationDate') or cookies.txt. A cURL
+    command or a Cookie line carries no expiry and gives {}."""
+    text = (text or '').strip()
+    found = {}
+    if text[:1] in '[{':
+        try:
+            data = json.loads(text)
+        except ValueError:
+            data = None
+        if isinstance(data, dict) and isinstance(data.get('cookies'), list):
+            data = data['cookies']
+        for item in data if isinstance(data, list) else ():
+            if isinstance(item, dict) and item.get('name'):
+                moment = expiryTime(item.get('expirationDate', item.get('expires')))
+                if moment:
+                    found[str(item['name'])] = moment
+        if data is not None:
+            return found
+    if '\t' in text and pastedHeaders(text) is None:
+        for columns in netscapeRows(text):
+            moment = expiryTime(columns[4])
+            if moment:
+                found[columns[5]] = moment
+    return found
 
 
 # Accepts what people actually paste: devtools 'Copy as cURL', the 'Cookie:'

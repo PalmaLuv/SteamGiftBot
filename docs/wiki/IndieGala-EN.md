@@ -17,6 +17,24 @@ browser. When you copy as cURL, the farm also takes the browser's User-Agent.
 IndieGala»).** It is shown in your profile on the site. IndieGala only shows
 giveaways for your level, and level 0 on a new account is normal.
 
+### Session and cookie expiry
+
+The farm keeps one session with the site from run to run while the pasted
+text and the User-Agent stay the same. Cookies the site refreshes on its own
+(bot protection, a renewed sign-in) are no longer lost that way. The new values
+of the cookies that were in the pasted text are written to `farm.json` next to
+it (`sessionCookies` of the site); the text itself is left as it was. After a
+restart the farm puts them over the paste. A new paste starts from scratch, and
+disconnecting the site erases what was kept. The log only ever shows cookie
+names, never their values.
+
+When the expiry of the sign-in cookie (`auth` or `sessionid`) is known, the Connection
+(«Подключение») tab shows it. A Cookie-Editor export (JSON) and cookies.txt
+carry it, and so does a Set-Cookie when the site renews the cookie itself; cURL
+and a Cookie line do not. 3 days before it, a running site sends one
+🔑 COOKIE EXPIRES SOON message with a Reconnect («Подключить заново») button.
+If the site renews the cookie, the farm reminds about the new date separately.
+
 ## How a run goes
 
 1. The farm reads the iS balance.
