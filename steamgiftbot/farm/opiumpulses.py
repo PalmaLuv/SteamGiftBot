@@ -18,9 +18,9 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 
 from steamgiftbot.farm.base import (DEFAULT_USER_AGENT, FAILED_TRIES, TIMEOUT, AuthError,
-                                    Platform, PlatformError, RetryLater, buildSession,
-                                    cookieGuide, field, grouped, parseCookies, presetFields,
-                                    scheduleFields, userAgentFrom)
+                                    Platform, RetryLater, cookieGuide, field, grouped,
+                                    parseCookies, presetFields, scheduleFields)
+from steamgiftbot.farm.sessions import KeptSession
 from steamgiftbot.logging_setup import writePrivate
 
 BASE     = 'https://www.opiumpulses.com'
@@ -172,12 +172,15 @@ def nextPageURL(soup, pageURL):
     return None if target == pageURL else target
 
 
-class OpiumPulsesPlatform(Platform):
+class OpiumPulsesPlatform(KeptSession, Platform):
     key         = 'opiumpulses'
     unit        = 'OP'
     title       = 'OpiumPulses'
     siteURL     = LISTING
     description = 'Раздачи ключей: бесплатные и за OP-поинты.'
+    sessionDomain = DOMAIN
+    # PHP's session and the 'remember me' one, which Yii 1 names with an md5.
+    signInCookie  = re.compile(r'PHPSESSID|[0-9a-f]{32}|.*remember.*|_identity', re.IGNORECASE)
 
     def schema(self):
         return grouped('Аккаунт', [
@@ -238,12 +241,10 @@ class OpiumPulsesPlatform(Platform):
         except OSError:
             pass
 
+    # The session of the last pass while the paste is the same (see sessions.py).
     def connect(self, conf):
-        cookies = parseCookies(conf['cookie'])
-        if not cookies:
-            raise PlatformError("не задан cookie")
-        self.session = buildSession(userAgentFrom(conf['cookie']) or conf['user_agent'],
-                                    cookies, DOMAIN)
+        if not self.openSession(conf):
+            return
         self.session.headers.update({'Referer': LISTING})
         # Entering is a GET, and the shared adapter repeats GETs after a read
         # timeout: a repeat could enter twice, or come back 'already entered'
@@ -507,12 +508,14 @@ class OpiumPulsesPlatform(Platform):
             if conf is None:
                 return
             self.connect(conf)
-            entered = self.cycle(conf)
-            if conf['check_wins'] and not self.stopped:
-                try:
-                    self.checkWins()
-                except RetryLater as error:
-                    self.warn(f"Выигрыши не проверены: {error}")
+            with self.keptPass():
+                entered = self.cycle(conf)
+                if conf['check_wins'] and not self.stopped:
+                    try:
+                        self.checkWins()
+                    except RetryLater as error:
+                        self.warn(f"Выигрыши не проверены: {error}")
+            self.remindExpiry()
             self.lastCycle = time.time()
             self.finishPass(f"Проход окончен: вошёл в {entered}")
             if not self.wait(max(5, conf['interval'] or 120) * 60):

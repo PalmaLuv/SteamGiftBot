@@ -1092,5 +1092,16 @@
  "SteamGifts: не удалось прочитать ключи на странице выигрышей": "SteamGifts: could not read the keys on the won page",
  "взят со страницы выигрышей SteamGifts": "taken from the SteamGifts won page",
  "🔑 Ключ есть, но не активирован": "🔑 Key in hand but not activated",
- "КЛЮЧ ПОЛУЧЕН": "KEY RECEIVED"
+ "КЛЮЧ ПОЛУЧЕН": "KEY RECEIVED",
+ "Войдите на сайт в браузере, скопируйте запрос заново и подключите площадку: иначе после этого срока сайт перестанет узнавать ферму": "Sign in to the site in your browser, copy the request again and reconnect the site: after this date the site will stop recognising the farm",
+ "Пока сайт пускает ферму, всё в порядке; если выкинет — подключите площадку заново": "As long as the site lets the farm in, all is well; if it signs the farm out, reconnect the site",
+ "Войдите на сайт в браузере и подключите площадку заново": "Sign in to the site in your browser and reconnect the site",
+ "За 3 дня до этого ферма напомнит в Telegram": "The farm will remind you in Telegram 3 days before",
+ "Cookie входа действует до": "The sign-in cookie is valid until",
+ "Срок cookie входа прошёл": "The sign-in cookie expired on",
+ "Cookie входа истекает": "The sign-in cookie expires on",
+ "Вход на сайт истекает": "The site sign-in expires on",
+ "COOKIE СКОРО ИСТЕЧЁТ": "COOKIE EXPIRES SOON",
+ "Cookie не сохранены": "Cookies not saved",
+ "Сайт обновил cookie": "The site refreshed cookies"
 }

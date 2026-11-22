@@ -23,7 +23,8 @@ All files live in the project folder, or, if the farm was started with
   "web": {"password": {"salt": "…", "hash": "…"}, "secret": "…"},
   "settings": {"timezone": "Europe/Kyiv", "steam_api_key": "…", "…": "…"},
   "platforms": {
-    "indiegala": {"autostart": true, "settings": {"cookie": "…", "sort": "smart", "…": "…"}},
+    "indiegala": {"autostart": true, "settings": {"cookie": "…", "sort": "smart", "…": "…"},
+                  "sessionCookies": {"paste": "…", "values": {"auth": "…"}, "expires": {}}},
     "steamfree": {"autostart": true, "connected": true, "settings": {}},
     "indiegala-2": {"autostart": true, "connected": true, "profile": "p2",
                     "account": "brother", "settings": {"cookie": "…"}}
@@ -41,6 +42,11 @@ default name of the Main profile, "Брат" means "Brother"); `accounts` are th
 sites connected in them beyond a site's first card; `accountSeq` and
 `profileSeq` are the last numbers handed out: the number of a deleted card is
 never given to a new one, so histories do not get mixed up.
+
+`sessionCookies` holds the cookies IndieGala or OpiumPulses refreshed after
+the paste and the known expiry of the sign-in cookies (see
+[IndieGala](IndieGala-EN.md)); `paste` is a fingerprint of the pasted text
+they belong to.
 
 You can edit the file by hand while the farm is stopped, but the panel is more
 convenient. If you delete `web.secret`, all panel sessions end.

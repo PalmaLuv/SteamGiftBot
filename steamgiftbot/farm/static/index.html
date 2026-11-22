@@ -1328,9 +1328,20 @@ function accountBlock(p){
 function riskNote(p){
   return p.risk ? `<div class="note" role="note" style="margin-bottom:12px"><b>⚠️ Риск для аккаунта.</b> ${esc(p.risk)}</div>` : '';
 }
+// When the site's sign-in cookie runs out, if the paste or the site said so.
+function cookieExpiryNote(p){
+  if (!p.cookieExpires) return '';
+  const left = p.cookieExpires * 1000 - Date.now();
+  const when = esc(new Date(p.cookieExpires * 1000).toLocaleString(LOCALE(), {day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'}));
+  if (left <= 0) return `<p class="muted" style="margin:0 0 12px">Срок cookie входа прошёл ${when}. Пока сайт пускает ферму, всё в порядке; если выкинет — подключите площадку заново.</p>`;
+  if (left <= 3 * 86400e3) return `<div class="note" style="margin:0 0 12px"><b>Cookie входа истекает ${when}.</b> Войдите на сайт в браузере и подключите площадку заново.</div>`;
+  return `<p class="muted" style="margin:0 0 12px">Cookie входа действует до ${when}. За 3 дня до этого ферма напомнит в Telegram.</p>`;
+}
+
 function renderConnection(body, p){
   body.innerHTML = `<div class="stack">${riskNote(p)}<section class="block"><h2>Подключение</h2>
       <p class="muted" style="margin:6px 0 12px">${p.state === 'auth' ? 'Сайт больше не узнаёт сохранённые cookie — подключите площадку заново.' : 'Cookie сохранены. Если сайт выкинет из аккаунта, ферма остановит площадку и пришлёт сообщение в Telegram.'}</p>
+      ${cookieExpiryNote(p)}
       <a class="btn primary" href="#/connect/${p.key}">${icon('key')}Подключить заново</a></section>
     ${accountBlock(p)}
     ${p.primary ? `<section class="block"><h2>Отключить площадку</h2><p class="muted" style="margin:6px 0 12px">Ферма остановит площадку и забудет cookie. История входов и настройки останутся.</p>
