@@ -66,17 +66,21 @@
   <section class="hero" aria-labelledby="title">
     <p class="eyebrow">{{hero.eyebrow}} <span class="sdot" aria-hidden="true"></span></p>
     <h1 class="title" id="title">
-      <span class="title-line"><span class="line-mask"><span class="word" style="--i:0">{{hero.line1}}</span></span><span class="paren-group" aria-hidden="true"><span class="paren">(</span><span class="tiles"><span class="tile t-sg">SG</span><span class="tile t-ig">IG</span><span class="tile t-op">OP</span><span class="tile t-gog">GOG</span></span><span class="paren">)</span></span></span>
+      <span class="title-line"><span class="line-mask"><span class="word" style="--i:0">{{hero.line1}}</span></span></span>
       <span class="title-line"><span class="line-mask"><span class="word" style="--i:1">{{hero.line2}}</span></span></span>
       <span class="title-line"><span class="line-mask"><span class="word" style="--i:2">{{hero.line3}}</span></span><span class="title-desc">{{hero.desc}}</span></span>
     </h1>
 
     <div class="mid">
-      <div class="get">
-        <a class="btn-get" href="https://github.com/PalmaLuv/SteamGiftBot/releases/latest/download/BotFarm.exe">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
-          <span><b>{{get.button}}</b><small>BotFarm.exe · v{{version}} · {{get.meta}}</small></span>
-        </a>
+      <div class="buy">
+        <p class="buy-title">{{get.title}} <span class="buy-ver">v{{version}}</span></p>
+        <div class="buy-bar">
+          <span class="deal" aria-hidden="true"><span class="deal-pct">-100%</span><span class="deal-price"><s>$19.99</s>{{get.free}}</span></span>
+          <a class="btn-get" href="https://github.com/PalmaLuv/SteamGiftBot/releases/latest/download/BotFarm.exe">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+            <span><b>{{get.button}}</b><small>BotFarm.exe · {{get.meta}}</small></span>
+          </a>
+        </div>
         <p class="get-alt">{{get.alt}}</p>
       </div>
       <ol class="res-list">
@@ -172,12 +176,12 @@
     <div class="sec-head"><div><p class="sec-n">{{nav.sites}} / 02</p><h2 id="sites-h">{{sites.title}}</h2></div><p class="sec-lead">{{sites.lead}}</p></div>
     <div class="site-row head" aria-hidden="true"><span>{{sites.colSite}}</span><span>{{sites.colWhat}}</span><span>{{sites.colHow}}</span><span>{{sites.colWhere}}</span></div>
     <ul class="site-list" aria-label="{{sites.title}}">
-      <li><a class="site-row" href="{{wiki}}SteamGifts"><span><i class="sw t-sg"></i>SteamGifts</span><span>{{sites.sg}}</span><span class="mono">cookie</span><span>{{sites.both}}</span></a></li>
-      <li><a class="site-row" href="{{wiki}}IndieGala"><span><i class="sw t-ig"></i>IndieGala</span><span>{{sites.ig}}</span><span class="mono">cookie</span><span>{{sites.farm}}</span></a></li>
-      <li><a class="site-row" href="{{wiki}}OpiumPulses"><span><i class="sw t-op"></i>OpiumPulses</span><span>{{sites.op}}</span><span class="mono">cookie</span><span>{{sites.farm}}</span></a></li>
-      <li><a class="site-row" href="{{wiki}}Бесплатные-игры-Steam"><span><i class="sw t-st"></i>Steam</span><span>{{sites.st}}</span><span class="mono">ArchiSteamFarm</span><span>{{sites.farm}}</span></a></li>
-      <li><a class="site-row" href="{{wiki}}GOG"><span><i class="sw t-gog"></i>GOG</span><span>{{sites.gog}}</span><span class="mono">cookie</span><span>{{sites.farm}}</span></a></li>
-      <li><a class="site-row" href="{{wiki}}itch-io"><span><i class="sw t-itch"></i>itch.io</span><span>{{sites.itch}}</span><span class="mono">cookie</span><span>{{sites.farm}}</span></a></li>
+      <li><a class="site-row" href="{{wiki}}SteamGifts"><span><i class="sw t-sg"></i>SteamGifts<span class="ptag">P</span></span><span>{{sites.sg}}</span><span class="mono">cookie</span><span>{{sites.both}}</span></a></li>
+      <li><a class="site-row" href="{{wiki}}IndieGala"><span><i class="sw t-ig"></i>IndieGala<span class="ptag">iS</span></span><span>{{sites.ig}}</span><span class="mono">cookie</span><span>{{sites.farm}}</span></a></li>
+      <li><a class="site-row" href="{{wiki}}OpiumPulses"><span><i class="sw t-op"></i>OpiumPulses<span class="ptag">OP</span></span><span>{{sites.op}}</span><span class="mono">cookie</span><span>{{sites.farm}}</span></a></li>
+      <li><a class="site-row" href="{{wiki}}Бесплатные-игры-Steam"><span><i class="sw t-st"></i>Steam<span class="ptag free">-100%</span></span><span>{{sites.st}}</span><span class="mono">ArchiSteamFarm</span><span>{{sites.farm}}</span></a></li>
+      <li><a class="site-row" href="{{wiki}}GOG"><span><i class="sw t-gog"></i>GOG<span class="ptag free">-100%</span></span><span>{{sites.gog}}</span><span class="mono">cookie</span><span>{{sites.farm}}</span></a></li>
+      <li><a class="site-row" href="{{wiki}}itch-io"><span><i class="sw t-itch"></i>itch.io<span class="ptag free">-100%</span></span><span>{{sites.itch}}</span><span class="mono">cookie</span><span>{{sites.farm}}</span></a></li>
     </ul>
     <p class="fine">{{sites.free}}</p>
   </section>
@@ -267,7 +271,7 @@ sudo chown -R 1000:1000 /srv/steamgiftbot &amp;&amp; sudo chmod 600 /srv/steamgi
     <div class="clay support-card">
       <div class="support-l">
         <p class="sec-n">{{support.eyebrow}} <span class="heart" aria-hidden="true">♥</span></p>
-        <h2 class="support-h" id="support-h">{{support.title}}</h2>
+        <h2 class="support-h" id="support-h">{{support.title}} <span class="sticker" aria-hidden="true">-100%</span></h2>
         <p>{{support.lead}}</p>
         <p class="fine">{{support.note}}</p>
       </div>

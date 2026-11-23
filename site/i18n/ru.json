@@ -27,7 +27,9 @@
     "desc": "Входит в раздачи на SteamGifts, IndieGala и OpiumPulses, забирает бесплатные игры в Steam, GOG и itch.io и пишет в Telegram, когда вы выиграли."
   },
   "get": {
-    "button": "Скачать для Windows",
+    "title": "Скачать SteamGiftBot",
+    "button": "Скачать",
+    "free": "Бесплатно",
     "meta": "Windows 10 и 11",
     "alt": "Linux, macOS и Docker — <a href=\"#install\">установка</a> · <a href=\"https://github.com/PalmaLuv/SteamGiftBot/releases/latest\">все файлы и контрольные суммы</a>"
   },

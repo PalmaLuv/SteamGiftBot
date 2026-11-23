@@ -127,26 +127,35 @@ kbd { font: 11px var(--mono); color: #8f98a0; }
 .word { display: inline-block; animation: rise .9s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i) * .09s); }
 @keyframes rise { from { transform: translateY(105%); } }
 .title-desc { font: 500 14px/1.5 var(--sans); letter-spacing: 0; text-transform: none; color: var(--text2); max-width: 300px; align-self: center; }
-.paren-group { display: inline-flex; align-items: center; gap: 6px; }
-.paren { font-weight: 400; color: var(--text3); }
-.tiles { display: inline-flex; }
-.tile { width: clamp(38px, 4.4vw, 60px); height: clamp(38px, 4.4vw, 60px); border-radius: var(--r-lg); display: grid; place-items: center; font: 700 clamp(11px, 1.1vw, 15px) var(--mono); letter-spacing: 0; color: #fff; border: 3px solid var(--bg); margin-left: -10px; box-shadow: 0 6px 14px rgba(0,0,0,.25); transition: transform .3s; }
-.tile:first-child { margin-left: 0; }
-.tiles:hover .tile { transform: translateY(-4px) rotate(-6deg); }
 .t-sg { background: var(--s-sg); } .t-ig { background: var(--s-ig); } .t-op { background: var(--s-op); } .t-gog { background: var(--s-gog); } .t-st { background: var(--s-st); } .t-itch { background: var(--s-itch); }
-/* The letters on the hero's tiles need darker shades to be read. */
-.tile.t-sg { background: #2a66b8; } .tile.t-ig { background: #b04418; } .tile.t-op { background: #127a56; } .tile.t-gog { background: #8f3479; }
 
-/* the download: one button, the facts under it */
-.get { display: flex; flex-direction: column; gap: 10px; max-width: 420px; }
-.btn-get { display: inline-flex; align-items: center; gap: 14px; padding: 14px 22px 14px 18px; border-radius: var(--r); background: var(--btn-go); color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 8px 22px rgba(63,102,20,.3); transition: background .2s, transform .2s; align-self: flex-start; }
-.btn-get:hover { background: var(--btn-go-hi); transform: translateY(-1px); }
-.btn-get svg { width: 26px; height: 26px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* the download, as a store's purchase box: a title, then a dark bar with
+   the discount and the button */
+:root { --deal-bg: #4c6b22; --deal: #beee11; }
+.buy { max-width: 520px; padding: 16px 16px 14px; border-radius: var(--r-lg); background: linear-gradient(135deg, rgba(103,193,245,.2) 0%, rgba(42,71,94,.35) 100%); border: 1px solid var(--brd2); }
+:root[data-theme="light"] .buy { background: linear-gradient(135deg, #dbe9f5 0%, #eef3f8 100%); }
+.buy-title { margin: 0 0 12px; font-size: 19px; font-weight: 800; letter-spacing: -.01em; }
+.buy-ver { font: 500 13px var(--mono); color: var(--text3); }
+.buy-bar { display: flex; align-items: stretch; gap: 3px; padding: 3px; border-radius: var(--r); background: #000; width: fit-content; max-width: 100%; }
+.deal { display: inline-flex; align-items: stretch; border-radius: 2px; overflow: hidden; }
+.deal-pct { display: grid; place-items: center; padding: 0 12px; background: var(--deal-bg); color: var(--deal); font: 800 26px/1 var(--sans); }
+.deal-price { display: flex; flex-direction: column; justify-content: center; padding: 0 12px; background: #344654; font: 700 15px/1.15 var(--sans); color: var(--deal); }
+.deal-price s { color: #8fa2b0; font-weight: 500; font-size: 12px; }
+.btn-get { display: inline-flex; align-items: center; gap: 12px; padding: 10px 18px 10px 14px; border-radius: 2px; background: var(--btn-go); color: #fff; transition: background .2s; }
+.btn-get:hover { background: var(--btn-go-hi); }
+.btn-get svg { width: 24px; height: 24px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .btn-get span { display: flex; flex-direction: column; line-height: 1.25; }
-.btn-get b { font-size: 18px; font-weight: 800; }
-.btn-get small { font: 12px var(--mono); color: rgba(255,255,255,.82); }
-.get-alt { margin: 0; color: var(--text2); font-size: 14px; }
+.btn-get b { font-size: 17px; font-weight: 800; }
+.btn-get small { font: 12px var(--mono); color: rgba(255,255,255,.85); white-space: nowrap; }
+.get-alt { margin: 12px 0 0; color: var(--text2); font-size: 14px; }
 .get-alt a { color: var(--brand); text-decoration: underline; text-underline-offset: 3px; }
+
+/* price tags: on the sites and the support heading */
+.ptag { margin-left: auto; padding: 2px 7px; border-radius: 2px; background: #344654; color: #c7d5e0; font: 700 12px/1.4 var(--mono); letter-spacing: 0; }
+.ptag.free { background: var(--deal-bg); color: var(--deal); }
+a.site-row:hover .ptag { color: #c7d5e0; }
+a.site-row:hover .ptag.free { color: var(--deal); }
+.sticker { display: inline-block; margin-left: 10px; padding: 4px 10px; border-radius: 3px; background: var(--deal-bg); color: var(--deal); font-size: .55em; vertical-align: middle; transform: rotate(-4deg); }
 
 .mid { display: flex; justify-content: space-between; align-items: center; gap: 32px; margin: 44px 0 26px; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -156,7 +165,7 @@ kbd { font: 11px var(--mono); color: #8f98a0; }
 .res-item .n { font: 400 12px var(--mono); color: var(--text3); }
 .res-item:hover .n, .res-item:hover .dots { color: var(--row-ink2); }
 .dots { color: var(--text3); letter-spacing: 2px; font-size: 11px; }
-@media (max-width: 720px) { .mid { flex-direction: column; align-items: stretch; gap: 22px; margin-top: 32px; } .res-list { max-width: none; } .res-item { padding: 8px 12px; } .btn-get { align-self: stretch; } }
+@media (max-width: 720px) { .mid { flex-direction: column; align-items: stretch; gap: 22px; margin-top: 32px; } .res-list { max-width: none; } .res-item { padding: 8px 12px; } .buy { max-width: none; } .buy-bar { width: 100%; flex-wrap: wrap; } .deal { flex: 1 1 100%; } .deal-pct { padding: 8px 12px; font-size: 22px; } .deal-price { flex: 1; } .btn-get { flex: 1 1 100%; justify-content: center; } }
 
 /* ---------- cards ---------- */
 .clay { background: var(--card); border: 1px solid var(--brd); border-radius: var(--r-lg); box-shadow: var(--inset), var(--shadow); }
