@@ -16,3 +16,7 @@ wcwidth==0.8.2
 clipboard==0.0.4; sys_platform == "win32"
 keyboard==0.13.5; sys_platform == "win32"
 pyperclip==1.11.0; sys_platform == "win32"
+
+# Windows has no time zone database of its own: the farm's working hours and
+# days are in a time zone (Europe/Kyiv unless set), which zoneinfo finds here.
+tzdata==2026.6; sys_platform == "win32"
