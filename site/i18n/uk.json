@@ -24,10 +24,12 @@
     "line1": "Роздачі ігор",
     "line2": "на шести сайтах,",
     "line3": "одна ферма.",
-    "desc": "Заходить у роздачі на SteamGifts, IndieGala та OpiumPulses, забирає безкоштовні ігри в Steam, GOG та itch.io і пише в Telegram, коли ви виграли.",
-    "badge": "без паролів · відкритий код · telegram · ",
-    "badgeLabel": "До опису ферми",
-    "free": "Безкоштовно"
+    "desc": "Заходить у роздачі на SteamGifts, IndieGala та OpiumPulses, забирає безкоштовні ігри в Steam, GOG та itch.io і пише в Telegram, коли ви виграли."
+  },
+  "get": {
+    "button": "Завантажити для Windows",
+    "meta": "Windows 10 і 11",
+    "alt": "Linux, macOS і Docker — <a href=\"#install\">встановлення</a> · <a href=\"https://github.com/PalmaLuv/SteamGiftBot/releases/latest\">усі файли й контрольні суми</a>"
   },
   "term": {
     "label": "Приклад журналу ферми",

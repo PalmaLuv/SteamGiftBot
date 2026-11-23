@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SteamGiftBot — ферма раздач игр</title>
+<meta name="description" content="Входит в раздачи на SteamGifts, IndieGala и OpiumPulses, забирает бесплатные игры в Steam, GOG и itch.io и сообщает в Telegram о выигрышах. Открытый код, веб-панель, Windows и Linux.">
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="plain.css">
+</head>
+<body>
+<a class="skip" href="#main">К содержанию</a>
+
+<header class="top">
+  <div class="wrap top-row">
+    <a class="brand" href="./"><img src="../assets/icon.svg" alt="" width="24" height="24">SteamGiftBot</a>
+    <nav aria-label="Разделы">
+      <a href="#features">Возможности</a>
+      <a href="#sites">Площадки</a>
+      <a href="#install">Установка</a>
+      <a href="#faq">Вопросы</a>
+      <a href="https://github.com/PalmaLuv/SteamGiftBot">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero wrap">
+    <div class="hero-text">
+      <h1>Ферма раздач игр</h1>
+      <p class="lead">SteamGiftBot сам входит в раздачи на SteamGifts, IndieGala и OpiumPulses, забирает бесплатные игры в Steam, GOG и itch.io и сообщает в Telegram, когда вы выиграли. Управляется из веб-панели, которая работает на вашем компьютере.</p>
+      <div class="get">
+        <a class="button" href="https://github.com/PalmaLuv/SteamGiftBot/releases/latest/download/BotFarm.exe">Скачать для Windows</a>
+        <p class="get-meta">BotFarm.exe, версия 3.0.0, Windows 10 и 11. <a href="#install">Linux, macOS и Docker</a></p>
+      </div>
+      <p class="facts">Бесплатно, без рекламы и подписок. Открытый код под лицензией MPL-2.0. Пароли от сайтов ферме не нужны: она входит по cookie из вашего браузера.</p>
+    </div>
+    <figure class="shot">
+      <img src="../images/overview.png" width="1280" height="820" alt="Обзор в панели фермы: новые выигрыши, график входов по дням и состояние каждой площадки">
+      <figcaption>Обзор: выигрыши, входы по дням и почему каждая площадка сейчас ждёт.</figcaption>
+    </figure>
+  </section>
+
+  <section id="features" class="wrap block">
+    <h2>Что делает ферма</h2>
+    <div class="features">
+      <div>
+        <h3>Входит в раздачи по вашим правилам</h3>
+        <p>Часы работы, дневные лимиты на входы и траты, пропуск DLC, игр 18+ и игр, которые уже есть в вашей библиотеке Steam. По желанию игры из списка желаемого идут первыми.</p>
+      </div>
+      <div>
+        <h3>Показывает, что возьмёт</h3>
+        <p>Пробный проход выводит все текущие раздачи и для каждой пишет, войдёт ли ферма и почему нет. Ничего не тратит.</p>
+      </div>
+      <div>
+        <h3>Следит за выигрышами</h3>
+        <p>Выигрыши со всех сайтов в одной таблице, с ключом и отметками «получен» и «активирован». Ключ можно активировать в Steam через ArchiSteamFarm одной кнопкой.</p>
+      </div>
+      <div>
+        <h3>Пишет в Telegram</h3>
+        <p>О каждом выигрыше, о cookie, которые скоро истекут, и сводку за сутки. Командами <code>/status</code>, <code>/pause</code> и <code>/run</code> можно управлять фермой из чата.</p>
+      </div>
+      <div>
+        <h3>Ведёт несколько учёток</h3>
+        <p>У каждого человека — свой набор сайтов, свои лимиты и история, и свой аккаунт Steam для ключей.</p>
+      </div>
+      <div>
+        <h3>Открывается с телефона</h3>
+        <p>Дома — по адресу компьютера в сети, вне дома — через Tailscale. Панель на русском, украинском и английском, её можно добавить на главный экран.</p>
+      </div>
+    </div>
+    <div class="shots">
+      <figure class="shot"><img src="../images/preview.png" width="1280" height="820" loading="lazy" alt="Пробный проход: список раздач IndieGala с причиной пропуска у каждой"><figcaption>Пробный проход по IndieGala.</figcaption></figure>
+      <figure class="shot"><img src="../images/connect.png" width="1280" height="820" loading="lazy" alt="Мастер подключения GOG: пронумерованные шаги и поле для скопированного запроса"><figcaption>Подключение сайта по шагам.</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="sites" class="wrap block">
+    <h2>Площадки</h2>
+    <p>Каждый сайт подключается в панели по инструкции: вы копируете запрос из браузера (F12 → Network → Copy as cURL), ферма проверяет его на сайте и показывает аккаунт и баланс.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Сайт</th><th scope="col">Что делает ферма</th><th scope="col">Что нужно</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><a href="https://github.com/PalmaLuv/SteamGiftBot/wiki/SteamGifts">SteamGifts</a></th><td>входит в раздачи за поинты, начиная с лучшего шанса на поинт</td><td>cookie из браузера</td></tr>
+          <tr><th scope="row"><a href="https://github.com/PalmaLuv/SteamGiftBot/wiki/IndieGala">IndieGala</a></th><td>входит в раздачи за Galasilver, проверяет выигрыши</td><td>cookie из браузера</td></tr>
+          <tr><th scope="row"><a href="https://github.com/PalmaLuv/SteamGiftBot/wiki/OpiumPulses">OpiumPulses</a></th><td>входит в бесплатные раздачи и раздачи за OP</td><td>cookie из браузера</td></tr>
+          <tr><th scope="row"><a href="https://github.com/PalmaLuv/SteamGiftBot/wiki/Бесплатные-игры-Steam">Steam</a></th><td>добавляет в библиотеку игры, которые Steam раздаёт навсегда</td><td>запущенный ArchiSteamFarm</td></tr>
+          <tr><th scope="row"><a href="https://github.com/PalmaLuv/SteamGiftBot/wiki/GOG">GOG</a></th><td>забирает раздачу с главной страницы</td><td>cookie из браузера</td></tr>
+          <tr><th scope="row"><a href="https://github.com/PalmaLuv/SteamGiftBot/wiki/itch-io">itch.io</a></th><td>забирает игры со скидкой 100%</td><td>cookie из браузера</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="install" class="wrap block">
+    <h2>Установка</h2>
+    <div class="install">
+      <div>
+        <h3>Windows</h3>
+        <ol>
+          <li>Скачайте <a href="https://github.com/PalmaLuv/SteamGiftBot/releases/latest/download/BotFarm.exe">BotFarm.exe</a> и положите в отдельную папку: настройки и история хранятся рядом с программой.</li>
+          <li>Запустите. Ферма один раз спросит пароль для панели и откроет её в браузере.</li>
+          <li>В разделе «Площадки» подключите первый сайт.</li>
+        </ol>
+        <p class="note">У программы нет цифровой подписи, поэтому Windows может предупредить о неизвестном издателе. Сверить файл с опубликованным: <code>certutil -hashfile BotFarm.exe SHA256</code> и <a href="https://github.com/PalmaLuv/SteamGiftBot/releases/latest">сумма из релиза</a>.</p>
+      </div>
+      <div>
+        <h3>Linux и macOS</h3>
+        <p>Нужен Python 3.10 или новее.</p>
+<pre tabindex="0"><code>git clone https://github.com/PalmaLuv/SteamGiftBot.git
+cd SteamGiftBot
+python3 -m venv env
+env/bin/pip install -r requirements.txt
+env/bin/python -m steamgiftbot.farm --set-password
+env/bin/python -m steamgiftbot.farm --host 192.168.1.10</code></pre>
+        <p class="note">Вместо <code>192.168.1.10</code> — адрес компьютера в домашней сети. Как сделать ферму службой systemd — в <a href="https://github.com/PalmaLuv/SteamGiftBot/wiki/Сервер-и-служба">вики</a>.</p>
+      </div>
+      <div>
+        <h3>Docker</h3>
+<pre tabindex="0"><code>docker run --rm -v botfarm:/app/data -e BOTFARM_PASSWORD=пароль \
+  --entrypoint python ghcr.io/palmaluv/steamgiftbot \
+  -m steamgiftbot.farm --data /app/data --set-password
+docker run -d --name botfarm --restart unless-stopped \
+  -p 127.0.0.1:8092:8092 -v botfarm:/app/data \
+  --entrypoint python ghcr.io/palmaluv/steamgiftbot \
+  -m steamgiftbot.farm --host 0.0.0.0 --data /app/data</code></pre>
+        <p class="note">Образ собран для amd64 и arm64 и работает не от root.</p>
+      </div>
+    </div>
+    <p>Если нужна только SteamGifts без панели, есть бот для командной строки: <a href="https://github.com/PalmaLuv/SteamGiftBot/releases/latest/download/SteamGiftBot.exe">SteamGiftBot.exe</a> или <code>python main.py</code>. Описание — в <a href="https://github.com/PalmaLuv/SteamGiftBot#readme">README</a>.</p>
+  </section>
+
+  <section id="risks" class="wrap block">
+    <h2>Риски</h2>
+    <p>SteamGifts запрещает скрипты автоматического входа в раздачи, у других сайтов свои правила, и аккаунт могут заблокировать. Ферма делает паузы между запросами, отступает, когда сайт просит подождать, и не обходит Cloudflare и капчи, но решение и риск остаются за вами. Перед подключением сайта панель напоминает о его правилах.</p>
+  </section>
+
+  <section id="faq" class="wrap block">
+    <h2>Вопросы</h2>
+    <details><summary>Ферма знает мои пароли?</summary><p>Нет. Она входит по cookie, скопированным из браузера, и хранит их только на вашем компьютере. Панель не показывает их обратно даже вам.</p></details>
+    <details><summary>Нужен отдельный сервер?</summary><p>Нет. Подойдёт любой компьютер, который не выключается: мини-ПК, старый ноутбук, Raspberry Pi. Ферма почти всё время ждёт и нагрузки не создаёт.</p></details>
+    <details><summary>Почему ферма ни во что не входит?</summary><p>Откройте у площадки вкладку «Что возьмёт»: у каждой раздачи там написана причина. Чаще всего кончился баланс или в настройках указан не тот уровень аккаунта.</p></details>
+    <details><summary>Чем это отличается от расширений вроде AutoJoin?</summary><p>Расширение работает, пока открыт браузер, и только на SteamGifts. Ферма работает круглосуточно, ведёт шесть площадок сразу, пропускает игры, которые уже есть в Steam, и сообщает о выигрышах в Telegram.</p></details>
+    <details><summary>Это официальный проект SteamGifts?</summary><p>Нет. SteamGiftBot — независимый проект с открытым кодом, не связанный со SteamGifts, IndieGala, OpiumPulses, GOG, itch.io и Valve.</p></details>
+  </section>
+
+  <section id="support" class="wrap block">
+    <h2>Поддержать проект</h2>
+    <p>SteamGiftBot делает один человек в свободное время. Если ферма вам пригодилась, можно поддержать разработку через <a href="https://github.com/sponsors/palmaluv">GitHub Sponsors</a> или <a href="https://www.buymeacoffee.com/palmaluv">Buy Me a Coffee</a>, или переводом в TON: <code class="wallet">UQBhyAtIaZxHiiLsLjmJtnG8sFmNiG77k2xkWfgr0xka7X2J</code>. Все функции бесплатны и останутся бесплатными.</p>
+  </section>
+</main>
+
+<footer class="wrap foot">
+  <p>SteamGiftBot 3.0.0 · <a href="https://github.com/PalmaLuv/SteamGiftBot">Исходный код</a> · <a href="https://github.com/PalmaLuv/SteamGiftBot/wiki">Вики</a> · <a href="https://github.com/PalmaLuv/SteamGiftBot/releases">Релизы</a> · MPL-2.0</p>
+  <p>Независимый проект. Не связан со SteamGifts, IndieGala, OpiumPulses, GOG, itch.io и Valve.</p>
+</footer>
+</body>
+</html>

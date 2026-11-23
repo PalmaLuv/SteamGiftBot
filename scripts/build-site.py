@@ -125,7 +125,7 @@ def page(template, lang, folder, strings):
     values = flatten(strings)
     values.update({
         'lang': lang, 'base': base, 'canonical': URL + folder, 'alternates': alternates,
-        'langLinks': ''.join(links), 'wiki': WIKI, 'ton': TON,
+        'langLinks': ''.join(links), 'wiki': WIKI, 'version': VERSION, 'ton': TON,
         'term.static': html.escape('\n'.join(strings['term']['lines'])),
         # </script> inside the JSON would end the tag early.
         'js': json.dumps(script, ensure_ascii=False).replace('</', '<\\/'),

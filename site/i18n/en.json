@@ -24,10 +24,12 @@
     "line1": "Game giveaways",
     "line2": "on six sites,",
     "line3": "one farm.",
-    "desc": "Enters giveaways on SteamGifts, IndieGala and OpiumPulses, claims free games on Steam, GOG and itch.io, and messages you on Telegram when you win.",
-    "badge": "no passwords · open source · telegram · ",
-    "badgeLabel": "To the farm",
-    "free": "Free"
+    "desc": "Enters giveaways on SteamGifts, IndieGala and OpiumPulses, claims free games on Steam, GOG and itch.io, and messages you on Telegram when you win."
+  },
+  "get": {
+    "button": "Download for Windows",
+    "meta": "Windows 10 and 11",
+    "alt": "Linux, macOS and Docker: <a href=\"#install\">install</a> · <a href=\"https://github.com/PalmaLuv/SteamGiftBot/releases/latest\">all files and checksums</a>"
   },
   "term": {
     "label": "Sample of the farm's log",

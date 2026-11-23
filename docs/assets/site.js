@@ -160,9 +160,17 @@
   $$('.copy').forEach(b => b.addEventListener('click', () => copy(b.dataset.copyText || $('pre', b.parentElement).textContent)));
 
   /* ---------- GitHub stars ---------- */
-  fetch('https://api.github.com/repos/PalmaLuv/SteamGiftBot').then(r => r.ok ? r.json() : null).then(d => {
+  // Asked once an hour per visitor: unsigned calls to the API are limited.
+  function showStars(count) {
+    const s = $('[data-stars]'); s.textContent = `★ ${fmt(count)}`; s.title = `${count} ${T.stars}`; s.hidden = false;
+  }
+  let cached = null;
+  try { cached = JSON.parse(sessionStorage.getItem('sgb-stars') || 'null'); } catch {}
+  if (cached && Date.now() - cached.at < 3600e3) showStars(cached.count);
+  else fetch('https://api.github.com/repos/PalmaLuv/SteamGiftBot').then(r => r.ok ? r.json() : null).then(d => {
     if (!d || typeof d.stargazers_count !== 'number') return;
-    const s = $('[data-stars]'); s.textContent = `★ ${fmt(d.stargazers_count)}`; s.title = `${d.stargazers_count} ${T.stars}`; s.hidden = false;
+    showStars(d.stargazers_count);
+    try { sessionStorage.setItem('sgb-stars', JSON.stringify({count: d.stargazers_count, at: Date.now()})); } catch {}
   }).catch(() => {});
 
   /* ---------- confetti ---------- */

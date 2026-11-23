@@ -36,10 +36,7 @@
 </head>
 <body>
 <a class="skip" href="#main">{{ui.skip}}</a>
-<div class="glow glow-a" aria-hidden="true"></div>
-<div class="glow glow-b" aria-hidden="true"></div>
-<div class="glow glow-c" aria-hidden="true"></div>
-<div class="bg-text" aria-hidden="true">GIFTBOT</div>
+<div class="backdrop" aria-hidden="true"><div class="glow glow-a"></div><div class="glow glow-b"></div><div class="glow glow-c"></div><div class="bg-text">GIFTBOT</div></div>
 
 <div class="page">
   <header class="header" role="banner">
@@ -75,12 +72,12 @@
     </h1>
 
     <div class="mid">
-      <div class="mid-l">
-      <a class="badge" href="#farm" aria-label="{{hero.badgeLabel}}">
-        <svg class="badge-ring" viewBox="0 0 120 120" aria-hidden="true"><defs><path id="ring" d="M60,60 m-46,0 a46,46 0 1,1 92,0 a46,46 0 1,1 -92,0"/></defs><text><textPath href="#ring">{{hero.badge}}</textPath></text></svg>
-        <span class="badge-center"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></span>
-      </a>
-      <span class="deal" aria-hidden="true"><span class="deal-pct">-100%</span><span class="deal-price"><s>$19.99</s>{{hero.free}}</span></span>
+      <div class="get">
+        <a class="btn-get" href="https://github.com/PalmaLuv/SteamGiftBot/releases/latest/download/BotFarm.exe">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+          <span><b>{{get.button}}</b><small>BotFarm.exe · v{{version}} · {{get.meta}}</small></span>
+        </a>
+        <p class="get-alt">{{get.alt}}</p>
       </div>
       <ol class="res-list">
         <li><a class="res-item" href="#farm"><span>{{nav.farm}}<span class="n"> / 01</span></span><span class="dots" aria-hidden="true">•••</span><span aria-hidden="true">→</span></a></li>
@@ -173,15 +170,15 @@
 
   <section class="section" id="sites" aria-labelledby="sites-h">
     <div class="sec-head"><div><p class="sec-n">{{nav.sites}} / 02</p><h2 id="sites-h">{{sites.title}}</h2></div><p class="sec-lead">{{sites.lead}}</p></div>
-    <div class="site-list" role="table" aria-label="{{sites.title}}">
-      <div class="site-row head" role="row"><span role="columnheader">{{sites.colSite}}</span><span role="columnheader">{{sites.colWhat}}</span><span role="columnheader">{{sites.colHow}}</span><span role="columnheader">{{sites.colWhere}}</span></div>
-      <a class="site-row" role="row" href="{{wiki}}SteamGifts"><span role="cell"><i class="sw t-sg"></i>SteamGifts</span><span role="cell">{{sites.sg}}</span><span role="cell" class="mono">cookie</span><span role="cell">{{sites.both}}</span></a>
-      <a class="site-row" role="row" href="{{wiki}}IndieGala"><span role="cell"><i class="sw t-ig"></i>IndieGala</span><span role="cell">{{sites.ig}}</span><span role="cell" class="mono">cookie</span><span role="cell">{{sites.farm}}</span></a>
-      <a class="site-row" role="row" href="{{wiki}}OpiumPulses"><span role="cell"><i class="sw t-op"></i>OpiumPulses</span><span role="cell">{{sites.op}}</span><span role="cell" class="mono">cookie</span><span role="cell">{{sites.farm}}</span></a>
-      <a class="site-row" role="row" href="{{wiki}}Бесплатные-игры-Steam"><span role="cell"><i class="sw t-st"></i>Steam</span><span role="cell">{{sites.st}}</span><span role="cell" class="mono">ArchiSteamFarm</span><span role="cell">{{sites.farm}}</span></a>
-      <a class="site-row" role="row" href="{{wiki}}GOG"><span role="cell"><i class="sw t-gog"></i>GOG</span><span role="cell">{{sites.gog}}</span><span role="cell" class="mono">cookie</span><span role="cell">{{sites.farm}}</span></a>
-      <a class="site-row" role="row" href="{{wiki}}itch-io"><span role="cell"><i class="sw t-itch"></i>itch.io</span><span role="cell">{{sites.itch}}</span><span role="cell" class="mono">cookie</span><span role="cell">{{sites.farm}}</span></a>
-    </div>
+    <div class="site-row head" aria-hidden="true"><span>{{sites.colSite}}</span><span>{{sites.colWhat}}</span><span>{{sites.colHow}}</span><span>{{sites.colWhere}}</span></div>
+    <ul class="site-list" aria-label="{{sites.title}}">
+      <li><a class="site-row" href="{{wiki}}SteamGifts"><span><i class="sw t-sg"></i>SteamGifts</span><span>{{sites.sg}}</span><span class="mono">cookie</span><span>{{sites.both}}</span></a></li>
+      <li><a class="site-row" href="{{wiki}}IndieGala"><span><i class="sw t-ig"></i>IndieGala</span><span>{{sites.ig}}</span><span class="mono">cookie</span><span>{{sites.farm}}</span></a></li>
+      <li><a class="site-row" href="{{wiki}}OpiumPulses"><span><i class="sw t-op"></i>OpiumPulses</span><span>{{sites.op}}</span><span class="mono">cookie</span><span>{{sites.farm}}</span></a></li>
+      <li><a class="site-row" href="{{wiki}}Бесплатные-игры-Steam"><span><i class="sw t-st"></i>Steam</span><span>{{sites.st}}</span><span class="mono">ArchiSteamFarm</span><span>{{sites.farm}}</span></a></li>
+      <li><a class="site-row" href="{{wiki}}GOG"><span><i class="sw t-gog"></i>GOG</span><span>{{sites.gog}}</span><span class="mono">cookie</span><span>{{sites.farm}}</span></a></li>
+      <li><a class="site-row" href="{{wiki}}itch-io"><span><i class="sw t-itch"></i>itch.io</span><span>{{sites.itch}}</span><span class="mono">cookie</span><span>{{sites.farm}}</span></a></li>
+    </ul>
     <p class="fine">{{sites.free}}</p>
   </section>
 
@@ -214,11 +211,11 @@
   <section class="section" id="install" aria-labelledby="install-h">
     <div class="sec-head"><div><p class="sec-n">{{nav.install}} / 04</p><h2 id="install-h">{{install.title}}</h2></div><p class="sec-lead">{{install.lead}}</p></div>
     <div class="tabs" role="tablist" aria-label="{{install.title}}">
-      <button role="tab" type="button" id="tab-farm" aria-controls="pane-farm" aria-selected="true">{{install.tabFarm}}</button>
-      <button role="tab" type="button" id="tab-exe" aria-controls="pane-exe" aria-selected="false" tabindex="-1">{{install.tabExe}}</button>
+      <button role="tab" type="button" id="tab-exe" aria-controls="pane-exe" aria-selected="true">{{install.tabExe}}</button>
+      <button role="tab" type="button" id="tab-farm" aria-controls="pane-farm" aria-selected="false" tabindex="-1">{{install.tabFarm}}</button>
       <button role="tab" type="button" id="tab-docker" aria-controls="pane-docker" aria-selected="false" tabindex="-1">Docker</button>
     </div>
-    <div class="clay pane" role="tabpanel" id="pane-farm" aria-labelledby="tab-farm">
+    <div class="clay pane" role="tabpanel" id="pane-farm" aria-labelledby="tab-farm" hidden>
       <ol class="steps">
         <li><p>{{install.farm1}}</p><div class="code"><button class="copy" type="button" aria-label="{{ui.copy}}">{{ui.copy}}</button><pre>git clone https://github.com/PalmaLuv/SteamGiftBot.git
 cd SteamGiftBot
@@ -230,7 +227,7 @@ env/bin/python -m steamgiftbot.farm --host 192.168.1.10</pre></div></li>
       </ol>
       <p class="fine">{{install.farmNote}}</p>
     </div>
-    <div class="clay pane" role="tabpanel" id="pane-exe" aria-labelledby="tab-exe" hidden>
+    <div class="clay pane" role="tabpanel" id="pane-exe" aria-labelledby="tab-exe">
       <ol class="steps">
         <li><p>{{install.exe1}}</p></li>
         <li><p>{{install.exe2}}</p><div class="code"><button class="copy" type="button" aria-label="{{ui.copy}}">{{ui.copy}}</button><pre>certutil -hashfile BotFarm.exe SHA256</pre></div></li>

@@ -40,10 +40,7 @@
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
-<div class="glow glow-a" aria-hidden="true"></div>
-<div class="glow glow-b" aria-hidden="true"></div>
-<div class="glow glow-c" aria-hidden="true"></div>
-<div class="bg-text" aria-hidden="true">GIFTBOT</div>
+<div class="backdrop" aria-hidden="true"><div class="glow glow-a"></div><div class="glow glow-b"></div><div class="glow glow-c"></div><div class="bg-text">GIFTBOT</div></div>
 
 <div class="page">
   <header class="header" role="banner">
@@ -79,12 +76,12 @@
     </h1>
 
     <div class="mid">
-      <div class="mid-l">
-      <a class="badge" href="#farm" aria-label="To the farm">
-        <svg class="badge-ring" viewBox="0 0 120 120" aria-hidden="true"><defs><path id="ring" d="M60,60 m-46,0 a46,46 0 1,1 92,0 a46,46 0 1,1 -92,0"/></defs><text><textPath href="#ring">no passwords · open source · telegram · </textPath></text></svg>
-        <span class="badge-center"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></span>
-      </a>
-      <span class="deal" aria-hidden="true"><span class="deal-pct">-100%</span><span class="deal-price"><s>$19.99</s>Free</span></span>
+      <div class="get">
+        <a class="btn-get" href="https://github.com/PalmaLuv/SteamGiftBot/releases/latest/download/BotFarm.exe">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+          <span><b>Download for Windows</b><small>BotFarm.exe · v3.0.0 · Windows 10 and 11</small></span>
+        </a>
+        <p class="get-alt">Linux, macOS and Docker: <a href="#install">install</a> · <a href="https://github.com/PalmaLuv/SteamGiftBot/releases/latest">all files and checksums</a></p>
       </div>
       <ol class="res-list">
         <li><a class="res-item" href="#farm"><span>Farm<span class="n"> / 01</span></span><span class="dots" aria-hidden="true">•••</span><span aria-hidden="true">→</span></a></li>
@@ -184,15 +181,15 @@
 
   <section class="section" id="sites" aria-labelledby="sites-h">
     <div class="sec-head"><div><p class="sec-n">Sites / 02</p><h2 id="sites-h">Six sites.</h2></div><p class="sec-lead">Three sites with giveaways for their own currency and three sources of free games. Each row opens its wiki page.</p></div>
-    <div class="site-list" role="table" aria-label="Six sites.">
-      <div class="site-row head" role="row"><span role="columnheader">Site</span><span role="columnheader">What it does</span><span role="columnheader">Connected with</span><span role="columnheader">Runs in</span></div>
-      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/SteamGifts"><span role="cell"><i class="sw t-sg"></i>SteamGifts</span><span role="cell">giveaways for points (P)</span><span role="cell" class="mono">cookie</span><span role="cell">bot and farm</span></a>
-      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/IndieGala"><span role="cell"><i class="sw t-ig"></i>IndieGala</span><span role="cell">giveaways for Galasilver (iS)</span><span role="cell" class="mono">cookie</span><span role="cell">farm</span></a>
-      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/OpiumPulses"><span role="cell"><i class="sw t-op"></i>OpiumPulses</span><span role="cell">free giveaways and OP ones</span><span role="cell" class="mono">cookie</span><span role="cell">farm</span></a>
-      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/Бесплатные-игры-Steam"><span role="cell"><i class="sw t-st"></i>Steam</span><span role="cell">games Steam gives away to keep</span><span role="cell" class="mono">ArchiSteamFarm</span><span role="cell">farm</span></a>
-      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/GOG"><span role="cell"><i class="sw t-gog"></i>GOG</span><span role="cell">the home page giveaway</span><span role="cell" class="mono">cookie</span><span role="cell">farm</span></a>
-      <a class="site-row" role="row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/itch-io"><span role="cell"><i class="sw t-itch"></i>itch.io</span><span role="cell">games on a 100% sale</span><span role="cell" class="mono">cookie</span><span role="cell">farm</span></a>
-    </div>
+    <div class="site-row head" aria-hidden="true"><span>Site</span><span>What it does</span><span>Connected with</span><span>Runs in</span></div>
+    <ul class="site-list" aria-label="Six sites.">
+      <li><a class="site-row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/SteamGifts"><span><i class="sw t-sg"></i>SteamGifts</span><span>giveaways for points (P)</span><span class="mono">cookie</span><span>bot and farm</span></a></li>
+      <li><a class="site-row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/IndieGala"><span><i class="sw t-ig"></i>IndieGala</span><span>giveaways for Galasilver (iS)</span><span class="mono">cookie</span><span>farm</span></a></li>
+      <li><a class="site-row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/OpiumPulses"><span><i class="sw t-op"></i>OpiumPulses</span><span>free giveaways and OP ones</span><span class="mono">cookie</span><span>farm</span></a></li>
+      <li><a class="site-row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/Бесплатные-игры-Steam"><span><i class="sw t-st"></i>Steam</span><span>games Steam gives away to keep</span><span class="mono">ArchiSteamFarm</span><span>farm</span></a></li>
+      <li><a class="site-row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/GOG"><span><i class="sw t-gog"></i>GOG</span><span>the home page giveaway</span><span class="mono">cookie</span><span>farm</span></a></li>
+      <li><a class="site-row" href="https://github.com/PalmaLuv/SteamGiftBot/wiki/itch-io"><span><i class="sw t-itch"></i>itch.io</span><span>games on a 100% sale</span><span class="mono">cookie</span><span>farm</span></a></li>
+    </ul>
     <p class="fine">The command line bot also tells you about free games on Epic, GOG and other stores, using GamerPower's list.</p>
   </section>
 
@@ -225,11 +222,11 @@
   <section class="section" id="install" aria-labelledby="install-h">
     <div class="sec-head"><div><p class="sec-n">Install / 04</p><h2 id="install-h">Install.</h2></div><p class="sec-lead">The farm is for a computer that stays on: on Windows it is one download, elsewhere it runs from source. The command line bot is for SteamGifts alone.</p></div>
     <div class="tabs" role="tablist" aria-label="Install.">
-      <button role="tab" type="button" id="tab-farm" aria-controls="pane-farm" aria-selected="true">Farm</button>
-      <button role="tab" type="button" id="tab-exe" aria-controls="pane-exe" aria-selected="false" tabindex="-1">Windows</button>
+      <button role="tab" type="button" id="tab-exe" aria-controls="pane-exe" aria-selected="true">Windows</button>
+      <button role="tab" type="button" id="tab-farm" aria-controls="pane-farm" aria-selected="false" tabindex="-1">Farm</button>
       <button role="tab" type="button" id="tab-docker" aria-controls="pane-docker" aria-selected="false" tabindex="-1">Docker</button>
     </div>
-    <div class="clay pane" role="tabpanel" id="pane-farm" aria-labelledby="tab-farm">
+    <div class="clay pane" role="tabpanel" id="pane-farm" aria-labelledby="tab-farm" hidden>
       <ol class="steps">
         <li><p>Get the code and its dependencies. Needs Python 3.10 or newer.</p><div class="code"><button class="copy" type="button" aria-label="Copy">Copy</button><pre>git clone https://github.com/PalmaLuv/SteamGiftBot.git
 cd SteamGiftBot
@@ -241,7 +238,7 @@ env/bin/python -m steamgiftbot.farm --host 192.168.1.10</pre></div></li>
       </ol>
       <p class="fine">On Windows there is nothing to install: <code>BotFarm.exe</code> is on the Windows tab.</p>
     </div>
-    <div class="clay pane" role="tabpanel" id="pane-exe" aria-labelledby="tab-exe" hidden>
+    <div class="clay pane" role="tabpanel" id="pane-exe" aria-labelledby="tab-exe">
       <ol class="steps">
         <li><p>Download <code>BotFarm.exe</code> (the farm with its panel) or <code>SteamGiftBot.exe</code> (SteamGifts alone), with its <code>.sha256</code>, from <a href="https://github.com/PalmaLuv/SteamGiftBot/releases/latest">releases</a>, into a folder of its own. No Python needed.</p></li>
         <li><p>Check the checksum against the line in the <code>.sha256</code> file.</p><div class="code"><button class="copy" type="button" aria-label="Copy">Copy</button><pre>certutil -hashfile BotFarm.exe SHA256</pre></div></li>
