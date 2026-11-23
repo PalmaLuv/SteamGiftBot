@@ -50,7 +50,7 @@ jobs:
 
           check() {
             if [ "$1" = "0" ]; then printf '  PASS  %s\n' "$2"
-            else printf '  FAIL  %s\n' "$2"; failures=$((failures + 1)); fi
+            else printf '  FAIL  %s\n' "$2"; failures=$((failures + 1)); echo "::error title=check::FAIL $2"; fi
           }
 
           ./dist/SteamGiftBot.exe --version
@@ -99,6 +99,9 @@ jobs:
           check $? "farm.json is written beside the .exe"
           kill $farm 2>/dev/null; taskkill //F //IM BotFarm.exe > /dev/null 2>&1
           cat run.txt
+          for f in setup.txt run.txt; do
+            [ -s "$f" ] && echo "::warning title=$f::$(head -c 3000 "$f" | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+          done
           cd ..
           rm -rf farmtest
 
