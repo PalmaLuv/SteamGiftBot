@@ -12,6 +12,16 @@ import sys
 
 from steamgiftbot.logging_setup import configure, getLogger
 
+# Windows writes a console that is redirected (a service, a log file, CI) in
+# the ANSI code page, which has no Cyrillic: the farm's first Russian line
+# would stop it. UTF-8 instead, before colorama wraps the streams.
+if sys.platform == 'win32':
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, ValueError, OSError):
+            pass
+
 try:
     from colorama import init, Fore
     init()
