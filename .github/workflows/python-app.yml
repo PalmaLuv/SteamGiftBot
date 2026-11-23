@@ -5,7 +5,7 @@ name: Python application
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "ci/**" ]
   pull_request:
     branches: [ "main" ]
 
@@ -51,7 +51,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
       - name: Run tests
-        run: pytest
+        shell: bash
+        run: |
+          set +e
+          pytest -rf -p no:cacheprovider > out.txt 2>&1
+          status=$?
+          tail -5 out.txt
+          # Failures as one annotation, readable without signing in.
+          summary=$( (grep -E '^(FAILED|ERROR) ' out.txt; grep -E '^E  ' out.txt | head -40) | head -80 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          [ -n "$summary" ] && echo "::error title=pytest on ${{ matrix.os }}::$summary"
+          exit $status
 
   docker:
     runs-on: ubuntu-latest
