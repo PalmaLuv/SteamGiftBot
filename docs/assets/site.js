@@ -1,5 +1,5 @@
 /* SteamGiftBot — project page behaviour: theme, Ctrl+K menu, the log replay,
-   the odds calculator, install tabs, copy buttons, GitHub stars, Konami. */
+   the panel tour, the odds calculator, install tabs, copy buttons, GitHub stars, Konami. */
 (() => {
   'use strict';
   const $ = (s, el = document) => el.querySelector(s);
@@ -10,17 +10,20 @@
                   set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
   /* ---------- toast ---------- */
-  const toastBox = $('[data-toast]');
+  // A corner notification. achievement=true adds the cup icon and the
+  // "achievement unlocked" title, for the rare and the silly.
+  const toastBox = $('[data-toast]'), toastText = $('[data-toast-text]');
   let toastTimer;
-  function toast(text) {
-    toastBox.textContent = text; toastBox.hidden = false;
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastBox.hidden = true; }, 3200);
+  function toast(text, achievement = false) {
+    toastText.textContent = text; toastBox.classList.toggle('achievement', achievement);
+    toastBox.hidden = true; void toastBox.offsetWidth; toastBox.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastBox.hidden = true; }, achievement ? 5200 : 3200);
   }
 
   /* ---------- theme ---------- */
   function setTheme(next) {
     document.documentElement.dataset.theme = next; store.set('sgb-theme', next);
-    document.querySelector('meta[name="theme-color"]').content = next === 'light' ? '#F2F3F7' : '#0C0C0E';
+    document.querySelector('meta[name="theme-color"]').content = next === 'light' ? '#e6ecf2' : '#171a21';
   }
   function toggleTheme() {
     const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
@@ -67,7 +70,9 @@
     // 1/41 per iS is a very good giveaway, 1/20000 a hopeless one; a log scale in between.
     const score = Math.max(0, Math.min(1, (Math.log10(value) + 4.3) / 2.7));
     $('[data-meter]').style.width = Math.round(4 + score * 96) + '%';
-    $('[data-verdict]').textContent = score > .62 ? T.verdictHigh : score > .3 ? T.verdictMid : T.verdictLow;
+    const rv = score > .62 ? 'pos' : score > .3 ? 'mix' : 'neg';
+    $('[data-verdict]').textContent = {pos: T.verdictHigh, mix: T.verdictMid, neg: T.verdictLow}[rv];
+    $('.odds-out').dataset.rv = rv;
   }
   entrants.addEventListener('input', odds); price.addEventListener('input', odds);
   $$('[data-odds]').forEach(b => b.addEventListener('click', () => { const [e, p] = b.dataset.odds.split(','); entrants.value = e; price.value = p; odds(); }));
@@ -75,13 +80,68 @@
   function roll() {
     const total = +entrants.value + 1, n = 1 + Math.floor(Math.random() * total);
     const out = $('[data-roll-out]');
-    if (n === 1) { out.textContent = T.win; confetti(140); }
+    if (n === 1) { out.textContent = T.win; confetti(140); toast(T.win, true); }
     else out.textContent = T.lose.replace('{n}', fmt(n)).replace('{total}', fmt(total));
   }
   $('[data-roll]').addEventListener('click', roll);
 
+  /* ---------- panel tour ---------- */
+  // Plays through the screens on its own while in view; hovering or focusing
+  // pauses it, and the first click hands it over to the visitor for good.
+  const tour = $('[data-tour]');
+  if (tour) {
+    const tourTabs = $$('[role=tab]', tour), url = $('[data-tour-url]', tour);
+    const STEP = 7000;
+    let current = 0, timer = 0, started = 0, left = STEP, auto = !reduced, visible = false, held = false;
+    tour.style.setProperty('--tour-ms', STEP + 'ms');
+    function show(i, focus = false) {
+      current = (i + tourTabs.length) % tourTabs.length;
+      tourTabs.forEach((t, n) => {
+        const on = n === current, panel = $('#' + t.getAttribute('aria-controls'));
+        t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1; panel.hidden = !on;
+        if (on) url.textContent = panel.dataset.url;
+      });
+      if (focus) tourTabs[current].focus();
+      left = STEP; restart();
+    }
+    function restart() {
+      clearTimeout(timer);
+      const run = auto && visible && !held;
+      tour.classList.toggle('playing', auto);
+      tour.classList.toggle('paused', auto && !run);
+      if (!run) return;
+      // a fresh step starts the progress line from zero
+      if (left === STEP) { const bar = $('[aria-selected="true"] .tt-bar i', tour); bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = ''; }
+      started = Date.now(); timer = setTimeout(() => show(current + 1), left);
+    }
+    function hold(on) {
+      if (on && !held && auto && visible) left = Math.max(400, left - (Date.now() - started));
+      held = on; restart();
+    }
+    function stop() { auto = false; restart(); }
+    tourTabs.forEach((t, i) => {
+      t.addEventListener('click', () => { stop(); show(i); });
+      t.addEventListener('keydown', e => {
+        const step = {ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1}[e.key];
+        if (step) { e.preventDefault(); stop(); show(current + step, true); }
+        else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); stop(); show(e.key === 'Home' ? 0 : tourTabs.length - 1, true); }
+      });
+    });
+    tour.addEventListener('pointerenter', () => hold(true));
+    tour.addEventListener('pointerleave', () => hold(false));
+    tour.addEventListener('focusin', () => hold(true));
+    tour.addEventListener('focusout', e => { if (!tour.contains(e.relatedTarget)) hold(false); });
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(([e]) => {
+        if (e.isIntersecting) $$('img[loading=lazy]', tour).forEach(img => { img.loading = 'eager'; });
+        visible = e.isIntersecting; restart();
+      }, {threshold: .35}).observe(tour);
+    }
+    document.addEventListener('visibilitychange', () => hold(document.hidden));
+  }
+
   /* ---------- install tabs ---------- */
-  const tabs = $$('[role=tab]');
+  const tabs = $$('.tabs [role=tab]');
   function selectTab(tab) {
     tabs.forEach(t => { const on = t === tab; t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1; $('#' + t.getAttribute('aria-controls')).hidden = !on; });
   }
@@ -97,7 +157,7 @@
   async function copy(text) {
     try { await navigator.clipboard.writeText(text); toast(T.copied); } catch { toast(T.copyFail); }
   }
-  $$('.copy').forEach(b => b.addEventListener('click', () => copy($('pre', b.parentElement).textContent)));
+  $$('.copy').forEach(b => b.addEventListener('click', () => copy(b.dataset.copyText || $('pre', b.parentElement).textContent)));
 
   /* ---------- GitHub stars ---------- */
   fetch('https://api.github.com/repos/PalmaLuv/SteamGiftBot').then(r => r.ok ? r.json() : null).then(d => {
@@ -111,7 +171,7 @@
   function confetti(count) {
     if (reduced) return;
     canvas.width = innerWidth * devicePixelRatio; canvas.height = innerHeight * devicePixelRatio;
-    const colors = ['#FF6B47', '#FF9A6C', '#FFB347', '#18C362', '#3987e5', '#F4F2EE'];
+    const colors = ['#66c0f4', '#1a9fff', '#c4f22a', '#a4d007', '#c7d5e0', '#ffffff'];
     for (let i = 0; i < count; i++) bits.push({
       x: innerWidth * (.2 + Math.random() * .6), y: innerHeight * .35, vx: (Math.random() - .5) * 9, vy: -4 - Math.random() * 8,
       r: 3 + Math.random() * 4, a: Math.random() * 6, va: (Math.random() - .5) * .3, c: colors[i % colors.length], life: 0,
@@ -140,6 +200,7 @@
     ...langs.filter(a => !a.hasAttribute('aria-current')).map(a => ({label: `${P.lang}: ${a.textContent}`, hint: a.hreflang, run: () => { store.set('sgb-lang', a.hreflang); location.href = a.href; }})),
     {label: P.copyInstall, hint: 'git clone', run: () => copy($('#pane-farm pre').textContent)},
     {label: P.roll, hint: '🎟', run: () => { location.hash = 'odds'; roll(); }},
+    {label: P.support, hint: '♥', run: () => location.hash = 'support'},
     {label: P.wiki, hint: '↗', run: () => open('https://github.com/PalmaLuv/SteamGiftBot/wiki', '_blank', 'noopener')},
     {label: P.github, hint: '↗', run: () => open('https://github.com/PalmaLuv/SteamGiftBot', '_blank', 'noopener')},
     {label: P.portfolio, hint: '↗', run: () => open('https://palmaluv.github.io/palma.github.io/', '_blank', 'noopener')},
@@ -179,6 +240,6 @@
     if (e.key === 'Escape' && !box.hidden) { closePalette(); return; }
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     progress = key === konami[progress] ? progress + 1 : key === konami[0] ? 1 : 0;
-    if (progress === konami.length) { progress = 0; confetti(220); toast(T.konami); }
+    if (progress === konami.length) { progress = 0; confetti(220); toast(T.konami, true); }
   });
 })();

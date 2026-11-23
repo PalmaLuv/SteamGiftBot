@@ -1103,5 +1103,6 @@
  "Вход на сайт истекает": "The site sign-in expires on",
  "COOKIE СКОРО ИСТЕЧЁТ": "COOKIE EXPIRES SOON",
  "Cookie не сохранены": "Cookies not saved",
- "Сайт обновил cookie": "The site refreshed cookies"
+ "Сайт обновил cookie": "The site refreshed cookies",
+ "Steam не ответил про карточки": "Steam did not say whether it has cards"
 }

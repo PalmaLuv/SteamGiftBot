@@ -1,7 +1,10 @@
 {
   "meta": {
-    "title": "SteamGiftBot — a farm for game giveaways",
-    "description": "An open source farm for game giveaways: SteamGifts, IndieGala, OpiumPulses, free Steam games, GOG and itch.io. Web panel, Telegram, ArchiSteamFarm."
+    "title": "SteamGiftBot — SteamGifts & IndieGala giveaway bot",
+    "description": "Open-source bot that auto-enters SteamGifts, IndieGala and OpiumPulses giveaways and claims free games on Steam, GOG and itch.io. Web panel and Telegram.",
+    "ogTitle": "SteamGiftBot — a game giveaway bot",
+    "ogAlt": "SteamGiftBot: a giveaway bot for SteamGifts, IndieGala, OpiumPulses, Steam, GOG and itch.io",
+    "locale": "en_US"
   },
   "ui": {
     "skip": "Skip to content",
@@ -23,7 +26,8 @@
     "line3": "one farm.",
     "desc": "Enters giveaways on SteamGifts, IndieGala and OpiumPulses, claims free games on Steam, GOG and itch.io, and messages you on Telegram when you win.",
     "badge": "no passwords · open source · telegram · ",
-    "badgeLabel": "To the farm"
+    "badgeLabel": "To the farm",
+    "free": "Free"
   },
   "term": {
     "label": "Sample of the farm's log",
@@ -34,7 +38,7 @@
       "[IndieGala] Account palma, balance 40 iS",
       "[IndieGala] Entered: ★ Doughlings: Arcade for 4 iS (31 entrants, 36 left)",
       "[IndieGala] Entered: Tiny Farm for 1 iS (40 entrants, 35 left)",
-      "[IndieGala] Skipped: not enough iS — 12, DLC / soundtrack / pack — 4, 18+ — 3",
+      "[IndieGala] Skipped: not enough iS — 12, DLC / soundtrack / pack — 4",
       "[SteamGifts] Waiting for points: 21 of 30 P",
       "[Steam] Entered: Star Courier — added to the Steam library",
       "[GOG] no giveaway right now",
@@ -51,26 +55,35 @@
   "farm": {
     "title": "A panel, not a terminal.",
     "lead": "Each site runs in its own thread, and the panel shows which one is busy, why another is waiting and what went out over the last day.",
-    "shotAlt": "The farm's overview: new wins, a chart of entries per day and the state of each site",
-    "shotCaption": "Overview: wins, entries per day, and why each site is waiting.",
-    "f1t": "Connected in a minute",
-    "f1": "Copy the site's request as cURL and paste it. The farm checks the sign in without saving anything and shows the balance.",
-    "f2t": "Dry run",
-    "f2": "Every giveaway on offer and the decision for each: enter, or why it is skipped. Not a single point spent.",
-    "f3t": "Telegram",
-    "f3": "Wins, expired cookies and a daily summary. From your phone: /status, /pause, /run, /preview.",
-    "f4t": "ArchiSteamFarm",
-    "f4": "A won key is activated on Steam with one button; free Steam games land in your library on their own.",
-    "f5t": "Rules",
-    "f5": "Working hours, daily limits, no DLC or adult games, nothing you already own. Your wishlist goes first.",
-    "f6t": "Your server",
-    "f6": "Any computer that stays on. The panel is visible only on your network or through Tailscale.",
-    "previewAlt": "IndieGala dry run: two giveaways it would enter, two skipped with a reason",
-    "previewCaption": "Dry run: a decision for every giveaway.",
-    "connectAlt": "Connect wizard for GOG: numbered steps and a box for the request",
-    "connectCaption": "Connect wizard: steps for every site.",
-    "mobileAlt": "The farm's overview on a phone",
-    "mobileCaption": "On a phone."
+    "tourLabel": "Panel screens",
+    "open": "Open the screenshot at full size",
+    "hint": "Click a screenshot to open it at full size.",
+    "s1t": "Overview",
+    "s1": "Wins, entries per day and why each site is waiting. You don't have to read the log to see what is going on.",
+    "s1alt": "The farm's overview: new wins, a chart of entries per day and the state of each site",
+    "s1url": "192.168.1.10:8092/#overview",
+    "s2t": "Dry run",
+    "s2": "Every giveaway on offer and the decision for each: enter, or why it is skipped. Not a single point spent.",
+    "s2alt": "IndieGala dry run: two giveaways it would enter, two skipped with a reason",
+    "s2url": "192.168.1.10:8092/#sites/indiegala",
+    "s3t": "Connected in a minute",
+    "s3": "Copy the site's request as cURL and paste it. The farm checks the sign in without saving anything and shows the balance.",
+    "s3alt": "Connect wizard for GOG: numbered steps and a box for the request",
+    "s3url": "192.168.1.10:8092/#sites/gog",
+    "s4t": "Rules and schedule",
+    "s4": "Working hours, daily limits, no DLC or adult games, nothing you already own. Your wishlist goes first.",
+    "s4alt": "Farm settings: time zone, sites that start on boot, Telegram, Steam library and ArchiSteamFarm",
+    "s4url": "192.168.1.10:8092/#settings",
+    "s5t": "On your phone",
+    "s5": "The same panel with tabs at the bottom of the screen. Add it to your home screen and it opens like an app.",
+    "s5alt": "The farm's overview on a phone: wins, counters and the bottom tab bar",
+    "s5url": "192.168.1.10:8092 · phone",
+    "c1t": "Telegram",
+    "c1": "Wins, expired cookies and a daily summary. Commands: /status, /pause, /run, /preview.",
+    "c2t": "ArchiSteamFarm",
+    "c2": "A won key is activated on Steam with one button; free Steam games land in your library on their own.",
+    "c3t": "Your server",
+    "c3": "Any computer that stays on. The panel is visible only on your network or through Tailscale."
   },
   "sites": {
     "title": "Six sites.",
@@ -132,13 +145,26 @@
     "q5": "Why does the farm enter nothing?",
     "a5": "Open the site's dry run: every giveaway has its reason there. Most often the balance ran out or the account level is set wrong.",
     "q6": "Is this an official SteamGifts project?",
-    "a6": "No. SteamGiftBot is an independent open source project under MPL-2.0, not affiliated with SteamGifts, IndieGala, GOG, itch.io or Valve."
+    "a6": "No. SteamGiftBot is an independent open source project under MPL-2.0, not affiliated with SteamGifts, IndieGala, GOG, itch.io or Valve.",
+    "q7": "How is the farm different from extensions like AutoJoin?",
+    "a7": "An extension enters giveaways while your browser is open, and only on SteamGifts. The farm runs on a server around the clock, handles six sites at once, skips games already in your Steam library and tells you about wins on Telegram.",
+    "q8": "How much does it cost?",
+    "a8": "Nothing. The code is open under MPL-2.0, with no subscriptions or paid features. All you need is a computer that stays on."
+  },
+  "support": {
+    "eyebrow": "Support the project",
+    "title": "Free. For good.",
+    "lead": "SteamGiftBot is built by one person in their spare time. If the farm has already brought you a game or two, you can buy the author a coffee: it pays for new sites, and for fixing old ones when they change their pages.",
+    "note": "Support is voluntary: the farm hides no features behind a payment and shows no ads.",
+    "tonLabel": "TON wallet",
+    "open": "Open in wallet"
   },
   "footer": {
     "made": "PalmaLuv, 2026 · <a href=\"https://github.com/PalmaLuv/SteamGiftBot\">source</a> · <a href=\"https://github.com/PalmaLuv/SteamGiftBot/wiki\">wiki (Russian)</a>",
     "disclaimer": "Independent project. Not affiliated with SteamGifts, IndieGala, OpiumPulses, GOG, itch.io or Valve."
   },
   "js": {
+    "achievement": "Achievement unlocked",
     "copied": "Copied",
     "copyFail": "Could not copy",
     "dark": "Dark theme",
@@ -165,6 +191,7 @@
       "portfolio": "Author's portfolio",
       "roll": "Draw a ticket",
       "confetti": "Confetti, just because",
+      "support": "Support the project",
       "empty": "Nothing found"
     }
   }

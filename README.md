@@ -744,6 +744,20 @@ actually starts, and attaches it to the GitHub Release.
 Suggestions are welcome
 [here](https://github.com/PalmaLuv/SteamGiftBot/discussions/6).
 
+## Support the project
+
+SteamGiftBot is free and will stay free: no paid features, no ads. It is built
+by one person in their spare time. If it has brought you a game or two and you
+would like to see new sites and quick fixes when the old ones change, you can
+support it:
+
+- [GitHub Sponsors](https://github.com/sponsors/palmaluv)
+- [Buy Me a Coffee](https://www.buymeacoffee.com/palmaluv)
+- TON: `UQBhyAtIaZxHiiLsLjmJtnG8sFmNiG77k2xkWfgr0xka7X2J`
+  ([open in a wallet](https://app.tonkeeper.com/transfer/UQBhyAtIaZxHiiLsLjmJtnG8sFmNiG77k2xkWfgr0xka7X2J))
+
+A star on GitHub helps too: it is how other people find the project.
+
 ## License
 
 [MPL-2.0](LICENSE).

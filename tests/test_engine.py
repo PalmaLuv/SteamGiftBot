@@ -13,6 +13,7 @@ from steamgiftbot.bot import CHALLENGE_MESSAGE, SteamGift, SteamGiftError
 from steamgiftbot.bot import info as botInfo
 from steamgiftbot.farm import base, steamgifts
 from steamgiftbot.farm.steamgifts import FarmSteamGift
+from steamgiftbot.providers.steamgifts import SteamGiftsProvider
 
 
 # ---- retries ---------------------------------------------------------------
@@ -305,7 +306,7 @@ def test_steamgifts_sends_the_browsers_user_agent(manager, tmp_path):  # noqa: F
 
 def test_steamgifts_check_uses_the_pasted_user_agent(manager, monkeypatch):  # noqa: F811
     agents = []
-    monkeypatch.setattr(SteamGift, 'updateInfo',
+    monkeypatch.setattr(SteamGiftsProvider, 'refresh',
                         lambda self: agents.append(self.session.headers['User-Agent']))
     platform = manager.platforms['steamgifts']
     platform.check({'cookie': CURL_SG})

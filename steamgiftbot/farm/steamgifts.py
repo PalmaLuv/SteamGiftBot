@@ -616,7 +616,7 @@ class SteamGiftsPlatform(Platform):
     # sends the card. Then the keys the won page shows go onto the wins.
     def announce(self, bot):
         bot.announceWins()
-        self.keysFromWonPage(bot.wonPage)
+        self.keysFromWonPage(getattr(bot, 'wonPage', None))
 
     # Unactivated wins are what SteamGifts bans for most. A key the creator
     # sent shows on the won page: it goes onto the win (and to ASF when

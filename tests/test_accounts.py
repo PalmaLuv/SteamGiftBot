@@ -10,7 +10,7 @@ from test_farm import call, manager, panel  # noqa: F401
 from test_farm_extras import FakeASF
 
 from steamgiftbot import settings as sgSettings
-from steamgiftbot.bot import SteamGift
+from steamgiftbot.providers.steamgifts import SteamGiftsProvider
 from steamgiftbot.farm.base import actingFor
 from steamgiftbot.farm.indiegala import IndieGalaPlatform
 from steamgiftbot.farm.manager import FarmManager
@@ -114,9 +114,10 @@ def test_accounts_survive_a_restart_and_removal(manager, accounts, brother,  # n
 
 def test_steamgifts_accounts_keep_apart(manager, brother, tmp_path, monkeypatch):  # noqa: F811
     monkeypatch.setenv('STEAMGIFTBOT_COOKIE', 'fromenv')
-    monkeypatch.setattr(SteamGift, 'updateInfo',
-                        lambda bot: (setattr(bot, 'points', 50),
-                                     setattr(bot, 'username', bot.cookie['PHPSESSID'][:3])))
+    monkeypatch.setattr(SteamGiftsProvider, 'refresh',
+                        lambda provider: (setattr(provider, 'points', 50),
+                                          setattr(provider, 'username',
+                                                  provider.cookie['PHPSESSID'][:3])))
     second, found = manager.addAccount('steamgifts', {'cookie': 'bobsession'}, brother)
     assert found == {'account': 'bob', 'balance': 50}
     path = tmp_path / 'accounts' / 'steamgifts-2' / 'config.ini'
@@ -142,13 +143,13 @@ def test_steamgifts_accounts_keep_apart(manager, brother, tmp_path, monkeypatch)
 
 
 def test_steamgifts_reads_the_name_from_the_header():
-    bot = SteamGift.__new__(SteamGift)
+    provider = SteamGiftsProvider.__new__(SteamGiftsProvider)
     html = ('<input name="xsrf_token" value="t"><span class="nav__points">1,204</span>'
             '<a class="nav__avatar-outer-wrap" href="/user/Palma"></a>')
-    bot.GetSoupFromPage = lambda url: BeautifulSoup(html, 'html.parser')
-    bot.baseURL = 'https://www.steamgifts.com'
-    bot.updateInfo()
-    assert (bot.points, bot.username) == (1204, 'Palma')
+    provider.getSoup = lambda url: BeautifulSoup(html, 'html.parser')
+    provider.baseURL = 'https://www.steamgifts.com'
+    provider.refresh()
+    assert (provider.points, provider.username) == (1204, 'Palma')
 
 
 def test_steam_accounts_are_asf_bots(manager):  # noqa: F811

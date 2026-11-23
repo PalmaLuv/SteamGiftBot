@@ -8,6 +8,7 @@ from test_farm import FakeSteamGiftBot, manager  # noqa: F401
 from steamgiftbot.farm import steamgifts
 from steamgiftbot.farm.steamgifts import FarmSteamGift, siteQuery
 from steamgiftbot.giveaway import Giveaway, parseRow
+from steamgiftbot.providers.base import EntryResult, Outcome
 
 
 def row(code, cost, entries, copies=1):
@@ -70,13 +71,13 @@ def walkingBot(manager, monkeypatch, pages, points=100, **conf):  # noqa: F811
         asked.append(url)
         number = int(url.split('page=')[1].split('&')[0])
         return page(*pages.get(number, []))
-    monkeypatch.setattr(bot, 'GetSoupFromPage', getSoup)
+    monkeypatch.setattr(bot.provider, 'getSoup', getSoup)
 
-    def enter(code, cost):
-        entered.append(code)
-        bot.points -= cost
-        return True
-    monkeypatch.setattr(bot, 'entryGIFT', enter)
+    def enter(giveaway):
+        entered.append(giveaway.code)
+        bot.points -= giveaway.cost
+        return EntryResult(Outcome.ENTERED)
+    monkeypatch.setattr(bot.provider, 'enter', enter)
     monkeypatch.setattr(steamgifts, 'sleep', lambda *a: None, raising=False)
     monkeypatch.setattr('steamgiftbot.bot.sleep', lambda *a: None)
     platform.extraReason = lambda giveaway, points=None, minPoints=None: None
@@ -106,7 +107,7 @@ def test_the_walk_asks_the_site_to_filter(manager, monkeypatch):  # noqa: F811
     bot.getGameContent()
     assert asked[0].endswith('search?page=1&level_max=0&point_max=15')
     # The address is put back for the next walk.
-    assert '&' not in bot.filterURL['All']
+    assert '&' not in bot.provider.filterURL['All']
 
 
 def test_a_filter_that_leaves_nothing_is_not_an_error(manager, monkeypatch):  # noqa: F811

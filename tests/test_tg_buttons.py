@@ -157,6 +157,7 @@ def test_steamgifts_win_card_carries_the_buttons_and_is_recorded_once(polling):
     platform = polling.platforms['steamgifts']
     bot = object.__new__(FarmSteamGift)
     bot.platform = platform
+    bot.provider = type('Provider', (), {'wonPage': None})()
     win = Win('8caCY', 'Patrician Iii')
     bot.announceWins = lambda: bot.tellWin(win) or [win]
     platform.announce(bot)

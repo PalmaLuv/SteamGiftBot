@@ -7,10 +7,11 @@ import time
 from test_farm import manager  # noqa: F401
 from test_steamgifts_odds import page, row
 
-from steamgiftbot.bot import SteamGift
 from steamgiftbot.farm import base, web
 from steamgiftbot.farm.base import dailyReason
 from steamgiftbot.farm.steamgifts import FarmSteamGift
+from steamgiftbot.providers.base import EntryResult, Outcome
+from steamgiftbot.providers.steamgifts import SteamGiftsProvider
 
 
 def until(check, seconds=3):
@@ -165,13 +166,13 @@ def enteringBot(manager, monkeypatch, pages):  # noqa: F811
         number = int(url.split('page=')[1].split('&')[0])
         return page(*pages.get(number, []))
 
-    def entry(self, code, cost):
-        posted.append(code)
-        self.points -= cost
-        return True
+    def entry(self, giveaway):
+        posted.append(giveaway.code)
+        self.points -= giveaway.cost
+        return EntryResult(Outcome.ENTERED)
 
-    monkeypatch.setattr(bot, 'GetSoupFromPage', getSoup)
-    monkeypatch.setattr(SteamGift, 'entryGIFT', entry)
+    monkeypatch.setattr(bot.provider, 'getSoup', getSoup)
+    monkeypatch.setattr(SteamGiftsProvider, 'enter', entry)
     monkeypatch.setattr('steamgiftbot.bot.sleep', lambda *a: None)
     return platform, bot, posted
 
@@ -212,7 +213,8 @@ def test_dry_run_records_nothing(manager, monkeypatch):  # noqa: F811
 
 def test_refused_entry_records_nothing(manager, monkeypatch):  # noqa: F811
     platform, bot, posted = enteringBot(manager, monkeypatch, {1: [row('abc12', 15, 42)]})
-    monkeypatch.setattr(SteamGift, 'entryGIFT', lambda self, code, cost: False)
+    monkeypatch.setattr(SteamGiftsProvider, 'enter',
+                        lambda self, giveaway: EntryResult(Outcome.REJECTED, message='Not Enough'))
     bot.getGameContent()
     assert platform.sessionEntered == 0
 
