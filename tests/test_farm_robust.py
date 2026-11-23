@@ -39,8 +39,9 @@ def test_write_private_syncs_and_keeps_a_backup(tmp_path, monkeypatch):
     writePrivate(path, {'n': 2})
     assert json.loads(path.read_text(encoding='utf-8')) == {'n': 2}
     assert json.loads((tmp_path / 'farm.json.bak').read_text(encoding='utf-8')) == {'n': 1}
-    # The file and its directory, on both writes.
-    assert len(synced) >= 4
+    # The file and its directory, on both writes. Windows cannot open a
+    # directory to sync it, so there only the file is.
+    assert len(synced) >= (4 if os.name != 'nt' else 2)
     if os.name != 'nt':
         assert path.stat().st_mode & 0o777 == 0o600
     assert not list(tmp_path.glob('*.tmp'))
