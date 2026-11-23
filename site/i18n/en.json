@@ -27,11 +27,11 @@
     "desc": "Enters giveaways on SteamGifts, IndieGala and OpiumPulses, claims free games on Steam, GOG and itch.io, and messages you on Telegram when you win."
   },
   "get": {
-    "title": "Download SteamGiftBot",
-    "button": "Download",
+    "eyebrow": "Latest release",
+    "button": "Go to the release",
     "free": "Free",
-    "meta": "Windows 10 and 11",
-    "alt": "Linux, macOS and Docker: <a href=\"#install\">install</a> · <a href=\"https://github.com/PalmaLuv/SteamGiftBot/releases/latest\">all files and checksums</a>"
+    "sub": "The farm for Windows and the command line bot. Both programs, their checksums and the list of changes are on the release page.",
+    "alt": "Install on Linux, macOS or Docker"
   },
   "term": {
     "label": "Sample of the farm's log",

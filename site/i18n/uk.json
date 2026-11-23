@@ -27,11 +27,11 @@
     "desc": "Заходить у роздачі на SteamGifts, IndieGala та OpiumPulses, забирає безкоштовні ігри в Steam, GOG та itch.io і пише в Telegram, коли ви виграли."
   },
   "get": {
-    "title": "Завантажити SteamGiftBot",
-    "button": "Завантажити",
+    "eyebrow": "Останній реліз",
+    "button": "Перейти до релізу",
     "free": "Безкоштовно",
-    "meta": "Windows 10 і 11",
-    "alt": "Linux, macOS і Docker — <a href=\"#install\">встановлення</a> · <a href=\"https://github.com/PalmaLuv/SteamGiftBot/releases/latest\">усі файли й контрольні суми</a>"
+    "sub": "Ферма для Windows і бот для командного рядка. Обидві програми, контрольні суми й список змін — на сторінці релізу.",
+    "alt": "Встановлення на Linux, macOS і в Docker"
   },
   "term": {
     "label": "Приклад журналу ферми",
