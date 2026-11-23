@@ -1104,5 +1104,9 @@
  "COOKIE СКОРО ИСТЕЧЁТ": "COOKIE EXPIRES SOON",
  "Cookie не сохранены": "Cookies not saved",
  "Сайт обновил cookie": "The site refreshed cookies",
- "Steam не ответил про карточки": "Steam did not say whether it has cards"
+ "Steam не ответил про карточки": "Steam did not say whether it has cards",
+ "Пароль веб-панели ещё не задан. Придумайте его (не короче 6 символов": "The web panel has no password yet. Choose one (at least 6 characters",
+ "Пароли не совпали, попробуйте ещё раз": "The passwords do not match, try again",
+ "Не подходит": "Not accepted",
+ "Ещё раз": "Once more"
 }

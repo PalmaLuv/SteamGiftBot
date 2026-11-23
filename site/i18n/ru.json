@@ -117,19 +117,19 @@
   },
   "install": {
     "title": "Установка.",
-    "lead": "Ферма — для сервера или домашнего компьютера. Бот для командной строки — если нужна только SteamGifts.",
+    "lead": "Ферма — для компьютера, который не выключается: на Windows это одна программа, на остальных системах — запуск из исходников. Бот для командной строки — если нужна только SteamGifts.",
     "tabFarm": "Ферма",
-    "tabExe": "Бот для Windows",
+    "tabExe": "Windows",
     "farm1": "Скачайте код и поставьте зависимости. Нужен Python 3.10 или новее.",
     "farm2": "Задайте пароль панели и запустите ферму на адресе компьютера в вашей сети.",
     "farm3": "Откройте <code>http://192.168.1.10:8092</code>, войдите и подключите площадку. Служба systemd, фаервол и телефон — в <a href=\"https://github.com/PalmaLuv/SteamGiftBot/wiki/Сервер-и-служба\">вики</a>.",
-    "farmNote": "Пока ферма в ветке botfarm, поэтому клонируется с <code>-b botfarm</code>. После слияния в main флаг не понадобится.",
-    "exe1": "Скачайте <code>SteamGiftBot.exe</code> и <code>.sha256</code> со страницы <a href=\"https://github.com/PalmaLuv/SteamGiftBot/releases/latest\">релизов</a>. Python не нужен.",
+    "farmNote": "На Windows ничего устанавливать не нужно: <code>BotFarm.exe</code> — на вкладке Windows.",
+    "exe1": "Скачайте <code>BotFarm.exe</code> (ферма с панелью) или <code>SteamGiftBot.exe</code> (только SteamGifts) вместе с <code>.sha256</code> со страницы <a href=\"https://github.com/PalmaLuv/SteamGiftBot/releases/latest\">релизов</a> в отдельную папку. Python не нужен.",
     "exe2": "Сверьте контрольную сумму со строкой в файле <code>.sha256</code>.",
-    "exe3": "Запустите: бот спросит cookie и настройки. Пробный проход покажет, куда он вошёл бы, ничего не тратя.",
+    "exe3": "Запустите. <code>BotFarm.exe</code> один раз спросит пароль панели и откроет её в браузере; <code>SteamGiftBot.exe</code> спросит cookie и настройки.",
     "docker1": "Положите cookie SteamGifts (значение PHPSESSID) в файл-секрет: так его не видно в <code>docker inspect</code>.",
     "docker2": "Запустите контейнер. Он работает не от root, образ собран для amd64 и arm64.",
-    "dockerNote": "Это бот для командной строки, только SteamGifts. Ферму в Docker запускают с параметром <code>--data</code> — см. <a href=\"https://github.com/PalmaLuv/SteamGiftBot/wiki/Установка\">вики</a>."
+    "dockerNote": "Это бот для командной строки, только SteamGifts. Тот же образ запускает ферму: <code>-m steamgiftbot.farm --data</code> — см. <a href=\"https://github.com/PalmaLuv/SteamGiftBot/wiki/Установка\">вики</a>."
   },
   "faq": {
     "title": "Вопросы.",

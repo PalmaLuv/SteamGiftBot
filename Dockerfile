@@ -27,4 +27,12 @@ USER app
 # from a mounted config.ini. Add --once to the run command for a single pass:
 #   docker run --rm -e STEAMGIFTBOT_COOKIE=... ghcr.io/palmaluv/steamgiftbot --once
 # 'docker stop' sends SIGTERM, which the bot turns into a clean stop and summary.
+#
+# The same image runs the bot farm with its web panel, data in the volume:
+#   docker run -d -p 8092:8092 -v botfarm:/app/data -e BOTFARM_PASSWORD=... \
+#     --entrypoint python ghcr.io/palmaluv/steamgiftbot -m steamgiftbot.farm \
+#     --host 0.0.0.0 --data /app/data
+# BOTFARM_PASSWORD is read by --set-password; run that once with the same
+# volume before the first start.
+EXPOSE 8092
 ENTRYPOINT ["python", "main.py", "--no-input"]

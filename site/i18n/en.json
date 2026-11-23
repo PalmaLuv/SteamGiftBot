@@ -117,19 +117,19 @@
   },
   "install": {
     "title": "Install.",
-    "lead": "The farm is for a server or a home computer that stays on. The command line bot is for SteamGifts alone.",
+    "lead": "The farm is for a computer that stays on: on Windows it is one download, elsewhere it runs from source. The command line bot is for SteamGifts alone.",
     "tabFarm": "Farm",
-    "tabExe": "Windows bot",
+    "tabExe": "Windows",
     "farm1": "Get the code and its dependencies. Needs Python 3.10 or newer.",
     "farm2": "Set the panel's password and start the farm on your computer's LAN address.",
     "farm3": "Open <code>http://192.168.1.10:8092</code>, sign in and connect a site. A systemd service, the firewall and phones are covered in the <a href=\"https://github.com/PalmaLuv/SteamGiftBot#bot-farm\">README</a>.",
-    "farmNote": "The farm lives on the botfarm branch for now, hence <code>-b botfarm</code>. Once it is merged into main, the flag goes.",
-    "exe1": "Download <code>SteamGiftBot.exe</code> and its <code>.sha256</code> from <a href=\"https://github.com/PalmaLuv/SteamGiftBot/releases/latest\">releases</a>. No Python needed.",
+    "farmNote": "On Windows there is nothing to install: <code>BotFarm.exe</code> is on the Windows tab.",
+    "exe1": "Download <code>BotFarm.exe</code> (the farm with its panel) or <code>SteamGiftBot.exe</code> (SteamGifts alone), with its <code>.sha256</code>, from <a href=\"https://github.com/PalmaLuv/SteamGiftBot/releases/latest\">releases</a>, into a folder of its own. No Python needed.",
     "exe2": "Check the checksum against the line in the <code>.sha256</code> file.",
-    "exe3": "Run it: the bot asks for the cookie and a few settings. A dry run shows what it would enter without spending anything.",
+    "exe3": "Run it. <code>BotFarm.exe</code> asks once for a password for its panel and opens the panel in your browser; <code>SteamGiftBot.exe</code> asks for the cookie and a few settings.",
     "docker1": "Put the SteamGifts cookie (the PHPSESSID value) in a secret file, so that <code>docker inspect</code> does not show it.",
     "docker2": "Start the container. It does not run as root; the image is built for amd64 and arm64.",
-    "dockerNote": "This is the command line bot, SteamGifts only. The farm runs in Docker with <code>--data</code>; see the <a href=\"https://github.com/PalmaLuv/SteamGiftBot#bot-farm\">README</a>."
+    "dockerNote": "This is the command line bot, SteamGifts only. The same image runs the farm with <code>-m steamgiftbot.farm --data</code>; see the <a href=\"https://github.com/PalmaLuv/SteamGiftBot#starting-it\">README</a>."
   },
   "faq": {
     "title": "FAQ.",

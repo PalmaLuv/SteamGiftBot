@@ -6,6 +6,7 @@ import os
 import signal
 import sys
 import threading
+import webbrowser
 
 from pathlib import Path
 
@@ -16,6 +17,32 @@ from steamgiftbot.farm.manager import DataFileError, FarmManager
 from steamgiftbot.farm.web import serve
 
 BIND_RETRY_SECONDS = 15
+
+
+# A first start in a console (the downloaded BotFarm.exe, double-clicked)
+# asks for the panel's password there, instead of a panel nobody can sign in
+# to. Without a console (a service, Docker) the warning below says what to run.
+def askPassword(manager):
+    if manager.hasPassword() or not (sys.stdin and sys.stdin.isatty()):
+        return
+    print("Пароль веб-панели ещё не задан. Придумайте его (не короче 6 символов).")
+    while True:
+        try:
+            first = getpass.getpass("Новый пароль панели: ")
+            second = getpass.getpass("Ещё раз: ")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if first != second:
+            print("Пароли не совпали, попробуйте ещё раз.")
+            continue
+        try:
+            manager.setPassword(first)
+        except ValueError as error:
+            print(f"Не подходит: {error}.")
+            continue
+        print("Пароль сохранён.")
+        return
 
 
 def configureLogging(dataDir):
@@ -161,6 +188,7 @@ def main(argv=None):
         if platform.kind == 'steamgifts':
             platform.attachLogger()
 
+    askPassword(manager)
     if not manager.hasPassword():
         log.warning("Пароль панели не задан: python -m steamgiftbot.farm --set-password")
 
@@ -193,6 +221,11 @@ def main(argv=None):
     for thread in threads:
         thread.start()
 
+    # The downloaded program has no other way in than the browser: open it.
+    if getattr(sys, 'frozen', False) and hosts and not os.environ.get('BOTFARM_NO_BROWSER'):
+        host = '127.0.0.1' if hosts[0] in ('0.0.0.0', '::') else hosts[0]
+        threading.Timer(1.5, webbrowser.open, args=(f"http://{host}:{args.port}/",)).start()
+
     if not args.no_autostart:
         manager.startAutostart()
     manager.startClock()
@@ -207,7 +240,10 @@ def main(argv=None):
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
     try:
-        stopping.wait()
+        # In short waits: on Windows a wait without a timeout does not wake for
+        # Ctrl+C.
+        while not stopping.wait(1):
+            pass
     finally:
         for server in list(servers):
             server.shutdown()

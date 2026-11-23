@@ -220,7 +220,7 @@
     </div>
     <div class="clay pane" role="tabpanel" id="pane-farm" aria-labelledby="tab-farm">
       <ol class="steps">
-        <li><p>{{install.farm1}}</p><div class="code"><button class="copy" type="button" aria-label="{{ui.copy}}">{{ui.copy}}</button><pre>git clone -b botfarm https://github.com/PalmaLuv/SteamGiftBot.git
+        <li><p>{{install.farm1}}</p><div class="code"><button class="copy" type="button" aria-label="{{ui.copy}}">{{ui.copy}}</button><pre>git clone https://github.com/PalmaLuv/SteamGiftBot.git
 cd SteamGiftBot
 python3 -m venv env
 env/bin/pip install -r requirements.txt</pre></div></li>
@@ -233,8 +233,8 @@ env/bin/python -m steamgiftbot.farm --host 192.168.1.10</pre></div></li>
     <div class="clay pane" role="tabpanel" id="pane-exe" aria-labelledby="tab-exe" hidden>
       <ol class="steps">
         <li><p>{{install.exe1}}</p></li>
-        <li><p>{{install.exe2}}</p><div class="code"><button class="copy" type="button" aria-label="{{ui.copy}}">{{ui.copy}}</button><pre>certutil -hashfile SteamGiftBot.exe SHA256</pre></div></li>
-        <li><p>{{install.exe3}}</p><div class="code"><button class="copy" type="button" aria-label="{{ui.copy}}">{{ui.copy}}</button><pre>SteamGiftBot.exe --once --dry-run</pre></div></li>
+        <li><p>{{install.exe2}}</p><div class="code"><button class="copy" type="button" aria-label="{{ui.copy}}">{{ui.copy}}</button><pre>certutil -hashfile BotFarm.exe SHA256</pre></div></li>
+        <li><p>{{install.exe3}}</p></li>
       </ol>
     </div>
     <div class="clay pane" role="tabpanel" id="pane-docker" aria-labelledby="tab-docker" hidden>

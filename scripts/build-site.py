@@ -25,6 +25,9 @@ URL = 'https://palmaluv.github.io/SteamGiftBot/'
 WIKI = 'https://github.com/PalmaLuv/SteamGiftBot/wiki/'
 
 REPO = 'https://github.com/PalmaLuv/SteamGiftBot'
+# The released version, for search engines: the package says which it is.
+VERSION = re.search(r"__version__ = '([^']+)'",
+                    (ROOT / 'steamgiftbot' / '__init__.py').read_text(encoding='utf-8')).group(1)
 # The same wallet as steamgiftbot/farm/support.py on the farm's branch.
 TON = 'UQBhyAtIaZxHiiLsLjmJtnG8sFmNiG77k2xkWfgr0xka7X2J'
 
@@ -61,6 +64,7 @@ def structured_data(lang, folder, strings):
          'operatingSystem': 'Windows, Linux, macOS, Docker',
          'license': 'https://www.mozilla.org/en-US/MPL/2.0/', 'isAccessibleForFree': True,
          'offers': {'@type': 'Offer', 'price': '0', 'priceCurrency': 'USD'},
+         'softwareVersion': VERSION,
          'downloadUrl': REPO + '/releases/latest', 'installUrl': url + '#install',
          'softwareHelp': WIKI, 'sameAs': [REPO, WIKI.rstrip('/')],
          'featureList': [plain(strings['farm'][f's{i}t']) for i in range(1, 6)]

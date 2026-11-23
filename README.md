@@ -68,15 +68,31 @@ What the farm adds:
 
 Pick one of three. They are the same program.
 
-### The Windows executable
+### Download for Windows
 
-The simplest option, nothing to install.
+The simplest option, nothing to install. The
+[latest release](https://github.com/PalmaLuv/SteamGiftBot/releases/latest) has
+two programs:
 
-1. Download `SteamGiftBot.exe` from
-   [releases](https://github.com/PalmaLuv/SteamGiftBot/releases/latest).
-2. Put it in a folder of its own. The bot writes `config.ini`, its state file and
-   its logs beside itself, so give it somewhere to live rather than Downloads.
-3. Run it.
+| File | What it is |
+| --- | --- |
+| **`BotFarm.exe`** | the farm with its web panel: every site, wins, Telegram |
+| **`SteamGiftBot.exe`** | the command line bot, for SteamGifts alone |
+
+1. Download the one you want and put it in a folder of its own. Each writes its
+   settings, history and logs beside itself, so give it somewhere to live
+   rather than Downloads.
+2. Run it. `BotFarm.exe` asks once for a password for its panel, then opens the
+   panel in your browser at `http://127.0.0.1:8092/`. `SteamGiftBot.exe` asks
+   its setup questions in the console.
+
+Windows may warn that the program is from an unknown publisher: the programs
+are not code signed. Each file has a `.sha256` beside it on the release page;
+compare it with what Windows computes:
+
+```powershell
+certutil -hashfile BotFarm.exe SHA256
+```
 
 ### From source
 
@@ -137,16 +153,34 @@ already holds, pasted once as *Copy as cURL*; the panel walks you through it.
 
 ### Starting it
 
+On Windows, run `BotFarm.exe` (see [Download for Windows](#download-for-windows)).
+From source:
+
 ```bash
 python -m steamgiftbot.farm --set-password          # once: the panel's password
 python -m steamgiftbot.farm --host 192.168.1.10     # your LAN address
 ```
 
-Open `http://192.168.1.10:8092/`, sign in, go to **Площадки** (Sites) and pick one
-from the catalog. The panel's interface is in Russian. `--host` takes several addresses separated by commas (a LAN one and a
-Tailscale one, say); keep it off `0.0.0.0`, because the panel holds your site
-cookies. `--port` changes the port, `--no-autostart` starts with every site
-stopped.
+Open `http://192.168.1.10:8092/`, sign in, go to **Sites** and pick one from the
+catalog. The panel speaks English, Ukrainian and Russian: switch in its
+settings. `--host` takes several addresses separated by commas (a LAN one and a
+Tailscale one, say); keep it off `0.0.0.0` unless something else guards the
+port, because the panel holds your site cookies. `--port` changes the port,
+`--no-autostart` starts with every site stopped. `BotFarm.exe` takes the same
+options.
+
+In Docker, with the data in a volume:
+
+```bash
+docker run --rm -v botfarm:/app/data -e BOTFARM_PASSWORD=choose-one \
+  --entrypoint python ghcr.io/palmaluv/steamgiftbot -m steamgiftbot.farm --data /app/data --set-password
+docker run -d --name botfarm --restart unless-stopped -p 127.0.0.1:8092:8092 -v botfarm:/app/data \
+  --entrypoint python ghcr.io/palmaluv/steamgiftbot -m steamgiftbot.farm --host 0.0.0.0 --data /app/data
+```
+
+Inside the container the panel has to listen on `0.0.0.0`; `-p 127.0.0.1:8092:8092`
+keeps it on the host alone. Publish it on a LAN address instead to reach it
+from other devices.
 
 ### Connecting a site
 
