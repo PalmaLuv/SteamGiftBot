@@ -108,7 +108,8 @@ def test_an_unknown_won_page_is_kept_for_a_look(manager):  # noqa: F811
     platform.checkWins()
     saved = manager.dataDir / 'debug' / 'indiegala-won.html'
     assert saved.exists()
-    assert os.stat(saved).st_mode & 0o077 == 0
+    if os.name != 'nt':      # Windows has no owner-only mode bits
+        assert os.stat(saved).st_mode & 0o077 == 0
 
 
 def test_auto_redeem_is_promised_only_for_a_steam_key(manager):  # noqa: F811

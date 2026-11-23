@@ -88,7 +88,10 @@ jobs:
             sleep 2
           done
           check $up "the panel answers"
-          curl -sf http://127.0.0.1:8099/ | grep -q 'manifest.webmanifest'
+          # Into a file first: with pipefail, grep -q closing the pipe early
+          # would count as curl failing.
+          curl -sf http://127.0.0.1:8099/ > page.html
+          grep -q 'manifest.webmanifest' page.html
           check $? "the panel page is in the bundle"
           curl -sf http://127.0.0.1:8099/icon.svg > /dev/null
           check $? "the panel icons are in the bundle"
