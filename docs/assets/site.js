@@ -34,7 +34,7 @@
 
   /* ---------- log replay ---------- */
   const term = $('[data-term]');
-  const kind = line => line.startsWith('🎉') ? 'win' : /Пропущено|Skipped|Чекає|Ждёт|Waiting|нет|немає|no giveaway/.test(line) ? 'skip' : /Вошёл|Увійшов|Entered/.test(line) ? 'ok' : 'dim';
+  const kind = line => line.startsWith('🎉') ? 'win' : /Пропущено|Skipped|Чекає|Ждёт|Waiting|нет|немає|no giveaway/.test(line) ? 'wait' : /Вошёл|Увійшов|Entered/.test(line) ? 'ok' : 'dim';
   let replayRun = 0;
   async function replay() {
     const run = ++replayRun;
@@ -42,9 +42,11 @@
     term.textContent = '';
     for (const line of T.lines) {
       const row = document.createElement('span'); row.className = kind(line); term.appendChild(row);
-      for (let i = 0; i <= line.length; i += 2) {
+      // Two characters a step, and the whole line at the end whatever its length.
+      for (let i = 2; ; i += 2) {
         if (run !== replayRun) return;
         row.textContent = line.slice(0, i);
+        if (i >= line.length) break;
         await new Promise(r => setTimeout(r, 12));
       }
       term.appendChild(document.createTextNode('\n'));
