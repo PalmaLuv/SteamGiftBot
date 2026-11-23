@@ -132,7 +132,7 @@ kbd { font: 11px var(--mono); color: #8f98a0; }
 /* the download, as a store's purchase box: a title, then a dark bar with
    the discount and the button */
 :root { --deal-bg: #4c6b22; --deal: #beee11; }
-.buy { position: relative; max-width: 500px; padding: 22px 22px 20px; border-radius: var(--r-lg); background: var(--card); border: 1px solid var(--brd2); box-shadow: var(--inset), var(--shadow); }
+.buy { position: relative; display: flex; flex-direction: column; justify-content: center; padding: 22px 22px 20px; border-radius: var(--r-lg); background: var(--card); border: 1px solid var(--brd2); box-shadow: var(--inset), var(--shadow); }
 .buy-eyebrow { margin: 0 0 6px; font: 700 11.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--brand); }
 .buy-title { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
 .buy-sub { margin: 6px 0 18px; padding-right: 8px; color: var(--text2); font-size: 14.5px; line-height: 1.55; }
@@ -157,15 +157,19 @@ a.site-row:hover .ptag { color: #c7d5e0; }
 a.site-row:hover .ptag.free { color: var(--deal); }
 .sticker { display: inline-block; margin-left: 10px; padding: 4px 10px; border-radius: 3px; background: var(--deal-bg); color: var(--deal); font-size: .55em; vertical-align: middle; transform: rotate(-4deg); }
 
-.mid { display: flex; justify-content: space-between; align-items: center; gap: 32px; margin: 44px 0 26px; }
+/* The same columns as the log and the cards under it, so nothing gapes between. */
+.mid { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(0,1fr); align-items: stretch; gap: 16px; margin: 44px 0 16px; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.res-list { list-style: none; margin: 0; padding: 0; width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 4px; }
+.res-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.res-list li { flex: 1; display: flex; }
+.res-list .res-item { flex: 1; align-items: center; }
 .res-item { display: grid; grid-template-columns: 1fr auto auto; gap: 18px; padding: 10px 12px; border-radius: var(--pill); background: var(--card-flat); color: var(--text2); font-weight: 600; transition: background .2s, color .2s, padding .25s; }
 .res-item:hover { background: var(--row-hover); color: var(--row-ink); padding-left: 18px; }
 .res-item .n { font: 400 12px var(--mono); color: var(--text3); }
 .res-item:hover .n, .res-item:hover .dots { color: var(--row-ink2); }
 .dots { color: var(--text3); letter-spacing: 2px; font-size: 11px; }
-@media (max-width: 720px) { .mid { flex-direction: column; align-items: stretch; gap: 22px; margin-top: 32px; } .res-list { max-width: none; } .res-item { padding: 8px 12px; } .buy { max-width: none; } .deal { right: -4px; } .btn-get { flex: 1 1 100%; justify-content: center; } }
+@media (max-width: 860px) { .mid { grid-template-columns: 1fr; gap: 22px; margin-top: 32px; } }
+@media (max-width: 720px) { .res-item { padding: 8px 12px; } .deal { right: -4px; } .btn-get { flex: 1 1 100%; justify-content: center; } }
 
 /* ---------- cards ---------- */
 .clay { background: var(--card); border: 1px solid var(--brd); border-radius: var(--r-lg); box-shadow: var(--inset), var(--shadow); }
