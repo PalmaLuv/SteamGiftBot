@@ -39,9 +39,12 @@ ALREADY_IN  = 'уже участвуете'
 ENDED       = 'раздача закончилась'
 # The site's own answers about the giveaway itself: worth remembering for good.
 FINAL       = (ALREADY_IN, ENDED)
-# The listing when the filters the user set on the site itself hide everything.
+# What the listing says when it is empty. The site says it about the
+# filters whether or not any are set, so on its own it means only that there
+# is no giveaway open right now: OpiumPulses has few, and often none.
 FILTERED    = re.compile(r'no\s+giveaways\s+that\s+match\s+your\s+selected\s+filters',
                          re.IGNORECASE)
+EMPTY_NOTE  = "Открытых раздач на OpiumPulses сейчас нет, загляну в следующий проход."
 FILTER_WARN = ("OpiumPulses прячет все раздачи: фильтры, выбранные на самом сайте, не "
                "пропускают ни одной. Сбросьте их на opiumpulses.com/giveaways.")
 # The Telegram reminder about it comes at most this often.
@@ -170,6 +173,13 @@ def nextPageURL(soup, pageURL):
         return None
     target = urljoin(pageURL, link['href'])
     return None if target == pageURL else target
+
+
+# The site's filter menu: each group (platforms, systems, genres, types) has an
+# "all" box, ticked unless the user picked something narrower.
+def filtersNarrow(soup):
+    boxes = soup.find_all('input', attrs={'type': 'checkbox', 'name': re.compile(r'-all$')})
+    return any(not box.has_attr('checked') for box in boxes)
 
 
 class OpiumPulsesPlatform(KeptSession, Platform):
@@ -313,12 +323,13 @@ class OpiumPulsesPlatform(KeptSession, Platform):
         self.keepForDebugging('enter-unconfirmed', response.text)
         return False, 'вход не подтверждён (страница сохранена в debug/)'
 
-    # The filter warning above already says why nothing is entered.
+    # The filter warning, or a listing with nothing open, already says why
+    # nothing is entered.
     def idleExplained(self):
-        return getattr(self, 'filteredNow', False)
+        return getattr(self, 'filteredNow', False) or getattr(self, 'emptyNow', False)
 
     def cycle(self, conf):
-        self.filteredNow = False
+        self.filteredNow = self.emptyNow = False
         response = self.get(LISTING)
         if not isSignedIn(response.text):
             raise AuthError("OpiumPulses не узнаёт cookie: войдите на сайт "
@@ -337,8 +348,11 @@ class OpiumPulsesPlatform(KeptSession, Platform):
             if page == 1:
                 self.info(f"Баланс: {self.balance if self.balance is not None else '?'} OP, "
                           f"раздач на странице: {len(giveaways)}")
-                if not giveaways and FILTERED.search(html):
+                if not giveaways and FILTERED.search(html) and filtersNarrow(soup):
                     self.filteredOut()
+                elif not giveaways and FILTERED.search(html):
+                    self.emptyNow = True
+                    self.info(EMPTY_NOTE)
                 elif not giveaways:
                     self.keepForDebugging('giveaways', html)
                     if soup.find(class_=re.compile('giveaways-page-items')) is None:
@@ -494,7 +508,7 @@ class OpiumPulsesPlatform(KeptSession, Platform):
             response = box.get(target)
             url, html = response.url, response.text
         note = self.previewNote(conf)
-        if not items and FILTERED.search(html):
+        if not items and FILTERED.search(html) and filtersNarrow(soup):
             note = (note + ' ' if note else '') + FILTER_WARN
         elif not items:
             note = (note + ' ' if note else '') + "Сайт сейчас не показывает ни одной раздачи."

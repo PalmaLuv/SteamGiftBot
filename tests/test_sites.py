@@ -1,6 +1,6 @@
 """OpiumPulses and itch.io: a giveaway that failed for now is tried again, a
 Cloudflare check is not a dead cookie, and the site's own filters that hide
-every giveaway are reported."""
+every giveaway are reported, but a listing with nothing open is not."""
 import time
 
 import pytest
@@ -14,11 +14,18 @@ from steamgiftbot.farm.opiumpulses import LISTING
 
 ENTER = 'https://www.opiumpulses.com/giveaways/enter/'
 
-FILTERED_PAGE = """<html><body><header><a href="/site/logout">Logout</a>
+# The site says the same about the filters whether any are set or not: only
+# its filter menu, with an "all" box per group, tells the two apart.
+EMPTY_LISTING = """<html><body><header><a href="/site/logout">Logout</a>
 <span class="points-items">40 OP</span></header>
+<input type="checkbox" name="platforms-all" id="platforms-all" {platforms}>
+<input data-platform type="checkbox" name="platforms-Steam" id="platforms-Steam">
+<input type="checkbox" name="types-all" id="types-all" checked>
 <div id="giveawaylistview" class="list-view"><div class="giveaways-page-items">
 <span class="empty"><img src="/sadop.png" /><p>There are no giveaways that match your selected
 filters.</p></span></div></div></body></html>"""
+FILTERED_PAGE = EMPTY_LISTING.format(platforms='')
+NOTHING_OPEN = EMPTY_LISTING.format(platforms='checked')
 
 
 def opiumPass(manager, pages):  # noqa: F811
@@ -121,12 +128,26 @@ def test_opiumpulses_filters_that_hide_everything_are_reported_daily(manager):  
     assert not (manager.dataDir / 'debug' / 'opiumpulses-giveaways.html').exists()
 
 
-def test_opiumpulses_preview_names_the_filters(manager):  # noqa: F811
+def test_opiumpulses_with_nothing_open_is_not_blamed_on_filters(manager):  # noqa: F811
+    platform, conf, notes = opiumPass(manager, {})
+    platform.session.pages[LISTING] = (200, NOTHING_OPEN)
+    warned, said = [], []
+    platform.warn = warned.append
+    platform.info = said.append
+    assert platform.cycle(conf) == 0
+    assert warned == [] and notes == []
+    assert any('сейчас нет' in line for line in said)
+    # Nothing to enter is the site's own state: no idle card, no debug copy.
+    assert platform.idleExplained()
+    assert not (manager.dataDir / 'debug' / 'opiumpulses-giveaways.html').exists()
+
+
+def previewOf(manager, page):  # noqa: F811
     platform = manager.platforms['opiumpulses']
     settings = platform.settings()
     settings.update(cookie='PHPSESSID=1', skip_owned=False)
     manager.savePlatformSettings('opiumpulses', settings)
-    fake = FakeOpium({LISTING: (200, FILTERED_PAGE)})
+    fake = FakeOpium({LISTING: (200, page)})
     original = platform.sandbox
 
     def sandbox():
@@ -134,8 +155,18 @@ def test_opiumpulses_preview_names_the_filters(manager):  # noqa: F811
         box.connect = lambda conf: setattr(box, 'session', fake)
         return box
     platform.sandbox = sandbox
-    result = platform.preview()
+    return platform.preview()
+
+
+def test_opiumpulses_preview_names_the_filters(manager):  # noqa: F811
+    result = previewOf(manager, FILTERED_PAGE)
     assert result['items'] == [] and 'фильтры' in result['note']
+
+
+def test_opiumpulses_preview_with_nothing_open(manager):  # noqa: F811
+    result = previewOf(manager, NOTHING_OPEN)
+    assert result['items'] == [] and 'фильтры' not in result['note']
+    assert 'ни одной раздачи' in result['note']
 
 
 # ---- itch.io ------------------------------------------------------------------------
