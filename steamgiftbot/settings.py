@@ -63,7 +63,7 @@ DEFAULT_CONFIG_PATH = BASE_DIR / 'config.ini'
 
 ENV_PREFIX = 'STEAMGIFTBOT_'
 
-GIFT_TYPES = ['All', 'WishList', 'Recommended', 'Copies', 'DLC', 'New']
+GIFT_TYPES = ['All', 'WishList', 'Recommended', 'Copies', 'DLC', 'New', 'Group']
 
 # Settings the bot cannot start without. log_info and once have safe defaults.
 REQUIRED = ('cookie', 'gift_type', 'pinned', 'min_points')

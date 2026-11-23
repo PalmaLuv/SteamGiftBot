@@ -15,7 +15,7 @@ import requests
 
 from conftest import fixture
 
-from steamgiftbot.farm import base, rules, web
+from steamgiftbot.farm import base, cards, rules, web
 from steamgiftbot.farm.base import AuthError, parseCookies
 from steamgiftbot.farm.indiegala import parseListing
 from steamgiftbot.farm.manager import FarmManager
@@ -512,7 +512,7 @@ def test_farm_settings_validate_and_hide_the_key(manager):
 
 def test_daily_report_goes_out_once(manager):
     sent = []
-    manager.notify = lambda text: sent.append(text) or []
+    manager.notify = lambda text=None, card=None: sent.append(card.plain() if card else text) or []
     manager.state.addEntry('indiegala', {'time': time.time(), 'name': 'Oxenfree', 'cost': 8})
     manager.state.addWin('indiegala', {'time': time.time(), 'name': 'Oxenfree'})
     manager.updateFarmSettings({'daily_report': True, 'report_hour': '21'})
@@ -521,8 +521,8 @@ def test_daily_report_goes_out_once(manager):
     manager.localNow = lambda: at(21, 5)
     assert manager.reportTick()
     assert not manager.reportTick()
-    assert 'IndieGala: 1 вх., потрачено 8' in sent[0]
-    assert 'выигрыши: Oxenfree' in sent[0]
+    assert 'IG  1 вх.  8 iS' in sent[0]
+    assert 'Выигрышей за сутки: 1 — Oxenfree' in sent[0]
 
 
 def test_steamgifts_farm_rules(manager):
@@ -708,6 +708,17 @@ def test_run_now_during_a_pass_skips_the_next_wait(manager):
     assert result == [True]
 
 
+class FixedRandom:
+    """Takes the place of a site's rng: the waits come out exact, or at the
+    edge of the jitter when `share` says so (-1 low, 1 high)."""
+
+    def __init__(self, share=0):
+        self.share = share
+
+    def uniform(self, low, high):
+        return (low + high) / 2 + self.share * (high - low) / 2
+
+
 class FakeSteamGiftBot:
     """Stands in for FarmSteamGift in SteamGiftsPlatform.run."""
 
@@ -739,6 +750,7 @@ def test_steamgifts_pauses_when_nothing_suits(manager, monkeypatch):
     from steamgiftbot.farm import steamgifts
     monkeypatch.setattr(steamgifts, 'FarmSteamGift', FakeSteamGiftBot)
     platform = manager.platforms['steamgifts']
+    platform.rng = FixedRandom()
     waits = []
 
     def wait(seconds, sleeping=True, reason=''):
@@ -881,7 +893,7 @@ def test_opiumpulses_empty_keys_table_is_not_a_win(manager):
     empty = '<table><tbody><tr><td colspan="4">No results found.</td></tr></tbody></table>'
     platform = manager.platforms['opiumpulses']
     notes = []
-    platform.notify = notes.append
+    platform.notify = lambda text='', icon='', **card: notes.append(card.get('headline') or text)
     for page in (table('Old Game'), empty, table('Old Game', 'Cool Game')):
         platform.session = FakeOpium({WON_KEYS: (200, page)})
         platform.checkWins()
@@ -941,3 +953,151 @@ def test_steamgifts_walk_records_entries_and_obeys_the_farm(manager, monkeypatch
     platform.extra = dict(platform.extra, daily_entries=2)
     with pytest.raises(FarmPause):
         bot.getGameContent()
+
+
+def test_command_line_history_is_imported_once(tmp_path):
+    (tmp_path / 'log').mkdir()
+    (tmp_path / 'log' / 'log-01.11.2026-10.00.00.log').write_text(
+        "[INFO:2026-11-01 10:00:05,123] One more game Alpha\n"
+        "[INFO:2026-11-01 10:01:05,123] Entry rejected: Missing Base Game\n"
+        "[INFO:2026-11-01 11:00:05,123] One more game Beta\n"
+        "[INFO:2026-11-02 09:00:05,123] One more game Gamma\n"
+        "[INFO:2026-11-03 09:00:05,123]  Entered 3 giveaways for 30 points.\n", encoding='utf-8')
+    # The farm's own entry on 2 Nov at 08:00 local server time: Gamma (09:00) is after it.
+    farmTime = time.mktime(time.strptime('2026-11-02 08:00:00', '%Y-%m-%d %H:%M:%S'))
+    (tmp_path / 'botfarm-state.json').write_text(json.dumps({'steamgifts': {
+        'entries': [{'time': farmTime, 'name': 'Farm', 'cost': 5}], 'totalEntered': 1,
+        'totalSpent': 5}}), encoding='utf-8')
+    manager = FarmManager(dataDir=tmp_path, configPath=tmp_path / 'none.ini')
+    site = manager.state.site('steamgifts')
+    assert site['totalEntered'] == 3 and site['totalSpent'] == 5
+    imported = {day: counts['cli'] for day, counts in site['daily'].items() if counts.get('cli')}
+    assert sum(imported.values()) == 2
+    again = FarmManager(dataDir=tmp_path, configPath=tmp_path / 'none.ini')
+    assert again.state.site('steamgifts')['totalEntered'] == 3
+    days = again.summary(90)
+    sg = next(item for item in days['sites'] if item['key'] == 'steamgifts')
+    assert sum(sg['importedByDay']) == 2 and sum(sg['entries']) >= 2
+
+
+def test_panel_log_survives_a_restart(manager):
+    (manager.dataDir / 'log').mkdir(exist_ok=True)
+    (manager.dataDir / 'log' / 'botfarm.log').write_text(
+        "[INFO 2026-11-20 10:00:00,001 botfarm.indiegala] Вошёл: Alpha за 2 iS\n"
+        "[WARNING 2026-11-20 10:05:00,001 botfarm.indiegala] IndieGala недоступна\n"
+        "[INFO 2026-11-20 10:06:00,001 botfarm] Веб-панель: http://x/\n"
+        "[INFO 2026-11-20 10:07:00,001 botfarm.nosuchsite] ignored\n", encoding='utf-8')
+    assert manager.restoreLogs() == 2
+    lines = manager.platforms['indiegala'].logLines()
+    assert [line['text'] for line in lines] == ['Вошёл: Alpha за 2 iS', 'IndieGala недоступна']
+    assert all(line['restored'] for line in lines) and lines[1]['level'] == 'WARNING'
+
+
+def test_log_lines_carry_entry_details_and_skip_reasons(manager):
+    import collections
+    platform = manager.platforms['indiegala']
+    platform.balance = 8
+    platform.passStartedAt = time.time() - 5
+    platform.info("Вошёл: Alpha за 2 iS")
+    platform.recordEntry('Alpha', 2, 'https://www.indiegala.com/giveaways/card/alpha/1', entries=40)
+    skipped = collections.Counter()
+    platform.skip(skipped, 'дороже лимита', 'Beta', cost='9 iS', entries=None)
+    platform.finishPass("Проход окончен: вошёл в 1")
+    lines = platform.logLines()
+    entry = next(line for line in lines if line['text'].startswith('Вошёл'))
+    assert entry['details']['cost'] == '2 iS' and entry['details']['entries'] == 40
+    assert entry['details']['balance'] == '8 iS'
+    skip = next(line for line in lines if line['level'] == 'DEBUG')
+    assert skip['text'] == 'Пропуск: Beta — дороже лимита' and 'entries' not in skip['details']
+    assert skipped['дороже лимита'] == 1
+    assert re.search(r'Проход окончен: вошёл в 1 · за \d+ с', lines[-1]['text'])
+
+
+def test_panel_look_is_checked_and_shared(panel, manager):
+    status, data, _ = call(panel + '/api/session')
+    assert status == 200 and data['ui']['lang'] == 'ru' and data['ui']['tour'] is False
+    assert call(panel + '/api/ui', {'values': {'theme': 'light'}})[0] == 401
+    _, _, headers = call(panel + '/api/login', {'password': 'secret123'})
+    cookie = headers['Set-Cookie'].split(';')[0]
+    status, data, _ = call(panel + '/api/ui', {'values': {'theme': 'light', 'lang': 'en',
+                                                         'accent': '#2ec27e', 'tour': True}},
+                           cookie=cookie)
+    assert status == 200 and data['ui']['theme'] == 'light' and data['ui']['lang'] == 'en'
+    for bad in ({'theme': 'neon'}, {'accent': 'red;}'}, {'scale': 300}, {'lang': 'xx'}):
+        assert call(panel + '/api/ui', {'values': bad}, cookie=cookie)[0] == 400
+    assert manager.uiSettings()['accent'] == '#2ec27e'
+    assert call(panel + '/api/session')[1]['ui']['theme'] == 'light'
+
+
+def test_command_line_wins_are_imported_as_received(tmp_path):
+    (tmp_path / 'log').mkdir()
+    (tmp_path / 'log' / 'log-03.09.2026-08.57.51.log').write_text(
+        "[INFO:2026-09-03 08:57:51,998] You won Patrician Iii! "
+        "https://www.steamgifts.com/giveaway/8caCY/\n"
+        "[INFO:2026-09-03 08:58:12,291]  You won 1 giveaways! Entered 4 giveaways for 13 points.\n"
+        "[INFO:2026-09-04 08:57:51,998] You won Patrician Iii! "
+        "https://www.steamgifts.com/giveaway/8caCY/\n", encoding='utf-8')
+    manager = FarmManager(dataDir=tmp_path, configPath=tmp_path / 'none.ini')
+    wins = manager.state.site('steamgifts')['wins']
+    assert [(win['name'], win['status']) for win in wins] == [('Patrician Iii', 'received')]
+    assert manager.state.totals('steamgifts')['wins'] == 1
+    assert manager.openWins() == []
+
+
+def test_telegram_messages_have_one_look_and_follow_the_language(manager):
+    sent = []
+    manager.notify = lambda text=None, card=None: sent.append(card.plain() if card else text) or []
+    manager.panelURLs = ['http://192.168.1.10:8092/', 'http://100.64.0.5:8092/']
+    platform = manager.platforms['indiegala']
+    platform.notify("строка", '✅', headline="Проход прошёл без ошибок.")
+    assert sent[-1] == '✅ ГОТОВО · IndieGala\nПроход прошёл без ошибок.\nстрока'
+    assert manager.panelLink('/wins') == 'http://100.64.0.5:8092/#/wins'
+    manager.updateUi({'lang': 'en'})
+    assert manager.translate("За сутки ни одного входа.") == "No entries in the last 24 hours."
+    card = manager.translateCard(cards.Card('🔑', headline="Сессия больше не действует",
+                                            buttons=[("Подключить заново", 'http://x/')]))
+    assert card.heading() == 'SIGN-IN NEEDED' and card.buttons == [('Reconnect', 'http://x/')]
+    manager.updateUi({'lang': 'ru'})
+    assert manager.translate("СВОДКА ЗА СУТКИ") == "СВОДКА ЗА СУТКИ"
+
+
+def test_watchdog_speaks_once_after_an_hour_and_once_when_back(manager):
+    sent = []
+    platform = manager.platforms['indiegala']
+    platform.notify = lambda text='', icon='', **card: sent.append(
+        icon + ' ' + (card.get('headline') or text))
+    for _ in range(base.WATCH_AFTER + 2):
+        platform.watch('IndieGala недоступна')
+    assert sent == ['⚠️ Не работает уже 60 мин']
+    platform.passStartedAt = time.time()
+    platform.finishPass("Проход окончен: вошёл в 0")
+    assert sent[-1] == '✅ Проход прошёл без ошибок.' and platform.failures == 0
+    platform.finishPass("Проход окончен: вошёл в 0")
+    assert len(sent) == 2
+
+
+def test_free_games_come_in_one_message_per_pass(manager):
+    sent = []
+    platform = manager.platforms['indiegala']
+    platform.notify = lambda text='', icon='', **card: sent.append(
+        icon + ' ' + (card.get('headline') or text))
+    for name in ('Alpha', 'Beta'):
+        platform.recordEntry(name, 0, '')
+    platform.recordEntry('Paid', 3, '')
+    platform.announceClaims()
+    platform.announceClaims()
+    assert sent == ['🎁 −100% · забрано игр: 2']
+
+
+def test_steamgifts_win_goes_out_in_the_farm_format(manager):
+    from steamgiftbot.farm.steamgifts import FarmSteamGift
+    from steamgiftbot.wins import Win
+    sent = []
+    manager.notify = lambda text=None, card=None: sent.append(card.plain() if card else text) or []
+    manager.panelURLs = ['http://192.168.1.10:8092/']
+    bot = object.__new__(FarmSteamGift)
+    bot.platform = manager.platforms['steamgifts']
+    win = Win('8caCY', 'Patrician Iii')
+    bot.tellWin(win)
+    assert sent[0].startswith('🎉 ВЫИГРЫШ · SteamGifts\nPatrician Iii — ' + win.url)
+    assert sent[0].endswith('Выигрыши: http://192.168.1.10:8092/#/wins')

@@ -47,6 +47,8 @@ What the farm adds:
 - A dry run: what it would enter right now, and why it skips the rest
 - Working hours, daily limits, ready-made filters (DLC, adult games, games you
   already own), your Steam wishlist first
+- Accounts for several people: each has its own set of sites, cards, limits
+  and history, and its own Steam (an ASF bot) for the keys it wins
 - Wins with key status, keys activated through ArchiSteamFarm
 - Telegram commands: `/status`, `/pause`, `/run`, `/preview`…
 - A chart of entries per day, a searchable log and history, CSV export
@@ -310,7 +312,7 @@ Those four are required. Everything below is optional.
 | Setting | Values | Meaning |
 | --- | --- | --- |
 | `cookie` | your `PHPSESSID` | session cookie from steamgifts.com |
-| `gift_type` | `All`, `WishList`, `Recommended`, `Copies`, `DLC`, `New` | which giveaways to walk through |
+| `gift_type` | `All`, `WishList`, `Recommended`, `Copies`, `DLC`, `New`, `Group` | which giveaways to walk through |
 | `pinned` | `yes` / `no` | also enter pinned giveaways |
 | `min_points` | number | stop entering once the balance falls below this; `0` spends everything |
 | `log_info` | `yes` / `no` | write a log file for each run, into `log/` |

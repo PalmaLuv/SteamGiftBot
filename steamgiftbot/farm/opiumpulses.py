@@ -17,10 +17,11 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 
-from steamgiftbot.farm.base import (DEFAULT_USER_AGENT, TIMEOUT, AuthError, Platform,
-                                    PlatformError, RetryLater, buildSession, cookieGuide, field,
-                                    grouped, parseCookies, presetFields, scheduleFields,
-                                    userAgentFrom)
+from steamgiftbot.farm.base import (DEFAULT_USER_AGENT, FAILED_TRIES, TIMEOUT, AuthError,
+                                    Platform, RetryLater, cookieGuide, dailyReason, field,
+                                    grouped, parseCookies, presetFields, scheduleFields)
+from steamgiftbot.farm.sessions import KeptSession
+from steamgiftbot.logging_setup import writePrivate
 
 BASE     = 'https://www.opiumpulses.com'
 DOMAIN   = '.opiumpulses.com'
@@ -34,8 +35,26 @@ FREE_TEXT   = re.compile(r'\bfree\b', re.IGNORECASE)
 ENTERED     = re.compile(r'\b(entered|joined)\b', re.IGNORECASE)
 PAGE_PARAM  = 'Giveaway_page'
 NO_POINTS   = 'не хватает поинтов'
+ALREADY_IN  = 'уже участвуете'
+ENDED       = 'раздача закончилась'
+# The site's own answers about the giveaway itself: worth remembering for good.
+FINAL       = (ALREADY_IN, ENDED)
+# The listing when the filters the user set on the site itself hide everything.
+FILTERED    = re.compile(r'no\s+giveaways\s+that\s+match\s+your\s+selected\s+filters',
+                         re.IGNORECASE)
+FILTER_WARN = ("OpiumPulses прячет все раздачи: фильтры, выбранные на самом сайте, не "
+               "пропускают ни одной. Сбросьте их на opiumpulses.com/giveaways.")
+# The Telegram reminder about it comes at most this often.
+FILTER_NOTIFY_EVERY = 24 * 3600
 ENTER_PATHS = tuple(f'/{base}/{verb}' for base in ('giveaway', 'giveaways')
                     for verb in ('enter', 'join', 'participate'))
+
+
+# The site answered, with a 403 or 5xx on this very link. Unlike a 429 or a
+# dropped connection, which are about the whole site, it can be held against
+# the giveaway the link belongs to.
+class LinkFailed(RetryLater):
+    pass
 
 
 @dataclass
@@ -153,12 +172,15 @@ def nextPageURL(soup, pageURL):
     return None if target == pageURL else target
 
 
-class OpiumPulsesPlatform(Platform):
+class OpiumPulsesPlatform(KeptSession, Platform):
     key         = 'opiumpulses'
     unit        = 'OP'
     title       = 'OpiumPulses'
     siteURL     = LISTING
     description = 'Раздачи ключей: бесплатные и за OP-поинты.'
+    sessionDomain = DOMAIN
+    # PHP's session and the 'remember me' one, which Yii 1 names with an md5.
+    signInCookie  = re.compile(r'PHPSESSID|[0-9a-f]{32}|.*remember.*|_identity', re.IGNORECASE)
 
     def schema(self):
         return grouped('Аккаунт', [
@@ -214,16 +236,15 @@ class OpiumPulsesPlatform(Platform):
         try:
             folder = self.debugDir()
             folder.mkdir(parents=True, exist_ok=True)
-            (folder / f'opiumpulses-{name}.html').write_text(html, encoding='utf-8')
+            # A logged-in page: the account, its balance, form tokens.
+            writePrivate(folder / f'opiumpulses-{name}.html', html)
         except OSError:
             pass
 
+    # The session of the last pass while the paste is the same (see sessions.py).
     def connect(self, conf):
-        cookies = parseCookies(conf['cookie'])
-        if not cookies:
-            raise PlatformError("не задан cookie")
-        self.session = buildSession(userAgentFrom(conf['cookie']) or conf['user_agent'],
-                                    cookies, DOMAIN)
+        if not self.openSession(conf):
+            return
         self.session.headers.update({'Referer': LISTING})
         # Entering is a GET, and the shared adapter repeats GETs after a read
         # timeout: a repeat could enter twice, or come back 'already entered'
@@ -239,7 +260,7 @@ class OpiumPulsesPlatform(Platform):
         if response.status_code == 429:
             raise RetryLater("OpiumPulses просит притормозить (HTTP 429).")
         if response.status_code >= 500 or response.status_code == 403:
-            raise RetryLater(f"OpiumPulses ответил HTTP {response.status_code}.")
+            raise LinkFailed(f"OpiumPulses ответил HTTP {response.status_code}.")
         return response
 
     def skipReason(self, conf, giveaway, seen, owned=None):
@@ -271,12 +292,12 @@ class OpiumPulsesPlatform(Platform):
                 return False, NO_POINTS
         for phrase in ('already entered', 'already joined'):
             if phrase in body:
-                return False, 'уже участвуете'
+                return False, ALREADY_IN
         # Exact phrases only: the listing we are sent back to has 'ended' and
         # 'expired' in its own filter menu.
         for phrase in ('giveaway has ended', 'this giveaway ended', 'no longer available'):
             if phrase in body:
-                return False, 'раздача закончилась'
+                return False, ENDED
         for phrase in ('successfully entered', 'you have entered', 'you entered',
                        'entry confirmed', 'good luck'):
             if phrase in body:
@@ -292,13 +313,19 @@ class OpiumPulsesPlatform(Platform):
         self.keepForDebugging('enter-unconfirmed', response.text)
         return False, 'вход не подтверждён (страница сохранена в debug/)'
 
+    # The filter warning above already says why nothing is entered.
+    def idleExplained(self):
+        return getattr(self, 'filteredNow', False)
+
     def cycle(self, conf):
+        self.filteredNow = False
         response = self.get(LISTING)
         if not isSignedIn(response.text):
             raise AuthError("OpiumPulses не узнаёт cookie: войдите на сайт "
                             "и вставьте cookie заново.")
         url, html = response.url, response.text
         seen = self.manager.state.seen(self.key)
+        tries = self.manager.state.value(self.key, 'tries') or {}
         owned = self.ownedGames(conf)
         skipped = Counter()
         entered = 0
@@ -310,7 +337,9 @@ class OpiumPulsesPlatform(Platform):
             if page == 1:
                 self.info(f"Баланс: {self.balance if self.balance is not None else '?'} OP, "
                           f"раздач на странице: {len(giveaways)}")
-                if not giveaways:
+                if not giveaways and FILTERED.search(html):
+                    self.filteredOut()
+                elif not giveaways:
                     self.keepForDebugging('giveaways', html)
                     if soup.find(class_=re.compile('giveaways-page-items')) is None:
                         self.warn("Страница раздач выглядит не так, как ожидалось; "
@@ -318,9 +347,15 @@ class OpiumPulsesPlatform(Platform):
             for giveaway in giveaways:
                 if self.stopped:
                     break
+                facts = {'cost': f"{giveaway.cost} OP" if giveaway.cost else 'бесплатно',
+                         'url': giveaway.url}
+                # Entered after all (the last 'unconfirmed' entry went
+                # through): its failure counter is of no use any more.
+                if giveaway.entered and giveaway.id in tries:
+                    self.settle(giveaway.id)
                 reason = self.skipReason(conf, giveaway, seen, owned)
                 if reason:
-                    skipped[reason] += 1
+                    self.skip(skipped, reason, giveaway.name, **facts)
                     continue
                 entriesLeft, spendLeft = self.dailyLeft(conf)
                 if entriesLeft == 0 or self.closedFor(conf):
@@ -328,13 +363,24 @@ class OpiumPulsesPlatform(Platform):
                     self.logSkips(skipped)
                     return entered
                 if spendLeft is not None and giveaway.cost > spendLeft:
-                    skipped['дневной лимит трат'] += 1
+                    self.skip(skipped, 'дневной лимит трат', giveaway.name, **facts)
                     continue
-                ok, reason = self.enter(giveaway)
-                # Short of points is the one refusal worth another try later.
-                if ok or reason != NO_POINTS:
-                    seen.add(giveaway.id)
-                    self.manager.state.markSeen(self.key, giveaway.id)
+                try:
+                    ok, reason = self.enter(giveaway)
+                except LinkFailed:
+                    # A 403 or 5xx on this giveaway's own link ends the pass;
+                    # counted, so a link that always fails does not stop
+                    # every later pass at the same place. A 429 or a dropped
+                    # connection is the whole site's trouble and is not.
+                    self.failedTry(giveaway.id)
+                    raise
+                # Only the site's final answers are remembered. Short of
+                # points waits for the balance; an HTTP error or an entry
+                # the page does not confirm is tried again on later passes.
+                if ok or reason in FINAL:
+                    self.settle(giveaway.id)
+                elif reason != NO_POINTS:
+                    reason += self.retryNote(self.failedTry(giveaway.id))
                 if ok:
                     entered += 1
                     if giveaway.cost and self.balance is not None:
@@ -355,6 +401,25 @@ class OpiumPulsesPlatform(Platform):
             url, html = response.url, response.text
         self.logSkips(skipped)
         return entered
+
+    @staticmethod
+    def retryNote(tries):
+        if tries >= FAILED_TRIES:
+            return f"; не вышло уже {tries} раза, больше не пробую"
+        return "; попробую снова в следующий проход"
+
+    # The user's own filters on opiumpulses.com hide every giveaway: the farm
+    # can do nothing about it, so the user hears it, in Telegram once a day.
+    def filteredOut(self):
+        self.filteredNow = True
+        self.warn(FILTER_WARN)
+        state = self.manager.state
+        last = state.value(self.key, 'filter_notified_at') or 0
+        if time.time() - last >= FILTER_NOTIFY_EVERY:
+            state.setFlag(self.key, 'filter_notified_at', time.time())
+            self.notify("Сбросьте фильтры на странице раздач, иначе ферме нечего брать.", '⚠️',
+                        headline="Фильтры сайта прячут все раздачи",
+                        buttons=[("Открыть раздачи", f"{BASE}/giveaways")])
 
     # Rows on 'my giveaway keys'. The first look only learns what is already
     # there, so turning this on does not announce every old key at once.
@@ -378,8 +443,12 @@ class OpiumPulsesPlatform(Platform):
             known.add(ident)
             if not first:
                 self.info(f"Новый ключ на OpiumPulses: {name}")
-                self.recordWin(name, WON_KEYS)
-                self.notify(f"Выигрыш / новый ключ: {name}\n{WON_KEYS}")
+                moment = self.recordWin(name, WON_KEYS)
+                self.notify('', '🎉', headline=name, link=WON_KEYS,
+                            note="Ключ лежит в разделе «Giveaway keys» на сайте.",
+                            buttons=[("Забрать ключ", WON_KEYS),
+                                     ("Выигрыши", self.manager.panelLink('/wins'))],
+                            actions=self.manager.winActions(self.key, moment, name))
         if fresh or first:
             state.setFlag(self.key, 'won_keys', sorted(known))
         state.setFlag(self.key, 'wins_seeded')
@@ -406,10 +475,8 @@ class OpiumPulsesPlatform(Platform):
                 box.balance = balance = found
             for giveaway in giveaways:
                 reason = box.skipReason(conf, giveaway, seen, owned)
-                if reason is None and entriesLeft == 0:
-                    reason = 'дневной лимит входов'
-                if reason is None and spendLeft is not None and giveaway.cost > spendLeft:
-                    reason = 'дневной лимит трат'
+                if reason is None:
+                    reason = dailyReason(giveaway.cost, entriesLeft, spendLeft)
                 if reason is None:
                     if giveaway.cost and box.balance is not None:
                         box.balance -= giveaway.cost
@@ -427,7 +494,9 @@ class OpiumPulsesPlatform(Platform):
             response = box.get(target)
             url, html = response.url, response.text
         note = self.previewNote(conf)
-        if not items:
+        if not items and FILTERED.search(html):
+            note = (note + ' ' if note else '') + FILTER_WARN
+        elif not items:
             note = (note + ' ' if note else '') + "Сайт сейчас не показывает ни одной раздачи."
         return {'balance': balance, 'account': '', 'items': items, 'note': note}
 
@@ -437,13 +506,15 @@ class OpiumPulsesPlatform(Platform):
             if conf is None:
                 return
             self.connect(conf)
-            entered = self.cycle(conf)
-            if conf['check_wins'] and not self.stopped:
-                try:
-                    self.checkWins()
-                except RetryLater as error:
-                    self.warn(f"Выигрыши не проверены: {error}")
+            with self.keptPass():
+                entered = self.cycle(conf)
+                if conf['check_wins'] and not self.stopped:
+                    try:
+                        self.checkWins()
+                    except RetryLater as error:
+                        self.warn(f"Выигрыши не проверены: {error}")
+            self.remindExpiry()
             self.lastCycle = time.time()
-            self.info(f"Проход окончен: вошёл в {entered}")
+            self.finishPass(f"Проход окончен: вошёл в {entered}")
             if not self.wait(max(5, conf['interval'] or 120) * 60):
                 return

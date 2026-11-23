@@ -52,6 +52,7 @@ def isPinned(item, classes):
 # exact class name, which has changed before.
 LEVEL_TEXT   = re.compile(r'level\s*(\d+)', re.IGNORECASE)
 ENTRIES_TEXT = re.compile(r'([\d,]+)\s+entries', re.IGNORECASE)
+COPIES_TEXT  = re.compile(r'([\d,]+)\s+copies', re.IGNORECASE)
 
 LEVEL_CLASS  = re.compile('contributor-level')
 REGION_CLASS = re.compile('region-restricted')
@@ -71,6 +72,16 @@ class Giveaway:
     level   : int  = 0
     # Open only to certain countries.
     regionLocked : bool = False
+    # Keys given away: '(3 Copies)' next to the name; one when it says nothing.
+    copies  : int  = 1
+
+    # The chance of winning for each point spent: copies shared among the
+    # people already in, and the cost. Unknown entries rank last.
+    @property
+    def odds(self):
+        if self.entries is None:
+            return -1.0
+        return min(1.0, self.copies / (self.entries + 1)) / max(1, self.cost)
 
 
 def findEntries(item):
@@ -78,6 +89,14 @@ def findEntries(item):
     if not found:
         return None
     return int(found.group(1).replace(',', ''))
+
+
+def findCopies(tags):
+    for tag in tags:
+        found = COPIES_TEXT.search(tag.get_text())
+        if found:
+            return max(1, int(found.group(1).replace(',', '')))
+    return 1
 
 
 def findLevel(item):
@@ -129,4 +148,5 @@ def parseRow(item):
         entries = findEntries(item),
         level   = findLevel(item),
         regionLocked = isRegionLocked(item),
+        copies  = findCopies(costTags[:-1]),
     )

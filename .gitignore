@@ -21,6 +21,10 @@ dist/
 # Bot farm
 farm.json
 botfarm-state.json
+# The previous good copy of each and a broken file put aside on start: the
+# same secrets (panel password hash, session key, site cookies) as the files.
+*.bak
+*.corrupt-*
 debug/
 *.tmp
 backups/

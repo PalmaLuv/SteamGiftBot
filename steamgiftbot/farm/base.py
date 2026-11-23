@@ -7,9 +7,12 @@ import logging
 import random
 import re
 import shlex
+import socket
 import threading
 import time
 import traceback
+
+from contextlib import contextmanager
 
 from collections import deque
 from datetime import timedelta
@@ -20,7 +23,8 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
-from steamgiftbot.farm import rules
+from steamgiftbot.farm import cards, rules
+from steamgiftbot.logging_setup import RedactFilter, redactSecrets
 
 # A recent desktop Chrome. Sites behind Incapsula or Cloudflare tie their
 # cookies to the browser that earned them, so each site lets the user paste
@@ -30,10 +34,50 @@ DEFAULT_USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537
 
 TIMEOUT        = 30
 LOG_LINES      = 600
+DEBUG_LINES    = 1500
 HISTORY_LENGTH = 2000
 
 # After an unexpected failure the worker waits this long and tries again.
 ERROR_RETRY_SECONDS = 15 * 60
+
+# The first tries after a failure come sooner: at boot the network (DNS) is
+# often not up yet, and a flat quarter hour cost every site its first pass.
+# Past these steps the worker waits ERROR_RETRY_SECONDS. watch() hears only
+# of the first failure and of tries a full ERROR_RETRY_SECONDS apart (see
+# retryDelay), so the quick steps do not bring its hourly alert forward.
+# Only a site that could not be reached gets them (see networkDown): one that
+# answered 429, a Cloudflare or Incapsula check or a 5xx has asked for time,
+# and coming back within a minute is what gets a bot blocked.
+RETRY_STEPS = (60, 2 * 60, 5 * 60)
+
+# What a network that is not up (yet) looks like: no DNS, refused or dropped
+# connections, no answer in time. A RetryError (urllib3 gave up on 429s or
+# 5xx) is the site answering, so it is not among them.
+NETWORK_ERRORS = (requests.ConnectionError, requests.Timeout,
+                  ConnectionError, TimeoutError, socket.gaierror)
+
+# Waits a site picks for itself (for points, 'nothing suits') vary by this
+# share either way: the same quarter hour to the second, day and night, is a
+# robot's rhythm.
+WAIT_JITTER = 0.2
+
+# Failed tries in a row before Telegram hears about it: about an hour.
+WATCH_AFTER = 4
+
+# A site that keeps making passes and enters nothing is told once: a day of
+# passes, at least IDLE_PASSES of them, without a single entry.
+IDLE_ALERT  = 24 * 3600
+IDLE_PASSES = 6
+
+# How long a restart (a SteamGifts settings save) waits for the old worker.
+# One still busy after that (a request that has not timed out) is left to
+# finish, and the new worker starts once it has.
+RESTART_WAIT = 15
+
+# Passes a giveaway may fail for a passing reason before it is given up on,
+# and how many such counters a site keeps at most.
+FAILED_TRIES = 3
+FAILED_KEPT  = 300
 
 STOPPED  = 'stopped'
 RUNNING  = 'running'
@@ -55,6 +99,19 @@ class PlatformError(Exception):
 # Temporary trouble (site down, Cloudflare check): wait and try again.
 class RetryLater(Exception):
     pass
+
+
+# Whether `error` comes from a network that did not reach the site. Sites
+# raise RetryLater from the requests exception they caught, so the cause
+# chain tells an outage from a site that answered 'not now'.
+def networkDown(error):
+    seen = set()
+    while error is not None and id(error) not in seen:
+        if isinstance(error, NETWORK_ERRORS):
+            return True
+        seen.add(id(error))
+        error = error.__cause__
+    return False
 
 
 # One field of a settings form. kind: text, secret, int, bool, select, list,
@@ -79,6 +136,17 @@ def scheduleFields():
         field('daily_spend', 'Макс. трат за сутки', 'int', None,
               'в валюте площадки; пусто — без лимита'),
     ])
+
+
+# Why the daily limits rule out one more entry costing `cost`, given what
+# Platform.dailyLeft() says is left (None = no limit); None when it fits.
+# Shared so the real passes and the dry runs word it the same on every site.
+def dailyReason(cost, entriesLeft, spendLeft):
+    if entriesLeft == 0:
+        return 'дневной лимит входов'
+    if spendLeft is not None and cost > spendLeft:
+        return 'дневной лимит трат'
+    return None
 
 
 # Ready-made filters the sites share.
@@ -288,9 +356,8 @@ def cookiesFromJSON(text):
     return None
 
 
-def cookiesFromNetscape(text):
+def netscapeRows(text):
     """cookies.txt: domain, flag, path, secure, expiry, name, value per line."""
-    jar = {}
     for line in text.splitlines():
         line = line.strip()
         if line.startswith('#HttpOnly_'):
@@ -299,8 +366,51 @@ def cookiesFromNetscape(text):
             continue
         columns = line.split('\t')
         if len(columns) >= 7 and columns[5]:
-            jar[columns[5]] = columns[6]
-    return jar
+            yield columns
+
+
+def cookiesFromNetscape(text):
+    return {columns[5]: columns[6] for columns in netscapeRows(text)}
+
+
+def expiryTime(value):
+    """Unix seconds from an export's expiry; None for a browser-session cookie.
+    Some extensions write milliseconds."""
+    try:
+        moment = float(value)
+    except (TypeError, ValueError):
+        return None
+    if moment <= 0:
+        return None
+    return int(moment / 1000 if moment > 1e11 else moment)
+
+
+def cookieExpiries(text):
+    """Name → when it expires (Unix seconds), for the cookies whose paste says
+    so: a Cookie-Editor JSON export ('expirationDate') or cookies.txt. A cURL
+    command or a Cookie line carries no expiry and gives {}."""
+    text = (text or '').strip()
+    found = {}
+    if text[:1] in '[{':
+        try:
+            data = json.loads(text)
+        except ValueError:
+            data = None
+        if isinstance(data, dict) and isinstance(data.get('cookies'), list):
+            data = data['cookies']
+        for item in data if isinstance(data, list) else ():
+            if isinstance(item, dict) and item.get('name'):
+                moment = expiryTime(item.get('expirationDate', item.get('expires')))
+                if moment:
+                    found[str(item['name'])] = moment
+        if data is not None:
+            return found
+    if '\t' in text and pastedHeaders(text) is None:
+        for columns in netscapeRows(text):
+            moment = expiryTime(columns[4])
+            if moment:
+                found[columns[5]] = moment
+    return found
 
 
 # Accepts what people actually paste: devtools 'Copy as cURL', the 'Cookie:'
@@ -365,16 +475,49 @@ def buildSession(userAgent, cookies, domain):
     return session
 
 
+# Which site the current thread works for. SteamGiftBot logs through one
+# package logger however many SteamGifts accounts run, so each account's
+# panel log keeps only the lines its own threads wrote.
+ACTING = threading.local()
+
+
+@contextmanager
+def actingFor(platform):
+    previous = getattr(ACTING, 'platform', None)
+    ACTING.platform = platform
+    try:
+        yield
+    finally:
+        ACTING.platform = previous
+
+
+class OwnLines(logging.Filter):
+    """Passes a shared logger's record to one site: the one acting in that
+    thread, or the main account when no site is acting (the command line)."""
+
+    def __init__(self, platform):
+        super().__init__()
+        self.platform = platform
+
+    def filter(self, record):
+        owner = getattr(ACTING, 'platform', None)
+        return owner is self.platform or (owner is None and self.platform.primary)
+
+
 class RingHandler(logging.Handler):
     """Keeps the last lines of one site's log for the web panel."""
 
     def __init__(self, platform):
         super().__init__()
         self.platform = platform
+        # The panel shows these lines as they are: mask secrets in error texts
+        # here as well, not only in the file and the journal.
+        self.addFilter(RedactFilter())
 
     def emit(self, record):
         try:
-            self.platform.addLine(record.levelname, self.format(record))
+            self.platform.addLine(record.levelname, self.format(record),
+                                  getattr(record, 'details', None))
         except Exception:
             self.handleError(record)
 
@@ -388,18 +531,43 @@ class Platform:
     # For the catalog: 'points' (raffles paid with site currency) or 'free'
     # (games that are free to keep), and what connecting it takes.
     category    = 'points'
+    # What connecting the site may cost the account, said before it is
+    # connected (the panel shows it in the wizard and on 'Подключение').
+    risk        = ''
     needs       = 'cookie'
     # Fields the connect wizard asks for; the rest keep their defaults.
     connectFields = ('cookie',)
+    # Whether a second account of this site can be added. Each account is
+    # its own instance: key 'steamgifts-2', its own settings, limits, history.
+    multiAccount = True
+    # True when a win keeps the same url as the entry that won it, so luck
+    # can count only the wins of kept entries instead of a time window.
+    winUrlIsEntryUrl = False
 
-    def __init__(self, manager):
+    def __init__(self, manager, key=None):
         self.manager = manager
+        self.kind    = type(self).key
+        self.key     = key or self.kind
+        self.primary = self.key == self.kind
+        self.number  = 1 if self.primary else int(self.key.rsplit('-', 1)[1])
+        self.baseTitle = type(self).title
+        self.title     = self.baseTitle
         self.logger  = logging.getLogger(f'botfarm.{self.key}')
         self.lines   = deque(maxlen=LOG_LINES)
+        # Per-giveaway 'why skipped' lines come by the hundred; kept apart so
+        # they never push the ordinary log out.
+        self.debugLines = deque(maxlen=DEBUG_LINES)
         self.lineSeq = 0
         self.lock    = threading.Lock()
 
         self.thread  = None
+        # start, stop and restart one at a time: a restart is a stop and a
+        # start that nothing else may come between.
+        self.workerLock = threading.RLock()
+        # A start asked for while the old worker was still winding down.
+        self.restartPending = False
+        # Counts stops, so a restart waiting outside the lock sees one.
+        self.stopSeq = 0
         self.stopFlag = threading.Event()
         self.wakeFlag = threading.Event()
 
@@ -420,6 +588,18 @@ class Platform:
         handler = RingHandler(self)
         handler.setFormatter(logging.Formatter('%(message)s'))
         self.logger.addHandler(handler)
+        # DEBUG lines (why each giveaway was skipped) reach the panel's
+        # 'Подробно' view only: the file and console handlers stay at INFO.
+        self.logger.setLevel(logging.DEBUG)
+        self.passStartedAt = None
+        self.passClaims = []
+        # Failed tries in a row (site or network down); see watch().
+        self.failures = 0
+        # Where the worker is in RETRY_STEPS, and when the current try began.
+        self.retryStep = 0
+        self.triedAt = None
+        # Its own generator, so a test can put a predictable one in its place.
+        self.rng = random.Random()
 
     # ---- things a site fills in -------------------------------------------
 
@@ -477,10 +657,11 @@ class Platform:
     # Forgets the account: stops the site and drops the connection secrets.
     def disconnect(self):
         self.stop(wait=10)
-        stored = self.manager.platformSettings(self.key)
-        for name in self.connectFields:
-            stored.pop(name, None)
-        self.manager.savePlatformSettings(self.key, stored)
+        with self.manager.lock:
+            stored = self.manager.platformSettings(self.key)
+            for name in self.connectFields:
+                stored.pop(name, None)
+            self.manager.savePlatformSettings(self.key, stored)
         self.manager.setAutostart(self.key, False)
 
     # The connection values merged over the saved settings, for check().
@@ -505,9 +686,12 @@ class Platform:
     def publicSettings(self):
         return publicValues(self.schema(), self.settings())
 
+    # Read, change and save under the farm's lock, so a change made at the
+    # same moment (the panel and a Telegram command) is not written over.
     def updateSettings(self, incoming):
-        current = applySettings(self.schema(), self.settings(), incoming)
-        self.manager.savePlatformSettings(self.key, current)
+        with self.manager.lock:
+            current = applySettings(self.schema(), self.settings(), incoming)
+            self.manager.savePlatformSettings(self.key, current)
         return current
 
     # The settings the schedule and the daily limits are read from.
@@ -526,41 +710,192 @@ class Platform:
             raise ValueError("у этой площадки нет такого списка")
         if not value:
             raise ValueError("пустое название")
-        current = list(self.settings().get(name) or [])
-        if any(item.lower() == value.lower() for item in current):
-            return False
-        self.updateSettings({name: current + [value]})
+        # One lock over the read and the write: two words added at once
+        # used to each start from the same list, and the second save dropped
+        # the first word.
+        with self.manager.lock:
+            current = list(self.settings().get(name) or [])
+            if any(item.lower() == value.lower() for item in current):
+                return False
+            self.updateSettings({name: current + [value]})
         return True
 
     # ---- log and history ---------------------------------------------------
 
-    def addLine(self, level, text):
+    def addLine(self, level, text, details=None, moment=None, restored=False):
         with self.lock:
             self.lineSeq += 1
-            self.lines.append({'id': self.lineSeq, 'time': time.time(),
-                               'level': level, 'text': text})
+            line = {'id': self.lineSeq, 'time': moment or time.time(), 'level': level,
+                    'text': text}
+            if details:
+                line['details'] = details
+            if restored:
+                line['restored'] = True
+            (self.debugLines if level == 'DEBUG' else self.lines).append(line)
+
+    # Adds facts to the newest line that mentions `name` (the entry line a
+    # site has just written), so the panel can show them under it. Falls back
+    # to a line of its own when there is none.
+    def attachDetails(self, name, details):
+        with self.lock:
+            for line in list(self.lines)[-6:][::-1]:
+                if name and name in line['text'] and 'details' not in line:
+                    line['details'] = details
+                    return
+        self.logger.debug(f"Подробности: {name}", extra={'details': details})
 
     def logLines(self, after=0):
         with self.lock:
-            return [line for line in self.lines if line['id'] > after]
+            lines = [line for line in self.lines if line['id'] > after]
+            lines += [line for line in self.debugLines if line['id'] > after]
+        return sorted(lines, key=lambda line: line['id'])
 
-    def info(self, text):
-        self.logger.info(text)
+    def info(self, text, **details):
+        self.logger.info(text, extra={'details': details} if details else None)
+
+    # Only for the panel's 'Подробно' view: one line per skipped giveaway.
+    def debug(self, text, **details):
+        self.logger.debug(text, extra={'details': details} if details else None)
+
+    # Counts a skipped giveaway for the pass summary and says why, by name,
+    # in the 'Подробно' view.
+    def skip(self, counter, reason, name, **details):
+        counter[reason] += 1
+        self.debug(f"Пропуск: {name} — {reason}",
+                   **{key: value for key, value in details.items() if value not in (None, '')})
+
+    # 'Проход окончен …' with how long the pass took.
+    def finishPass(self, text):
+        took = ''
+        if self.passStartedAt:
+            seconds = int(time.time() - self.passStartedAt)
+            took = f" · за {seconds // 60} мин {seconds % 60} с" if seconds >= 60 \
+                else f" · за {seconds} с"
+        started, self.passStartedAt = self.passStartedAt, None
+        self.info(text + took)
+        self.recovered()
+        self.watchIdle(started)
+
+    # Counts passes in a row that entered nothing (see IDLE_ALERT). Free
+    # sources are left out: most of their passes find nothing new, and that
+    # is how they work.
+    def watchIdle(self, started):
+        if self.category != 'points' or started is None:
+            return
+        state = self.manager.state
+        now = time.time()
+        idle = dict(state.value(self.key, 'idle') or {})
+        if state.usage(self.key, now - started + 1)[0]:
+            if idle:
+                state.setFlag(self.key, 'idle', {})
+            return
+        idle['from'] = idle.get('from') or started
+        idle['passes'] = idle.get('passes', 0) + 1
+        due = (not idle.get('told') and idle['passes'] >= IDLE_PASSES
+               and now - idle['from'] >= IDLE_ALERT and not self.idleExplained())
+        if due:
+            idle['told'] = True
+        state.setFlag(self.key, 'idle', idle)
+        if due:
+            self.tellIdle(now - idle['from'], idle['passes'])
+
+    # True when the site has already said why nothing is entered.
+    def idleExplained(self):
+        return False
+
+    def tellIdle(self, seconds, passes):
+        lines = []
+        if self.waitReason:
+            lines.append(f"Причина ожидания: {self.waitReason}")
+        if self.balance is not None:
+            lines.append(f"Баланс: {self.balance} {self.unit}")
+        self.notify('\n'.join(lines), '⚠️', title='СТОИТ БЕЗ ВХОДОВ',
+                    headline=f"Ни одного входа за {int(seconds // 3600)} ч, проходов: {passes}",
+                    note="Проходы идут, но ферма ни во что не входит: проверьте баланс, "
+                         "резерв и фильтры. «Что возьмёт» покажет, почему раздачи пропускаются.",
+                    buttons=[("Что возьмёт", self.manager.panelLink(f'/site/{self.key}/preview')),
+                             ("Настройки", self.manager.panelLink(f'/site/{self.key}/settings'))])
+
+    # A pass went through: if the site had been failing long enough to be
+    # reported, say it works again.
+    def recovered(self):
+        if self.failures >= WATCH_AFTER:
+            self.notify('', '✅', title='СНОВА РАБОТАЕТ', headline="Проход прошёл без ошибок.")
+        self.failures = 0
+
+    # A failed try. Said once, after about an hour of them; a single blip is
+    # not worth a message.
+    def watch(self, error):
+        self.failures += 1
+        if self.failures == WATCH_AFTER:
+            minutes = WATCH_AFTER * ERROR_RETRY_SECONDS // 60
+            self.notify(str(error), '⚠️', title='НЕ РАБОТАЕТ',
+                        headline=f"Не работает уже {minutes} мин",
+                        note=f"Ферма пробует снова каждые {ERROR_RETRY_SECONDS // 60} мин.",
+                        buttons=[("Журнал", self.manager.panelLink('/journal/log'))])
+
+    # How long to wait before trying again after a failure, counting it for
+    # watch() on the way. A new run of trouble starts with the quick steps:
+    # after a good pass (recovered() zeroes the failures, as start() does) or
+    # after a try that went on long enough to have been working. Only a
+    # `quick` failure (the site was not reached) takes them; any other one
+    # waits the full time and counts, and so does the rest of its run.
+    def retryDelay(self, error, quick=False):
+        if self.failures == 0 or (self.triedAt is not None
+                                  and time.time() - self.triedAt >= ERROR_RETRY_SECONDS):
+            self.retryStep = 0
+        if not quick:
+            self.retryStep = max(self.retryStep, len(RETRY_STEPS) + 1)
+        step = self.retryStep
+        self.retryStep += 1
+        if step == 0 or step > len(RETRY_STEPS):
+            self.watch(error)
+        return RETRY_STEPS[step] if step < len(RETRY_STEPS) else ERROR_RETRY_SECONDS
 
     def warn(self, text):
         self.logger.warning(text)
 
-    def recordEntry(self, name, cost, url=''):
+    def recordEntry(self, name, cost, url='', **extra):
         self.sessionEntered += 1
         self.sessionSpent   += cost or 0
+        # What else the site knew (participants, priority) stays in the history.
+        kept = {key: value for key, value in extra.items() if value not in (None, '')}
         self.manager.state.addEntry(self.key, {'time': time.time(), 'name': name,
-                                               'cost': cost, 'url': url})
+                                               'cost': cost, 'url': url, **kept})
+        if not cost:
+            self.passClaims.append(name)
+        details = {'cost': f"{cost or 0} {self.unit}" if cost else 'бесплатно',
+                   'balance': None if self.balance is None else f"{self.balance} {self.unit}",
+                   'today': self.manager.state.usage(self.key)[0], 'url': url, **extra}
+        self.attachDetails(name, {key: value for key, value in details.items()
+                                  if value not in (None, '')})
 
+    # Returns the win's time, which tells it apart later (setWinKey and the like).
     def recordWin(self, name, url=''):
-        self.manager.state.addWin(self.key, {'time': time.time(), 'name': name, 'url': url})
+        moment = time.time()
+        self.manager.state.addWin(self.key, {'time': moment, 'name': name, 'url': url})
+        return moment
 
-    def notify(self, text):
-        self.manager.notify(f"[{self.title}] {text}")
+    # One look for every message a site sends: a card (see cards.py) with
+    # this site's name and code. text gives the plain lines under the headline.
+    def notify(self, text='', icon='ℹ️', title='', headline='', link='', note='',
+               buttons=None, actions=None):
+        self.manager.notify(card=cards.Card(
+            icon, title, self.title, self.key, headline, link,
+            [line for line in (text or '').split('\n') if line], note=note,
+            buttons=list(buttons or []), actions=list(actions or [])))
+
+    # Free games taken this pass, in one message rather than one per game.
+    def announceClaims(self):
+        names = self.passClaims
+        self.passClaims = []
+        if not names:
+            return
+        lines = [f"• {name}" for name in names[:10]]
+        if len(names) > 10:
+            lines.append(f"…и ещё {len(names) - 10}")
+        self.notify('\n'.join(lines), '🎁', headline=f"−100% · забрано игр: {len(names)}",
+                    buttons=[("Площадка", self.manager.panelLink(f'/site/{self.key}'))])
 
     # ---- rules every site shares -------------------------------------------
 
@@ -581,6 +916,7 @@ class Platform:
         return None
 
     # (entries, spend) still allowed in the last 24 hours; None = no limit.
+    # dailyReason() words what they rule out.
     def dailyLeft(self, conf):
         count, spent, _oldest = self.manager.state.usage(self.key)
         entries = conf.get('daily_entries')
@@ -603,6 +939,35 @@ class Platform:
         windows = rules.parseHours(conf.get('active_hours') or '')
         return rules.secondsUntilOpen(windows, self.manager.localNow())
 
+    # ---- giveaways that failed for now ---------------------------------------
+
+    # A site's final answer (entered, already in, ended): the giveaway is
+    # remembered and never asked about again.
+    def settle(self, ident):
+        state = self.manager.state
+        tries = state.value(self.key, 'tries') or {}
+        if ident in tries:
+            state.setFlag(self.key, 'tries', {k: v for k, v in tries.items() if k != ident})
+        state.markSeen(self.key, ident)
+
+    # A failure that may well pass next time (an HTTP error, an unconfirmed
+    # entry, a claim that did not go through). Marking it seen at once would
+    # bury the giveaway for good over one hiccup, so it is retried on later
+    # passes; after FAILED_TRIES failures it is settled after all, so one that
+    # always fails does not cost a request every pass. Returns the tries so far.
+    def failedTry(self, ident):
+        state = self.manager.state
+        tries = dict(state.value(self.key, 'tries') or {})
+        count = tries.pop(ident, 0) + 1
+        if count >= FAILED_TRIES:
+            state.setFlag(self.key, 'tries', tries)
+            state.markSeen(self.key, ident)
+            return count
+        tries[ident] = count
+        # Newest last; the oldest counters go first, the flags stay small.
+        state.setFlag(self.key, 'tries', dict(list(tries.items())[-FAILED_KEPT:]))
+        return count
+
     def gate(self):
         """Waits out the working hours and the daily limits before a pass and
         returns the settings to run it with; None once stopped. 'Run now'
@@ -611,6 +976,7 @@ class Platform:
             conf = self.settings()
             if self.forced:
                 self.forced = False
+                self.passStartedAt = time.time()
                 return conf
             closed = self.closedFor(conf)
             if closed:
@@ -626,6 +992,7 @@ class Platform:
                 if not self.wait(wait, reason=f"Дневной лимит исчерпан, сброс в {resets:%H:%M}"):
                     return None
                 continue
+            self.passStartedAt = time.time()
             return conf
         return None
 
@@ -641,29 +1008,84 @@ class Platform:
         return self.thread is not None and self.thread.is_alive()
 
     def start(self):
-        if self.running:
-            return False
-        self.stopFlag.clear()
-        self.wakeFlag.clear()
-        self.lastError = ''
-        self.state     = RUNNING
-        self.startedAt = time.time()
-        self.sessionEntered = 0
-        self.sessionSpent   = 0
-        self.forced = False
-        self.thread = threading.Thread(target=self.loop, name=f'farm-{self.key}', daemon=True)
-        self.thread.start()
-        return True
+        with self.workerLock:
+            if self.running:
+                if not self.stopped:
+                    return False
+                # Stopped, but the old worker has not ended yet: refusing here
+                # used to leave the site stopped. It starts once that one ends.
+                self.startWhenEnded()
+                return True
+            self.stopFlag.clear()
+            self.wakeFlag.clear()
+            self.lastError = ''
+            self.state     = RUNNING
+            self.startedAt = time.time()
+            self.failures = 0
+            self.passClaims = []
+            self.sessionEntered = 0
+            self.sessionSpent   = 0
+            self.forced = False
+            self.thread = threading.Thread(target=self.loop, name=f'farm-{self.key}',
+                                           daemon=True)
+            self.thread.start()
+            return True
+
+    def startWhenEnded(self):
+        if self.restartPending:
+            return
+        self.restartPending = True
+        old = self.thread
+
+        def later():
+            old.join()
+            with self.workerLock:
+                # A stop pressed meanwhile takes the start back.
+                if self.restartPending:
+                    self.restartPending = False
+                    self.start()
+
+        threading.Thread(target=later, name=f'farm-{self.key}-restart', daemon=True).start()
 
     def stop(self, wait=0):
-        self.stopFlag.set()
-        self.wakeFlag.set()
-        try:
-            self.onStop()
-        except Exception as error:
-            self.warn(f"Ошибка при остановке: {error}")
-        if wait and self.thread is not None:
-            self.thread.join(wait)
+        with self.workerLock:
+            self.restartPending = False
+            self.stopSeq += 1
+            self.stopFlag.set()
+            self.wakeFlag.set()
+            thread = self.thread
+            try:
+                self.onStop()
+            except Exception as error:
+                self.warn(f"Ошибка при остановке: {error}")
+        if wait and thread is not None and thread is not threading.current_thread():
+            thread.join(wait)
+
+    # Stop and start again, for settings read once per start. With
+    # onlyIfRunning a stopped site stays stopped. True when it runs again
+    # (or will, once the old worker ends).
+    def restart(self, wait=None, onlyIfRunning=False):
+        wait = RESTART_WAIT if wait is None else wait
+        with self.workerLock:
+            if onlyIfRunning and not (self.running and
+                                      (not self.stopped or self.restartPending)):
+                return False
+            self.stop()
+            old = self.thread
+            if not wait or old is None or old is threading.current_thread():
+                return self.start()
+            # Pending while we wait, so a Start meanwhile does not queue one more.
+            self.restartPending = True
+            seq = self.stopSeq
+        # The join runs without the lock: a Stop (panel, Telegram, shutdown)
+        # pressed meanwhile answers at once instead of waiting it out.
+        old.join(wait)
+        with self.workerLock:
+            if self.stopSeq != seq:
+                # Stopped meanwhile (cancelled), or a newer restart took over.
+                return self.restartPending or (self.running and not self.stopped)
+            self.restartPending = False
+            return self.start()
 
     def wakeUp(self):
         self.forced = True
@@ -696,44 +1118,61 @@ class Platform:
             self.state = RUNNING
         return not self.stopped
 
+    # `seconds`, give or take WAIT_JITTER of it.
+    def jittered(self, seconds):
+        return max(0, round(seconds * self.rng.uniform(1 - WAIT_JITTER, 1 + WAIT_JITTER)))
+
     # A short human pause between two entries.
     def pause(self, low=3, high=7):
         return self.wait(random.uniform(low, high), sleeping=False)
 
     def loop(self):
+        ACTING.platform = self
         self.info("Запущено")
         while not self.stopped:
             try:
                 self.state = RUNNING
+                self.triedAt = time.time()
                 self.run()
                 break
             except AuthError as error:
                 self.state = AUTH
                 self.lastError = str(error)
                 self.warn(f"Нужна новая авторизация: {error}")
-                self.notify(f"Сессия больше не действует, ферма остановила площадку.\n{error}")
+                self.notify(str(error), '🔑', headline="Сессия больше не действует",
+                            note="Площадка остановлена до нового подключения.",
+                            buttons=[("Подключить заново",
+                                      self.manager.panelLink(f'/connect/{self.key}'))])
                 return
             except PlatformError as error:
                 self.state = ERROR
                 self.lastError = str(error)
                 self.warn(f"Площадка остановлена: {error}")
-                self.notify(f"Площадка остановлена: {error}")
+                self.notify(str(error), '⛔', headline="Продолжать нельзя",
+                            buttons=[("Открыть площадку",
+                                      self.manager.panelLink(f'/site/{self.key}'))])
                 return
             except RetryLater as error:
                 self.state = ERROR
                 self.lastError = str(error)
-                self.warn(f"{error} Повтор через {ERROR_RETRY_SECONDS // 60} мин.")
-                if not self.wait(ERROR_RETRY_SECONDS):
+                delay = self.retryDelay(error, quick=networkDown(error))
+                self.warn(f"{error} Повтор через {delay // 60} мин.")
+                if not self.wait(delay):
                     break
                 self.lastError = ''
             except Exception as error:
                 self.state = ERROR
                 self.lastError = f"{type(error).__name__}: {error}"
                 self.logger.error(f"Неожиданная ошибка: {self.lastError}")
+                # A bug or a connection a site did not catch: quick, but not
+                # when requests carries the site's own answer (urllib3 gave
+                # up on its 429s, an HTTP error status).
+                delay = self.retryDelay(self.lastError, quick=networkDown(error) or not
+                                        isinstance(error, requests.RequestException))
                 self.logger.debug(traceback.format_exc())
                 for line in traceback.format_exc().strip().splitlines()[-4:]:
                     self.logger.error("  " + line)
-                if not self.wait(ERROR_RETRY_SECONDS):
+                if not self.wait(delay):
                     break
                 self.lastError = ''
         self.state = STOPPED
@@ -761,7 +1200,8 @@ class Platform:
         if not self.previewLock.acquire(blocking=False):
             raise ValueError("пробный проход уже идёт")
         try:
-            return self.preview()
+            with actingFor(self):
+                return self.preview()
         finally:
             self.previewLock.release()
 
@@ -786,16 +1226,26 @@ class Platform:
             'opensAt': opens,
         }
 
+    # Called when an added account is removed for good, after disconnect().
+    def forget(self):
+        pass
+
     def snapshot(self):
         return {
             'key': self.key, 'title': self.title, 'url': self.siteURL,
+            'kind': self.kind, 'baseTitle': self.baseTitle, 'primary': self.primary,
+            'multi': self.multiAccount,
+            'label': self.manager.platformEntry(self.key).get('label', ''),
+            'keyBot': self.manager.keyBotFor(self.key),
+            'profile': self.manager.profileOf(self.key),
             'description': self.description,
-            'state': self.state, 'error': self.lastError,
+            'state': self.state, 'error': redactSecrets(self.lastError),
             'balance': self.balance, 'account': self.account,
             'startedAt': self.startedAt, 'lastCycle': self.lastCycle,
             'nextCycle': self.nextCycle, 'reason': self.waitReason,
             'limits': self.limits(), 'lists': self.quickLists(),
             'unit': self.unit, 'category': self.category, 'needs': self.needs,
+            'risk': self.risk,
             'sessionEntered': self.sessionEntered, 'sessionSpent': self.sessionSpent,
             'autostart': self.manager.autostart(self.key),
             'totals': self.manager.state.totals(self.key),

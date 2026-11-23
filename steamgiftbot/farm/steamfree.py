@@ -42,9 +42,14 @@ class SteamFreePlatform(Platform):
     category    = 'free'
     needs       = 'asf'
     connectFields = ()
+    # Several Steam accounts are several ASF bots, all served by this one card.
+    multiAccount = False
 
     def schema(self):
         return grouped('Что брать', [
+            field('bots', 'Боты ASF', 'list', [],
+                  'каждый бот ASF — отдельная учётка Steam; имена через запятую, '
+                  'пусто — все боты'),
             field('per_pass', 'Не больше за проход', 'int', PER_PASS,
                   'Steam ограничивает число бесплатных лицензий в час'),
             field('blacklist', 'Чёрный список', 'list', [], 'слова через запятую'),
@@ -83,9 +88,7 @@ class SteamFreePlatform(Platform):
 
     def disconnect(self):
         self.stop(wait=10)
-        self.manager.platformEntry(self.key)['connected'] = False
-        self.manager.setAutostart(self.key, False)
-        self.manager.saveFarm()
+        self.manager.updatePlatformEntry(self.key, connected=False, autostart=False)
 
     # ---- the work ---------------------------------------------------------------
 
@@ -147,7 +150,8 @@ class SteamFreePlatform(Platform):
         if not names:
             self.info("Новых бесплатных игр нет.")
             return 0
-        results = self.manager.asf.addLicenses(wanted['app'], wanted['sub'])
+        results = self.manager.asf.addLicenses(wanted['app'], wanted['sub'],
+                                               bots=conf.get('bots') or ())
         added = 0
         for item, name in names.items():
             verdict, words = results.get(item, ('retry', 'ASF не ответил'))
@@ -168,7 +172,8 @@ class SteamFreePlatform(Platform):
                 return
             try:
                 added = self.cycle(conf)
-                self.info(f"Проход окончен: добавлено {added}")
+                self.finishPass(f"Проход окончен: добавлено {added}")
+                self.announceClaims()
             except ValueError as error:
                 self.warn(str(error))
             self.lastCycle = time.time()

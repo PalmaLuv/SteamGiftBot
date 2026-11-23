@@ -13,11 +13,14 @@ from steamgiftbot.errors import SessionExpired, SteamGiftError
 
 
 class WinWatcher:
-    def __init__(self, provider, config, state, stats):
+    # tell(win) sends the message for one new win; by default the configured
+    # Telegram or Discord gets the bot's announcement.
+    def __init__(self, provider, config, state, stats, tell=None):
         self.provider = provider
         self.config   = config
         self.state    = state
         self.stats    = stats
+        self.tell     = tell or self.send
         # A dry run looks but neither sends nor writes anything down.
         self.dryRun   = bool(getattr(config, 'dry_run', False))
 
@@ -53,13 +56,16 @@ class WinWatcher:
         for win in fresh:
             log(f"You won {win.name}! {win.url}", "green")
             self.state.remember(win.code)
-            if notify.isConfigured(self.config):
-                for problem in notify.send(self.config, wins.announcement(win)):
-                    log(f"Could not deliver the win notification. {problem}", "yellow")
+            self.tell(win)
 
         self.state.save()
         self.stats.wins(len(fresh))
         return fresh
+
+    def send(self, win):
+        if notify.isConfigured(self.config):
+            for problem in notify.send(self.config, wins.announcement(win)):
+                log(f"Could not deliver the win notification. {problem}", "yellow")
 
     # With nothing remembered, every win on the page would look new, and a first
     # run would message the user about games won months ago. Those are written

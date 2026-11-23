@@ -116,10 +116,15 @@ def sendDiscord(webhook, text, session=None):
                        timeout=TIMEOUT), 'Discord')
 
 
-def sendTelegram(token, chat, text, session=None):
+def sendTelegram(token, chat, text, session=None, html=False, markup=None):
     poster = session.post if session else requests.post
-    checkAnswer(poster(TELEGRAM_API.format(token=token),
-                       json={'chat_id': chat, 'text': text}, timeout=TIMEOUT), 'Telegram')
+    payload = {'chat_id': chat, 'text': text}
+    if html:
+        payload.update(parse_mode='HTML', disable_web_page_preview=True)
+    if markup:
+        payload['reply_markup'] = markup
+    checkAnswer(poster(TELEGRAM_API.format(token=token), json=payload, timeout=TIMEOUT),
+                'Telegram')
 
 
 # Returns the list of problems met while delivering, empty when all went well.
@@ -128,19 +133,41 @@ def describeProblem(service, error):
     return str(error) if isinstance(error, NotifyError) else f"{service}: {error}"
 
 
-def send(config, text, session=None):
+# The token sits in the API's path, so an error text could carry it.
+def hideToken(text, token):
+    return str(text).replace(token, '<token>') if token else str(text)
+
+
+# card: an optional farm card (steamgiftbot.farm.cards.Card). Telegram then
+# gets its HTML and buttons, Discord its plain text.
+def send(config, text, session=None, card=None):
     problems = []
 
     if config.discord_webhook:
         try:
-            sendDiscord(config.discord_webhook, text, session)
+            sendDiscord(config.discord_webhook, card.plain() if card else text, session)
         except (requests.RequestException, NotifyError) as error:
             problems.append(describeProblem('Discord', error))
 
     if telegramReady(config):
+        token = config.telegram_token
         try:
-            sendTelegram(config.telegram_token, config.telegram_chat, text, session)
+            if card is None:
+                sendTelegram(token, config.telegram_chat, text, session)
+            else:
+                try:
+                    sendTelegram(token, config.telegram_chat, card.html(), session,
+                                 html=True, markup=card.keyboard())
+                except NotifyError:
+                    if not card.buttons:
+                        raise
+                    # A button Telegram will not take (a LAN address, say):
+                    # the same card with the links written out (the farm's
+                    # own buttons, which carry no address, stay).
+                    bare = card.withoutButtons()
+                    sendTelegram(token, config.telegram_chat, bare.html(), session, html=True,
+                                 markup=bare.keyboard())
         except (requests.RequestException, NotifyError) as error:
-            problems.append(describeProblem('Telegram', error))
+            problems.append(hideToken(describeProblem('Telegram', error), token))
 
     return problems

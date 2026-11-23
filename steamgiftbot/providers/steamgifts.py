@@ -68,6 +68,12 @@ class SteamGiftsProvider:
 
         self.points    = 0
         self.xsrfToken = None
+        # The account's name, read from the header by refresh().
+        self.username  = ''
+        # The exception behind the last page that did not load, if any.
+        self.lastNetworkError = None
+        # The last won page read, for whoever embeds the bot to take keys from.
+        self.wonPage   = None
 
         # Built once, up front: every request below goes through it.
         self.session = self.requestsRetrySession()
@@ -92,10 +98,12 @@ class SteamGiftsProvider:
         return session
 
     def getSoup(self, url):
+        self.lastNetworkError = None
         try:
             response = self.session.get(url, timeout=TIMEOUT)
         except requests.RequestException as error:
             log(f"Network error while loading the page: {error}", "red")
+            self.lastNetworkError = error
             return None
 
         if response.status_code != 200:
@@ -109,7 +117,9 @@ class SteamGiftsProvider:
     def refresh(self):
         soup = self.getSoup(self.baseURL)
         if soup is None:
-            raise SteamGiftError("Could not reach SteamGifts.")
+            # Chained to the network error, if that was it: the farm retries a
+            # network that is not up sooner than a site that answered badly.
+            raise SteamGiftError("Could not reach SteamGifts.") from self.lastNetworkError
 
         token  = soup.find('input', {'name': 'xsrf_token'})
         points = soup.find('span', {'class': 'nav__points'})
@@ -118,6 +128,10 @@ class SteamGiftsProvider:
 
         self.xsrfToken = token['value']
         self.points    = int(points.text.replace(',', '').strip())
+        # The header's avatar links to /user/<name>; only the farm needs it, to
+        # tell accounts apart, so a changed layout just leaves it empty.
+        avatar = soup.select_one('a.nav__avatar-outer-wrap[href^="/user/"]')
+        self.username = avatar['href'].split('/user/', 1)[1].strip('/') if avatar else ''
 
     def listGiveaways(self, page):
         filtered = self.filterURL[self.type] % page
@@ -172,6 +186,7 @@ class SteamGiftsProvider:
 
     def fetchWins(self):
         soup = self.getSoup(self.baseURL + wins.WON_PATH)
+        self.wonPage = soup
         if soup is None:
             return [], True
         return wins.parseWonPage(soup, self.baseURL)

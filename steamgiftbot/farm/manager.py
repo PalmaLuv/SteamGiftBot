@@ -6,7 +6,9 @@ import hmac
 import json
 import logging
 import os
+import re
 import secrets
+import shutil
 import threading
 import time
 
@@ -14,13 +16,20 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from steamgiftbot import notify
+from steamgiftbot import logging_setup, notify
 from steamgiftbot import settings as sgSettings
-from steamgiftbot.farm import rules
-from steamgiftbot.farm.base import HISTORY_LENGTH, applySettings, field, grouped, publicValues
+from steamgiftbot.farm import asf as asfModule
+from steamgiftbot.farm import cards, rules, support
+from steamgiftbot.farm.asf import normalizeKey, steamKeys
+from steamgiftbot.farm.base import (HISTORY_LENGTH, actingFor, applySettings, field, grouped,
+                                    publicValues)
 
 FARM_FILE  = 'farm.json'
 STATE_FILE = 'botfarm-state.json'
+# Added accounts keep their own files (SteamGifts: config.ini and state) here.
+ACCOUNTS_DIR = 'accounts'
+MAIN_PROFILE = 'main'
+ACCOUNT_KEY  = re.compile(r'^[a-z]+-[0-9]{1,3}$')
 
 # Remembered giveaway ids per site; old ones fall off the end.
 SEEN_LIMIT = 5000
@@ -31,8 +40,45 @@ RECENT_SECONDS = 86400
 # Days of per-day counters kept for the chart.
 DAILY_DAYS = 120
 
+# The command line bot's log lines (log/log-*.log), in the server's local time.
+CLI_LINE    = re.compile(r'^\[INFO:(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)[,.]\d+\] ?(.*)$')
+CLI_ENTERED = 'One more game '
+# Its log files are deleted once this old (after the history import).
+CLI_LOG_DAYS = 30
+
+# The panel's dictionaries, also used for the Telegram messages.
+I18N_DIR = Path(__file__).resolve().parent / 'static' / 'i18n'
+CLI_WON     = re.compile(r'^You won (.+)! (https://\S+)$')
+
+# The panel's language and look: name -> (default, check).
+UI_LANGUAGES = ('ru', 'en', 'uk')
+UI_THEMES    = ('store', 'graphite', 'midnight', 'light')
+UI_FIELDS = {
+    'lang':   ('ru', lambda v: v in UI_LANGUAGES),
+    'theme':  ('store', lambda v: v in UI_THEMES),
+    'accent': ('#1a9fff', lambda v: isinstance(v, str) and re.fullmatch(r'#[0-9a-fA-F]{6}', v)),
+    'radius': ('square', lambda v: v in ('square', 'round')),
+    'scale':  (100, lambda v: v in (90, 100, 110, 125)),
+    'glow':   (True, lambda v: isinstance(v, bool)),
+    'motion': (True, lambda v: isinstance(v, bool)),
+    # The first-run tour has been seen (or skipped) on some device.
+    'tour':   (False, lambda v: isinstance(v, bool)),
+    # A quiet line asking to support the project: under the wins in the
+    # panel, and under a win in Telegram at most once a week.
+    'support': (True, lambda v: isinstance(v, bool)),
+}
+
+# A line of log/botfarm.log: '[INFO 2026-11-20 21:11:31,975 botfarm.indiegala] text'.
+FARM_LINE = re.compile(r'^\[(\w+) (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)[,.]\d+ '
+                       r'botfarm\.([\w-]+)\] (.*)$')
+
 # What the user has done with a key they won.
 WIN_STATUSES = ('', 'received', 'activated')
+
+# A key Steam or ASF could not take right now is tried again this often, at
+# most this many times (Steam's limit on activations lasts about an hour).
+REDEEM_EVERY = 1800
+REDEEM_TRIES = 6
 
 log = logging.getLogger('botfarm')
 
@@ -87,20 +133,131 @@ FARM_FIELDS = (
 CONFIG_FIELDS = ('telegram_token', 'telegram_chat', 'telegram_enabled')
 
 
+def backupPath(path):
+    path = Path(path)
+    return path.with_suffix(path.suffix + '.bak')
+
+
+# A power cut right after os.replace used to leave an empty or half-written
+# farm.json behind (the data was still in the page cache), and the farm then
+# started from nothing. Now the new text is on disk before it takes the
+# name, the rename itself is on disk after the directory is synced, and the
+# previous file stays as <name>.bak for readJSON to fall back on.
 def writePrivate(path, data):
     path = Path(path)
+    text = json.dumps(data, indent=2, ensure_ascii=False)
     temporary = path.with_suffix(path.suffix + '.tmp')
-    temporary.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
     if os.name != 'nt':
         os.chmod(temporary, 0o600)
+    if path.exists():
+        keepBackup(path)
     os.replace(temporary, path)
+    syncDirectory(path.parent)
 
 
-def readJSON(path, default):
+# The current file becomes <name>.bak without a moment when neither exists:
+# a hard link to it, renamed over the old backup. Where links are not
+# supported, a copy.
+def keepBackup(path):
+    backup = backupPath(path)
+    staging = path.with_suffix(path.suffix + '.bak.tmp')
     try:
-        return json.loads(Path(path).read_text(encoding='utf-8'))
-    except (OSError, ValueError):
+        staging.unlink(missing_ok=True)
+        os.link(path, staging)
+    except OSError:
+        shutil.copyfile(path, staging)
+    os.replace(staging, backup)
+
+
+def syncDirectory(directory):
+    if os.name == 'nt':
+        return
+    try:
+        descriptor = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    except OSError:
+        pass
+    finally:
+        os.close(descriptor)
+
+
+def parseJSON(path, default):
+    data = json.loads(Path(path).read_text(encoding='utf-8'))
+    # A file holding a list or null is as broken as half a file.
+    if not isinstance(data, type(default)):
+        raise ValueError(f"неверный тип данных: {type(data).__name__}")
+    return data
+
+
+class DataFileError(RuntimeError):
+    """A data file is there but cannot be read (no permission, a disk error)."""
+
+
+# <name>.corrupt-<date>-<time>-<ms>, and never over an earlier one: two quick
+# restarts within one second used to put the second broken file over the
+# first.
+def corruptPath(path):
+    moment = time.time()
+    stamp = (time.strftime('%Y%m%d-%H%M%S', time.localtime(moment))
+             + f"-{int(moment * 1000) % 1000:03d}")
+    aside = path.with_name(f"{path.name}.corrupt-{stamp}")
+    number = 1
+    while aside.exists():
+        number += 1
+        aside = path.with_name(f"{path.name}.corrupt-{stamp}-{number}")
+    return aside
+
+
+# A broken file used to be read as empty, and the next save wrote the empty
+# data over it: every setting and the whole history gone. Now the broken
+# file is put aside as <name>.corrupt-<time> and the last good copy
+# (<name>.bak) is used instead.
+def readJSON(path, default):
+    path = Path(path)
+    try:
+        return parseJSON(path, default)
+    except FileNotFoundError:
         return copy.deepcopy(default)
+    except OSError as error:
+        # The file is there and may be fine (chmod, a disk that came back):
+        # starting empty would move it to .bak on the first save and write
+        # the empty data over that on the second.
+        raise DataFileError(f"Не удалось прочитать {path}: {error}. Ферма не запущена, "
+                            "чтобы не затереть данные; исправьте доступ к файлу и "
+                            "запустите снова.") from error
+    except ValueError as error:
+        problem = error
+    aside = corruptPath(path)
+    try:
+        os.replace(path, aside)
+    except OSError as error:
+        log.warning(f"Не удалось отложить повреждённый файл: {path}: {error}")
+    backup = backupPath(path)
+    try:
+        data = parseJSON(backup, default)
+    except (OSError, ValueError):
+        log.warning("Повреждённый файл отложен, резервной копии нет, ферма начнёт с пустого: "
+                    f"{path} → {aside.name} ({problem})")
+        return copy.deepcopy(default)
+    log.warning("Повреждённый файл отложен, данные взяты из резервной копии: "
+                f"{path} → {aside.name}, {backup.name} ({problem})")
+    # Back under its own name at once, or a restart before the next save
+    # would find no file and start empty. (When the broken file could not be
+    # moved, saving would only make it the backup.)
+    if not path.exists():
+        try:
+            writePrivate(path, data)
+        except OSError as error:
+            log.warning(f"Не удалось сохранить {path}: {error}")
+    return data
 
 
 def hashPassword(password, salt=None):
@@ -114,6 +271,59 @@ def checkPassword(password, stored):
         return False
     attempt = hashPassword(password, stored['salt'])
     return hmac.compare_digest(attempt['hash'], stored['hash'])
+
+
+# A count kept in an entry, or None: entries from before the farm kept it
+# have none, and a bool or a word is not one either.
+def countOf(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        return None
+    return value
+
+
+# One entry's chance to win: its copies shared among the people in, the farm
+# being one more. IndieGala's forecast for the end ('expected') is closer to
+# the truth than the people seen at entry, who are only the first to come.
+# (chance, forecast used), or None when the entry never saw a count.
+def entryChance(entry):
+    people, forecast = countOf(entry.get('expected')), True
+    if people is None:
+        people, forecast = countOf(entry.get('entries')), False
+    if people is None:
+        return None
+    copies = countOf(entry.get('copies')) or 1
+    return min(1.0, copies / (people + 1)), forecast
+
+
+# Wins the kept history of entries should have brought against those that
+# came, and the site's currency per win. With byUrl only the wins of kept
+# entries count: a giveaway is drawn days after the entry, so once the
+# history is trimmed a time window takes in wins of entries no longer kept,
+# and of giveaways entered by hand. Without it (the site's win and entry urls
+# differ) the wins since the oldest kept entry count, which runs high. The
+# command line bot's imported wins are never the farm's. Entries with no
+# count are left out of the expectation (and counted, so the panel can say
+# how many).
+def luckOf(entries, wins, byUrl=False):
+    if not entries:
+        return None
+    since = min(entry['time'] for entry in entries)
+    urls = {entry['url'] for entry in entries if entry.get('url')}
+    expected, known, forecast = 0.0, 0, 0
+    for entry in entries:
+        chance = entryChance(entry)
+        if chance is None:
+            continue
+        expected += chance[0]
+        known += 1
+        forecast += chance[1]
+    won = sum(1 for win in wins if not win.get('cli') and
+              (win.get('url') in urls if byUrl else win['time'] >= since))
+    spent = sum(entry.get('cost') or 0 for entry in entries)
+    return {'entries': len(entries), 'known': known, 'unknown': len(entries) - known,
+            'forecast': forecast, 'expected': round(expected, 2), 'wins': won,
+            'spent': spent, 'perWin': round(spent / won, 1) if won else None,
+            'avgCost': round(spent / len(entries), 1), 'since': since, 'byUrl': byUrl}
 
 
 class FarmState:
@@ -155,15 +365,19 @@ class FarmState:
     def daily(self, key, day):
         return self.site(key).get('daily', {}).get(day) or {'e': 0, 's': 0, 'w': 0}
 
+    # Under the lock: a site's first look from the panel and its first entry
+    # could otherwise each make an empty record and one of them be lost.
     def site(self, key):
-        return self.data.setdefault(key, {'entries': [], 'wins': [], 'seen': [], 'flags': {},
-                                          'totalEntered': 0, 'totalSpent': 0})
+        with self.lock:
+            return self.data.setdefault(key, {'entries': [], 'wins': [], 'seen': [],
+                                              'flags': {}, 'totalEntered': 0, 'totalSpent': 0})
 
     def save(self):
-        try:
-            writePrivate(self.path, self.data)
-        except OSError as error:
-            log.warning(f"Не удалось сохранить {self.path}: {error}")
+        with self.lock:
+            try:
+                writePrivate(self.path, self.data)
+            except OSError as error:
+                log.warning(f"Не удалось сохранить {self.path}: {error}")
 
     def addEntry(self, key, entry):
         with self.lock:
@@ -196,6 +410,9 @@ class FarmState:
             for win in self.site(key).get('wins', []):
                 if abs(win['time'] - float(moment)) < 0.001 and win['name'] == name:
                     win['status'] = status
+                    if status == 'activated':
+                        # Done by hand: the clock must not send it to ASF again.
+                        win.pop('redeemRetry', None)
                     self.save()
                     return True
         return False
@@ -218,8 +435,34 @@ class FarmState:
     def openWins(self, key):
         return [win for win in self.site(key).get('wins', []) if not win.get('status')]
 
+    # A short random name for a win, kept on it, for the buttons under its
+    # Telegram card: they still work after a restart, and the callback data
+    # carries neither the game's name nor its key.
+    def winToken(self, key, moment, name):
+        with self.lock:
+            win = self.findWin(key, moment, name)
+            if win is None:
+                return None
+            if not win.get('tg'):
+                win['tg'] = secrets.token_urlsafe(6)
+                self.save()
+            return win['tg']
+
+    # (site key, win) for a token from winToken, or None once the win has
+    # left the history.
+    def winByToken(self, token):
+        with self.lock:
+            for key, site in self.data.items():
+                if not isinstance(site, dict) or key.startswith('_'):
+                    continue
+                for win in site.get('wins', []):
+                    if token and win.get('tg') == token:
+                        return key, win
+        return None
+
     def seen(self, key):
-        return self.seenSets.setdefault(key, set(self.site(key).get('seen', [])))
+        with self.lock:
+            return self.seenSets.setdefault(key, set(self.site(key).get('seen', [])))
 
     def markSeen(self, key, ident):
         with self.lock:
@@ -288,20 +531,35 @@ class FarmManager:
         self.dataDir    = Path(dataDir or sgSettings.BASE_DIR)
         self.configPath = Path(configPath or sgSettings.DEFAULT_CONFIG_PATH)
         self.farmPath   = self.dataDir / FARM_FILE
-        self.lock       = threading.Lock()
+        # Every change to self.farm happens under this lock, a whole
+        # read-modify-write at a time: the panel, Telegram and the sites'
+        # threads change it at once, and two blacklist additions made at the
+        # same moment used to keep only one. Reentrant, so a change can call
+        # another (addToList -> updateSettings -> savePlatformSettings).
+        self.lock       = threading.RLock()
+        # Keeps the saves in order; the newest copy wins.
+        self.writeLock  = threading.Lock()
+        self.farmVersion = 0
+        self.writtenVersion = 0
+        self.accountsLock = threading.Lock()
         self.farm       = readJSON(self.farmPath, {})
         self.farm.setdefault('web', {})
         self.farm.setdefault('platforms', {})
         self.farm.setdefault('settings', {})
         self.state      = FarmState(self.dataDir / STATE_FILE, dayOf=self.dayOf)
+        self.importCliHistory()
         self.platforms  = {}
         self.steam      = rules.SteamLibrary()
         from steamgiftbot.farm.asf import ASF
         self.asf        = ASF(self)
         self.clock      = None
         self.panelURLs  = []
+        self.translations = {}
         self.startedAt  = time.time()
         self.clockStop  = threading.Event()
+        # One activation at a time: a retry by the clock and a click in the
+        # panel must not send the same key twice.
+        self.redeemLock = threading.RLock()
 
         from steamgiftbot.farm.gog import GOGPlatform
         from steamgiftbot.farm.indiegala import IndieGalaPlatform
@@ -309,9 +567,25 @@ class FarmManager:
         from steamgiftbot.farm.opiumpulses import OpiumPulsesPlatform
         from steamgiftbot.farm.steamfree import SteamFreePlatform
         from steamgiftbot.farm.steamgifts import SteamGiftsPlatform
+        self.kinds = {}
         for cls in (SteamGiftsPlatform, IndieGalaPlatform, OpiumPulsesPlatform,
                     SteamFreePlatform, GOGPlatform, ItchPlatform):
+            self.kinds[cls.key] = cls
             self.platforms[cls.key] = cls(self)
+        # Accounts are people (yours, a brother's): each has its own set of
+        # sites. The main one holds the sites' first cards.
+        self.farm.setdefault('profiles', [])
+        if not any(item.get('id') == MAIN_PROFILE for item in self.farm['profiles']):
+            self.farm['profiles'].insert(0, {'id': MAIN_PROFILE, 'name': 'Основная'})
+        # Sites added to an account: [{'key': 'steamgifts-2', 'kind': 'steamgifts'}].
+        self.farm.setdefault('accounts', [])
+        for item in self.farm['accounts']:
+            cls = self.kinds.get(item.get('kind'))
+            if cls is not None and ACCOUNT_KEY.match(item.get('key') or '') \
+                    and item['key'] not in self.platforms:
+                self.platforms[item['key']] = cls(self, key=item['key'])
+        self.sortPlatforms()
+        self.retitle()
 
     @staticmethod
     def now():
@@ -341,19 +615,20 @@ class FarmManager:
         return values
 
     def updateFarmSettings(self, incoming):
-        values = applySettings(FARM_FIELDS, self.farmSettings(), incoming)
-        if values['report_hour'] is not None and values['report_hour'] > 23:
-            raise ValueError("Час отправки сводки: от 0 до 23")
-        config = self.loadConfig()
-        if config is not None and any(name in incoming for name in CONFIG_FIELDS):
-            for name in CONFIG_FIELDS:
-                value = values[name]
-                setattr(config, name, sgSettings.CONVERTERS[name](value)
-                        if name != 'telegram_enabled' else bool(value))
-            sgSettings.save(config, self.configPath)
-        self.farm['settings'] = {key: value for key, value in values.items()
-                                 if key not in CONFIG_FIELDS}
-        self.saveFarm()
+        with self.lock:
+            values = applySettings(FARM_FIELDS, self.farmSettings(), incoming)
+            if values['report_hour'] is not None and values['report_hour'] > 23:
+                raise ValueError("Час отправки сводки: от 0 до 23")
+            config = self.loadConfig()
+            if config is not None and any(name in incoming for name in CONFIG_FIELDS):
+                for name in CONFIG_FIELDS:
+                    value = values[name]
+                    setattr(config, name, sgSettings.CONVERTERS[name](value)
+                            if name != 'telegram_enabled' else bool(value))
+                sgSettings.save(config, self.configPath)
+            self.farm['settings'] = {key: value for key, value in values.items()
+                                     if key not in CONFIG_FIELDS}
+            self.saveFarm()
         self.steam.cache.clear()
         return values
 
@@ -364,7 +639,8 @@ class FarmManager:
                        if '/' in name and not name.startswith(('Etc/', 'SystemV/', 'posix/',
                                                                'right/')))
         return {'zones': zones, 'panelURLs': self.panelURLs, 'startedAt': self.startedAt,
-                'now': self.localNow().strftime('%H:%M'), 'zone': str(self.zone())}
+                'now': self.localNow().strftime('%H:%M'), 'zone': str(self.zone()),
+                'support': support.info(self.uiSettings()['lang'])}
 
     # Chats the bot has seen, so the chat id can be picked rather than looked up.
     def telegramChats(self, token=None):
@@ -397,8 +673,10 @@ class FarmManager:
         return 'Steam: ' + ', '.join(parts)
 
     def logoutEverywhere(self):
-        self.farm['web']['secret'] = secrets.token_hex(32)
-        self.saveFarm()
+        with self.lock:
+            self.farm['web']['secret'] = secrets.token_hex(32)
+            self.farm['web'].pop('revoked', None)
+            self.saveFarm()
 
     def zone(self):
         try:
@@ -411,6 +689,144 @@ class FarmManager:
 
     def dayOf(self, moment):
         return datetime.fromtimestamp(moment, self.zone()).strftime('%Y-%m-%d')
+
+    # SteamGifts was entered by the command line bot long before the farm
+    # existed, and the chart started empty on the day the farm took over. Its
+    # log files still say what it entered and when: count those per day, once,
+    # up to the farm's own first entry so nothing is counted twice. The log
+    # names the games but not their prices, and its 'Entered N for P points'
+    # line is only written when a run ends (a long run never wrote one), so
+    # spending is left unknown rather than shown far too low.
+    def importCliHistory(self):
+        state = self.state
+        if state.flag('steamgifts', 'cli_imported'):
+            return None
+        logDir = self.dataDir / 'log'
+        site = state.site('steamgifts')
+        farmTimes = [entry['time'] for entry in site.get('entries', [])]
+        cutoff = min(farmTimes) if farmTimes else time.time()
+        perDay, won = {}, {}
+        for path in sorted(logDir.glob('log-*.log')) if logDir.is_dir() else []:
+            try:
+                lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
+            except OSError:
+                continue
+            for line in lines:
+                found = CLI_LINE.match(line)
+                if not found:
+                    continue
+                try:
+                    moment = time.mktime(time.strptime(found.group(1), '%Y-%m-%d %H:%M:%S'))
+                except ValueError:
+                    continue
+                if moment >= cutoff:
+                    continue
+                if found.group(2).startswith(CLI_ENTERED):
+                    day = self.dayOf(moment)
+                    perDay[day] = perDay.get(day, 0) + 1
+                    continue
+                win = CLI_WON.match(found.group(2))
+                if win:
+                    # Announced once per win, but keep the first if it repeats.
+                    won.setdefault(win.group(2), (moment, win.group(1)))
+        with state.lock:
+            daily = site.setdefault('daily', {})
+            for day, count in perDay.items():
+                target = daily.setdefault(day, {'e': 0, 's': 0, 'w': 0})
+                target['e'] += count
+                # Marks the day's spending as unknown for the chart.
+                target['cli'] = target.get('cli', 0) + count
+            for old in sorted(daily)[:-DAILY_DAYS]:
+                del daily[old]
+            entered = sum(perDay.values())
+            site['totalEntered'] = site.get('totalEntered', 0) + entered
+            # Its wins too: the user was told in Telegram back then, so they
+            # come in as 'key received' rather than as new wins to act on.
+            known = {win.get('url') for win in site.get('wins', [])}
+            imported = [{'time': moment, 'name': name, 'url': url, 'status': 'received',
+                         'cli': True}
+                        for url, (moment, name) in sorted(won.items(), key=lambda item: item[1])
+                        if url not in known]
+            for win in imported:
+                target = daily.setdefault(self.dayOf(win['time']), {'e': 0, 's': 0, 'w': 0})
+                target['w'] += 1
+            site['wins'] = sorted(site.get('wins', []) + imported,
+                                  key=lambda win: win['time'])[-HISTORY_LENGTH:]
+            site.setdefault('flags', {})['cli_imported'] = {
+                'entries': entered, 'wins': len(imported), 'from': min(perDay, default=None),
+                'to': max(perDay, default=None)}
+            state.save()
+        if entered:
+            log.info(f"История бота командной строки: {entered} входов за {len(perDay)} дн. "
+                     f"и {len(imported)} выигрышей добавлены в статистику SteamGifts "
+                     "(без трат: в логе их нет).")
+        return entered
+
+    # The command line bot left a log file per start in log/. Old ones go,
+    # but only once importCliHistory has read them: they are the only record
+    # of what it entered before the farm. Never botfarm.log, see pruneRunLogs.
+    def pruneCliLogs(self, days=CLI_LOG_DAYS):
+        if not self.state.flag('steamgifts', 'cli_imported'):
+            return 0
+        removed = logging_setup.pruneRunLogs(self.dataDir / 'log', days)
+        if removed:
+            log.info(f"Удалено старых логов бота командной строки: {removed} "
+                     f"(старше {days} дней)")
+        return removed
+
+    # The panel's log lives in memory, so it used to start empty after every
+    # restart. Refill it from the tail of log/botfarm.log; those lines are
+    # marked as restored.
+    def restoreLogs(self, perSite=200, tailBytes=2_000_000):
+        path = self.dataDir / 'log' / 'botfarm.log'
+        try:
+            with path.open('rb') as handle:
+                handle.seek(0, 2)
+                handle.seek(max(0, handle.tell() - tailBytes))
+                text = handle.read().decode('utf-8', errors='replace')
+        except OSError:
+            return 0
+        found = {}
+        for line in text.splitlines():
+            match = FARM_LINE.match(line)
+            if not match or match.group(3) not in self.platforms:
+                continue
+            level, stamp, key, message = match.groups()
+            try:
+                moment = time.mktime(time.strptime(stamp, '%Y-%m-%d %H:%M:%S'))
+            except ValueError:
+                continue
+            # Lines written before the log masked secrets may still hold them.
+            found.setdefault(key, []).append((level, moment,
+                                              logging_setup.redactSecrets(message)))
+        restored = 0
+        for key, lines in found.items():
+            for level, moment, message in lines[-perSite:]:
+                self.platforms[key].addLine(level, message, moment=moment, restored=True)
+                restored += 1
+        return restored
+
+    # ---- how the panel looks ------------------------------------------------
+
+    # Language and look of the panel, the same on every device. Not secret:
+    # the sign-in page reads it too, so it is in the language chosen.
+    def uiSettings(self):
+        stored = self.farm.get('ui') or {}
+        return {name: stored.get(name, default) for name, (default, _check) in UI_FIELDS.items()}
+
+    def updateUi(self, incoming):
+        with self.lock:
+            values = self.uiSettings()
+            for name, raw in (incoming or {}).items():
+                if name not in UI_FIELDS:
+                    continue
+                _default, check = UI_FIELDS[name]
+                if not check(raw):
+                    raise ValueError(f"оформление: недопустимое значение {name}")
+                values[name] = raw
+            self.farm['ui'] = values
+            self.saveFarm()
+        return values
 
     # ---- the panel's overview ------------------------------------------------
 
@@ -426,14 +842,32 @@ class FarmManager:
             series = [self.state.daily(platform.key, day) for day in dates]
             sites.append({
                 'key': platform.key, 'title': platform.title, 'unit': platform.unit,
-                'today': count, 'spentToday': spent,
+                # Free claims (GOG, itch.io, Steam) are entries no one can
+                # lose: the panel leaves them out of the win rate.
+                'free': platform.category == 'free',
+                # The tiles count today from midnight, like the chart's last
+                # bar; the 24-hour window stays on the cards and the limits.
+                'today': series[-1]['e'], 'spentToday': series[-1]['s'],
+                'last24': count, 'spent24': spent,
                 'entered': totals['entered'], 'spent': totals['spent'], 'wins': totals['wins'],
                 'winsWeek': len(self.state.winsSince(platform.key, week)),
                 'entries': [day['e'] for day in series],
                 'spentByDay': [day['s'] for day in series],
                 'winsByDay': [day['w'] for day in series],
+                # Entries the command line bot made that day: their cost is unknown.
+                'importedByDay': [day.get('cli', 0) for day in series],
+                # Wins expected against wins had, for the sites that draw.
+                'luck': self.luck(platform),
             })
         return {'days': dates, 'sites': sites}
+
+    def luck(self, platform):
+        if platform.category != 'points':
+            return None
+        site = self.state.site(platform.key)
+        with self.state.lock:
+            entries, wins = list(site.get('entries', [])), list(site.get('wins', []))
+        return luckOf(entries, wins, byUrl=platform.winUrlIsEntryUrl)
 
     def historyRows(self, kind='entries', site='', query=''):
         rows = []
@@ -489,60 +923,234 @@ class FarmManager:
 
     # ---- won keys --------------------------------------------------------------
 
-    def setWinKey(self, key, moment, name, value):
-        value = ' '.join(str(value or '').split()).upper()
-        if not self.state.updateWin(key, moment, name, cdkey=value):
-            raise ValueError("выигрыш не найден")
-        if value and self.farmSettings().get('auto_redeem'):
-            self.redeemWin(key, moment, name)
+    # The buttons the farm answers itself under a fresh win's Telegram card
+    # (see telegram.py), [(text, callback_data)]. Only when it reads its chat
+    # (telegram_commands): otherwise nobody would answer a press. ASF only
+    # for a Steam key it would not send on its own anyway (auto_redeem).
+    # steamKey: whether the win has one, when the key is saved after the card.
+    def winActions(self, key, moment, name, steamKey=None):
+        conf = self.farmSettings()
+        if not (conf.get('telegram_commands') and conf.get('telegram_token')
+                and conf.get('telegram_chat')):
+            return []
+        win = self.state.findWin(key, moment, name)
+        token = self.state.winToken(key, moment, name) if win is not None else None
+        if not token:
+            return []
+        if steamKey is None:
+            steamKey = bool(steamKeys(win.get('cdkey') or ''))
+        actions = []
+        if steamKey and not conf.get('auto_redeem') and self.asfConfigured():
+            actions.append(("Активировать в ASF", f"win:{token}:asf"))
+        actions.append(("Ключ получен", f"win:{token}:got"))
+        return actions
+
+    # Whether ArchiSteamFarm was set up at all: its IPC password given or in
+    # its usual place, another address than the default, or the free Steam
+    # games (which go through ASF) connected.
+    def asfConfigured(self):
+        conf = self.farmSettings()
+        url = (conf.get('asf_url') or asfModule.DEFAULT_URL).rstrip('/')
+        return bool(conf.get('asf_password') or url != asfModule.DEFAULT_URL
+                    or asfModule.LOCAL_CONFIG.exists()
+                    or any(platform.key.startswith('steamfree') and platform.configured()
+                           for platform in self.platforms.values()))
+
+    # The key as pasted: Steam keys in capitals, a gift link or another
+    # shop's code untouched (see asf.normalizeKey).
+    # Under redeemLock: a retry the clock is making for the old text would
+    # otherwise write its result over the new one.
+    # redeem=False keeps auto_redeem out of it: a key found for an old win is
+    # stored, not sent to ASF behind the user's back.
+    def setWinKey(self, key, moment, name, value, redeem=True):
+        value = normalizeKey(value)
+        with self.redeemLock:
+            win = self.state.findWin(key, moment, name)
+            if win is None:
+                raise ValueError("выигрыш не найден")
+            keys = steamKeys(value)
+            # Keys of the old text that already went through stay done; a
+            # pending retry was for the old text.
+            kept = [item for item in win.get('redeemed') or [] if item in keys]
+            self.state.updateWin(key, moment, name, cdkey=value, redeemed=kept,
+                                 redeemRetry=None)
+            if keys and redeem and self.farmSettings().get('auto_redeem'):
+                self.redeemWin(key, moment, name)
         return value
 
-    def redeemWin(self, key, moment, name):
-        win = self.state.findWin(key, moment, name)
-        if win is None:
-            raise ValueError("выигрыш не найден")
-        if not win.get('cdkey'):
-            raise ValueError("у этого выигрыша нет ключа: вставьте его в таблице")
-        kind, words = self.asf.redeem(win['cdkey'])
-        changes = {'redeem': words}
-        if kind in ('ok', 'owned'):
-            changes['status'] = 'activated'
-        self.state.updateWin(key, moment, name, **changes)
-        title = self.platforms[key].title if key in self.platforms else key
-        self.notify(f"[{title}] ключ «{name}»: {words}")
-        if kind in ('ok', 'owned'):
+    # Sends every key of a win to ASF, one request per key, and says how it
+    # went overall. A 'retry' (Steam's rate limit, ASF or its bot away) is
+    # kept on the win and tried again by the clock (redeemTick); those
+    # automatic tries tell Telegram only once they come to an end.
+    def redeemWin(self, key, moment, name, auto=False):
+        with self.redeemLock:
+            win = self.state.findWin(key, moment, name)
+            if win is None:
+                raise ValueError("выигрыш не найден")
+            if not win.get('cdkey'):
+                raise ValueError("у этого выигрыша нет ключа: вставьте его в таблице")
+            keys = steamKeys(win['cdkey'])
+            if not keys:
+                raise ValueError("это ссылка на подарок, а не ключ Steam: "
+                                 "откройте её в браузере")
+            done = [item for item in win.get('redeemed') or [] if item in keys]
+            pending = win.get('redeemRetry') or {}
+            if auto and win.get('status') == 'activated':
+                self.state.updateWin(key, moment, name, redeemRetry=None)
+                return 'owned', win.get('redeem') or ''
+            if auto:
+                todo = [item for item in pending.get('keys') or []
+                        if item in keys and item not in done]
+            else:
+                # A click sends what has not gone through yet, or everything
+                # again when it all has.
+                todo = [item for item in keys if item not in done] or keys
+            if not todo:
+                self.state.updateWin(key, moment, name, redeemRetry=None)
+                return 'owned', win.get('redeem') or ''
+            results = self.asf.redeemEach(todo, bot=self.keyBotFor(key))
+            done += [item for item, (kind, _words) in zip(todo, results, strict=True)
+                     if kind in ('ok', 'owned') and item not in done]
+            retry = [item for item, (kind, _words) in zip(todo, results, strict=True)
+                     if kind == 'retry']
+            kind, words = self.combineRedeem(keys, todo, results)
+            finished = all(item in done for item in keys)
+            changes = {'redeem': words, 'redeemed': done, 'redeemRetry': None}
+            if finished:
+                changes['status'] = 'activated'
+            # Automatic tries are counted; a click starts the count again.
+            tries = (pending.get('tries') or 0) + 1 if auto else 0
+            givenUp = bool(retry) and tries >= REDEEM_TRIES
+            if retry and not givenUp:
+                nextTry = time.time() + REDEEM_EVERY
+                changes['redeemRetry'] = {'keys': retry, 'tries': tries, 'nextTry': nextTry}
+                at = datetime.fromtimestamp(nextTry, self.zone()).strftime('%H:%M')
+                changes['redeem'] = f"{words} · повторю в {at}"
+            elif givenUp:
+                changes['redeem'] = f"{words} · повторы не помогли, активируйте вручную"
+            self.state.updateWin(key, moment, name, **changes)
+        # An automatic try that will be made again stays quiet; the last one
+        # is told as a failure, since nothing more happens on its own.
+        if not (auto and retry and not givenUp):
+            title = self.platforms[key].title if key in self.platforms else key
+            told = 'fail' if givenUp else kind
+            lines = [words]
+            if not finished and told in ('ok', 'owned'):
+                # This try went well, an earlier one did not: not all done yet.
+                told = 'partial'
+                lines.append(f"Активировано ключей: {len(done)} из {len(keys)}; "
+                             f"остальные — в разделе «Выигрыши»")
+            icon = {'ok': '✅', 'owned': '✅', 'retry': '⏳'}.get(told, '⚠️')
+            heading = {'ok': 'КЛЮЧ АКТИВИРОВАН', 'owned': 'КЛЮЧ: ИГРА УЖЕ ЕСТЬ',
+                       'retry': 'КЛЮЧ: ПОВТОРИМ ПОЗЖЕ',
+                       'partial': 'КЛЮЧИ: НЕ ВСЕ АКТИВИРОВАНЫ'}.get(told, 'КЛЮЧ НЕ ПОДОШЁЛ')
+            self.notify(card=cards.Card(icon, heading, title, key, name, lines=lines,
+                                        buttons=[("Выигрыши", self.panelLink('/wins'))]))
+        if finished and key in self.platforms:
             self.platforms[key].onWinStatus(win, 'activated')
-        return kind, words
+        return kind, changes['redeem']
+
+    # (kind, words) over the keys of one try. One key, or every key with the
+    # same answer, reads as one; otherwise each key by its place in the win
+    # ('2/3: неверный ключ'), never by the key itself, which is secret.
+    @staticmethod
+    def combineRedeem(keys, todo, results):
+        kinds = [kind for kind, _words in results]
+        kind = next((wanted for wanted in ('retry', 'fail', 'ok') if wanted in kinds), 'owned')
+        said = [words for _kind, words in results]
+        if len(set(said)) == 1:
+            return kind, said[0]
+        return kind, '; '.join(f"{keys.index(item) + 1}/{len(keys)}: {words}"
+                               for item, (_kind, words) in zip(todo, results, strict=True))
+
+    # Wins whose keys wait for another go (see redeemWin), once they are due.
+    # The clock calls it every minute; each win is tried at most every
+    # REDEEM_EVERY seconds. Returns how many were tried.
+    def redeemTick(self, now=None):
+        now = now or time.time()
+        due = []
+        for key in list(self.platforms):
+            for win in self.state.site(key).get('wins', []):
+                pending = win.get('redeemRetry')
+                if pending and win.get('status') != 'activated' \
+                        and (pending.get('nextTry') or 0) <= now:
+                    due.append((key, win['time'], win['name']))
+        for key, moment, name in due:
+            try:
+                self.redeemWin(key, moment, name, auto=True)
+            except Exception as error:
+                # The key was taken out meanwhile, or the try broke: drop it
+                # rather than fail the same way every minute.
+                log.warning(f"Повтор активации «{name}» не удался: {error}")
+                self.state.updateWin(key, moment, name, redeemRetry=None)
+        return len(due)
 
     # ---- daily report ----------------------------------------------------------
 
     def report(self, now=None):
+        return self.reportCard(now).plain()
+
+    # The daily summary: a table like the project page's log window, then the
+    # wins, the problems and what is waiting for the user.
+    def reportCard(self, now=None):
         since = (now or time.time()) - 86400
-        lines = ["сводка за сутки"]
-        winsTotal = 0
+        rows, wins, problems = [], [], []
         for platform in self.platforms.values():
             count, spent, _ = self.state.usage(platform.key)
-            wins = self.state.winsSince(platform.key, since)
-            winsTotal += len(wins)
-            if not count and not wins and not platform.running:
+            won = self.state.winsSince(platform.key, since)
+            wins += [(platform, win) for win in won]
+            if not count and not won and not platform.running:
                 continue
-            line = f"• {platform.title}: {count} вх., потрачено {spent}"
-            if platform.balance is not None:
-                line += f", баланс {platform.balance}"
-            if wins:
-                line += f", выигрыши: {', '.join(win['name'] for win in wins)}"
+            unit = f" {platform.unit}" if platform.unit else ''
+            rows.append([cards.code(platform.key), f"{count} вх.",
+                         f"{spent}{unit}" if spent else '—',
+                         '' if platform.balance is None else f"баланс {platform.balance}{unit}"])
             if platform.lastError:
-                line += f"\n  ⚠ {platform.lastError}"
-            lines.append(line)
-        if len(lines) == 1:
-            lines.append("за сутки ни одного входа")
-        lines.append(f"Выигрышей за сутки: {winsTotal}")
+                problems.append(f"⚠️ {platform.title}: {platform.lastError}")
+        card = cards.Card('📊', site='', headline=self.localNow().strftime('%d.%m, %H:%M'))
+        card.block = cards.table(rows) if rows else ["За сутки ни одного входа."]
+        card.lines.append(f"🎉 Выигрышей за сутки: {len(wins)}" +
+                          (f" — {', '.join(win['name'] for _, win in wins[:8])}" if wins else ''))
+        card.lines += problems
+        card.lines += [line for line in map(self.luckLine, self.platforms.values()) if line]
         waiting = self.openWins()
         if waiting:
-            lines.append(f"Не отмечено, что ключ получен: {len(waiting)} "
-                         f"({', '.join(win['name'] for win in waiting[:5])}). SteamGifts "
-                         "требует отмечать полученные выигрыши.")
-        return '\n'.join(lines)
+            card.lines.append(f"🔔 Не отмечено, что ключ получен: {len(waiting)} "
+                              f"({', '.join(win['name'] for win in waiting[:5])})")
+            card.note = "SteamGifts требует отмечать полученные выигрыши."
+        # A key in hand but not in Steam: the win SteamGifts bans for most.
+        unused = [(platform, win) for platform in self.platforms.values()
+                  for win in self.state.site(platform.key).get('wins', [])
+                  if win.get('cdkey') and win.get('status') != 'activated'
+                  and not win.get('cli')]
+        if unused:
+            card.lines.append(f"🔑 Ключ есть, но не активирован: {len(unused)} "
+                              f"({', '.join(win['name'] for _, win in unused[:5])})")
+            if any(platform.kind == 'steamgifts' for platform, _ in unused):
+                card.note = "SteamGifts блокирует за неактивированные выигрыши: " \
+                            "активируйте ключи и отметьте полученные."
+        card.buttons = [("Открыть панель", self.panelLink('/overview'))]
+        if waiting or unused:
+            card.buttons.append(("Выигрыши", self.panelLink('/wins')))
+        return card
+
+    # The report's line on a site's luck over its kept history, or '' for a
+    # free site or one that has entered nothing yet.
+    def luckLine(self, platform):
+        luck = self.luck(platform)
+        if not luck:
+            return ''
+        unit = f" {platform.unit}" if platform.unit else ''
+        line = f"🍀 {cards.code(platform.key)} за историю: выигрышей {luck['wins']}"
+        if luck['known']:
+            line += f", ожидалось ≈{luck['expected']:.1f}"
+            if luck['unknown']:
+                line += f" (известно для {luck['known']} из {luck['entries']} входов)"
+        else:
+            line += ", ожидание неизвестно"
+        if luck['perWin'] is not None:
+            line += f" · {round(luck['perWin'])}{unit} за выигрыш"
+        return line + f" · вход в среднем {luck['avgCost']:g}{unit}"
 
     # Sends the report once a day at the chosen hour. True when it went out.
     def reportTick(self):
@@ -554,7 +1162,7 @@ class FarmManager:
         if now.hour != conf['report_hour'] or self.state.value('_farm', 'reportDay') == today:
             return False
         self.state.setFlag('_farm', 'reportDay', today)
-        self.notify(self.report())
+        self.notify(card=self.reportCard())
         return True
 
     def startClock(self):
@@ -564,31 +1172,266 @@ class FarmManager:
                     self.reportTick()
                 except Exception as error:
                     log.warning(f"Сводка не отправлена: {error}")
+                try:
+                    self.redeemTick()
+                except Exception as error:
+                    log.warning(f"Повтор активации ключей не удался: {error}")
         self.clock = threading.Thread(target=tick, name='farm-clock', daemon=True)
         self.clock.start()
 
+    # A deep copy taken under the lock is what gets written, so a change made
+    # by another thread meanwhile cannot break the dump ('dictionary changed
+    # size during iteration') or end up half in the file. The slow part, the
+    # write and fsync, runs outside the lock; a copy older than the one
+    # already on disk is dropped.
     def saveFarm(self):
         with self.lock:
-            writePrivate(self.farmPath, self.farm)
+            self.farmVersion += 1
+            version = self.farmVersion
+            snapshot = copy.deepcopy(self.farm)
+        with self.writeLock:
+            if version <= self.writtenVersion:
+                return
+            writePrivate(self.farmPath, snapshot)
+            self.writtenVersion = version
+
+    # ---- several accounts of one site ---------------------------------------
+
+    # Every account of a site next to the others, the main one first.
+    def sortPlatforms(self):
+        order = list(self.kinds)
+        self.platforms = dict(sorted(self.platforms.items(),
+                                     key=lambda item: (order.index(item[1].kind), item[1].number)))
+
+    def accountDir(self, key):
+        return self.dataDir / ACCOUNTS_DIR / key
+
+    # ---- accounts (profiles) ------------------------------------------------
+
+    def profiles(self):
+        return self.farm['profiles']
+
+    def profile(self, ident):
+        for item in self.farm['profiles']:
+            if item.get('id') == ident:
+                return item
+        raise ValueError("нет такой учётки")
+
+    def profileOf(self, key):
+        platform = self.platforms.get(key)
+        if platform is not None and platform.primary:
+            return MAIN_PROFILE
+        wanted = self.farm['platforms'].get(key, {}).get('profile') or MAIN_PROFILE
+        return wanted if any(item.get('id') == wanted for item in self.farm['profiles']) \
+            else MAIN_PROFILE
+
+    @staticmethod
+    def cleanName(name):
+        name = ' '.join(str(name or '').split())[:40]
+        if not name:
+            raise ValueError("у учётки должно быть имя")
+        return name
+
+    def createProfile(self, name, asfBot=''):
+        name = self.cleanName(name)
+        with self.accountsLock:
+            if any(item['name'].lower() == name.lower() for item in self.farm['profiles']):
+                raise ValueError(f"учётка «{name}» уже есть")
+            with self.lock:
+                seq = self.farm.get('profileSeq', 1) + 1
+                self.farm['profileSeq'] = seq
+                item = {'id': f'p{seq}', 'name': name, 'asf_bot': str(asfBot or '').strip()}
+                self.farm['profiles'].append(item)
+                self.saveFarm()
+        return item
+
+    def updateProfile(self, ident, name=None, asfBot=None):
+        with self.lock:
+            item = self.profile(ident)
+            if name is not None:
+                name = self.cleanName(name)
+                if any(other is not item and other['name'].lower() == name.lower()
+                       for other in self.farm['profiles']):
+                    raise ValueError(f"учётка «{name}» уже есть")
+                item['name'] = name
+            if asfBot is not None:
+                item['asf_bot'] = str(asfBot or '').strip()
+            self.saveFarm()
+        self.retitle()
+        return item
+
+    # Removes an account with every site connected in it.
+    def deleteProfile(self, ident):
+        if ident == MAIN_PROFILE:
+            raise ValueError("основную учётку удалить нельзя")
+        item = self.profile(ident)
+        for key in [key for key in self.platforms if self.profileOf(key) == ident]:
+            self.removeAccount(key)
+        with self.lock:
+            self.farm['profiles'] = [other for other in self.farm['profiles']
+                                     if other is not item]
+            self.saveFarm()
+        self.retitle()
+
+    def publicProfiles(self):
+        return [{'id': item['id'], 'name': item['name'], 'asfBot': item.get('asf_bot', ''),
+                 'main': item['id'] == MAIN_PROFILE} for item in self.farm['profiles']]
+
+    # Titles tell accounts apart: "IndieGala · Брат". A site that only the
+    # main account has keeps its plain name.
+    def retitle(self):
+        names = {item['id']: item['name'] for item in self.farm['profiles']}
+        # Only connected cards count: an empty catalog card is nobody's yet.
+        owners = {}
+        for key, platform in self.platforms.items():
+            if self.isConnected(platform):
+                owners.setdefault(platform.kind, set()).add(self.profileOf(key))
+        for key, platform in self.platforms.items():
+            profile = self.profileOf(key)
+            name = self.farm['platforms'].get(key, {}).get('label') or ''
+            if not name and (profile != MAIN_PROFILE or len(owners.get(platform.kind, ())) > 1):
+                name = names.get(profile, '')
+            platform.title = f"{platform.baseTitle} · {name}" if name else platform.baseTitle
+
+    @staticmethod
+    def isConnected(platform):
+        try:
+            return platform.configured()
+        except Exception:
+            return False
+
+    # Asks the site who the cookie belongs to, and refuses an account that is
+    # already connected here under another card.
+    def checkAccount(self, platform, values):
+        with actingFor(platform):
+            found = platform.check(values) or {}
+        account = str(found.get('account') or '').strip()
+        if account:
+            for other in self.platforms.values():
+                if other is platform or other.kind != platform.kind:
+                    continue
+                known = self.farm['platforms'].get(other.key, {}).get('account') or other.account
+                if known and str(known).strip().lower() == account.lower():
+                    raise ValueError(f"аккаунт {account} уже подключён: {other.title}")
+        return found
+
+    def rememberAccount(self, platform, found):
+        account = str((found or {}).get('account') or '').strip()
+        if account:
+            self.updatePlatformEntry(platform.key, account=account)
+            self.retitle()
+
+    # Checks the pasted cookie on a new instance and keeps it only if the site
+    # accepted it, so a failed try leaves nothing behind.
+    def addAccount(self, kind, values, profile=MAIN_PROFILE):
+        cls = self.kinds.get(kind)
+        if cls is None:
+            raise ValueError("нет такой площадки")
+        if not cls.multiAccount:
+            raise ValueError(f"у {cls.title} одна карточка на все учётки")
+        owner = self.profile(profile)
+        # The main account's first card of a site is the site's own one.
+        primary = self.platforms.get(kind)
+        if profile == MAIN_PROFILE and primary is not None and not primary.configured():
+            found = self.checkAccount(primary, values)
+            primary.updateSettings({name: values[name] for name in primary.connectFields
+                                    if name in values})
+            self.updatePlatformEntry(kind, connected=True)
+            self.rememberAccount(primary, found)
+            self.retitle()
+            return primary, found
+        for key, other in self.platforms.items():
+            if other.kind == kind and self.profileOf(key) == profile \
+                    and (other.configured() or not other.primary):
+                raise ValueError(f"в учётке «{owner['name']}» {cls.title} уже подключена")
+        with self.accountsLock:
+            used = [platform.number for platform in self.platforms.values()
+                    if platform.kind == kind]
+            number = max(used + [self.farm.get('accountSeq', {}).get(kind, 1)]) + 1
+            key = f"{kind}-{number}"
+            platform = cls(self, key=key)
+            # The site is asked outside self.lock: it can take seconds.
+            found = self.checkAccount(platform, values)
+            with self.lock:
+                self.farm.setdefault('accountSeq', {})[kind] = number
+                self.farm['accounts'].append({'key': key, 'kind': kind})
+                entry = self.platformEntry(key)
+                entry['connected'] = True
+                entry['profile'] = profile
+                if found.get('account'):
+                    entry['account'] = str(found['account']).strip()
+            self.platforms[key] = platform
+            self.sortPlatforms()
+            platform.updateSettings({name: values[name] for name in platform.connectFields
+                                     if name in values})
+            self.saveFarm()
+            self.retitle()
+        return platform, found
+
+    def removeAccount(self, key):
+        platform = self.platforms.get(key)
+        if platform is None:
+            raise ValueError("нет такой учётки")
+        if platform.primary:
+            raise ValueError("основную учётку можно только отключить")
+        platform.stop(wait=15)
+        platform.disconnect()
+        platform.forget()
+        with self.accountsLock:
+            self.platforms.pop(key, None)
+            with self.lock:
+                self.farm['accounts'] = [item for item in self.farm['accounts']
+                                         if item.get('key') != key]
+                self.farm['platforms'].pop(key, None)
+                self.saveFarm()
+            self.retitle()
+        shutil.rmtree(self.accountDir(key), ignore_errors=True)
+
+    def renameAccount(self, key, label):
+        label = ' '.join(str(label or '').split())[:40]
+        self.updatePlatformEntry(key, label=label)
+        self.retitle()
+        return self.platforms[key].title
+
+    # The ASF bot a site's keys go to: the site's own choice, else its
+    # account's Steam bot, else the farm's.
+    def keyBotFor(self, key):
+        own = str(self.farm['platforms'].get(key, {}).get('asf_bot') or '').strip()
+        if own:
+            return own
+        try:
+            return str(self.profile(self.profileOf(key)).get('asf_bot') or '').strip()
+        except ValueError:
+            return ''
+
+    def setKeyBot(self, key, bot):
+        self.updatePlatformEntry(key, asf_bot=str(bot or '').strip())
 
     # ---- per site settings -------------------------------------------------
 
+    # The site's record in farm.json, made on first use. Read it freely; to
+    # change it, use updatePlatformEntry (or hold self.lock).
     def platformEntry(self, key):
-        return self.farm['platforms'].setdefault(key, {'autostart': False, 'settings': {}})
+        with self.lock:
+            return self.farm['platforms'].setdefault(key, {'autostart': False, 'settings': {}})
+
+    def updatePlatformEntry(self, key, **changes):
+        with self.lock:
+            self.platformEntry(key).update(changes)
+            self.saveFarm()
 
     def platformSettings(self, key):
-        return dict(self.platformEntry(key).get('settings', {}))
+        with self.lock:
+            return copy.deepcopy(self.platformEntry(key).get('settings', {}))
 
     def savePlatformSettings(self, key, values):
-        self.platformEntry(key)['settings'] = values
-        self.saveFarm()
+        self.updatePlatformEntry(key, settings=values)
 
     def autostart(self, key):
         return bool(self.platformEntry(key).get('autostart'))
 
     def setAutostart(self, key, value):
-        self.platformEntry(key)['autostart'] = bool(value)
-        self.saveFarm()
+        self.updatePlatformEntry(key, autostart=bool(value))
 
     # ---- web panel password ------------------------------------------------
 
@@ -598,19 +1441,39 @@ class FarmManager:
     def setPassword(self, password):
         if len(password) < 6:
             raise ValueError("пароль короче 6 символов")
-        self.farm['web']['password'] = hashPassword(password)
-        # New password, new sessions: everyone signed in before is signed out.
-        self.farm['web']['secret'] = secrets.token_hex(32)
-        self.saveFarm()
+        stored = hashPassword(password)
+        with self.lock:
+            self.farm['web']['password'] = stored
+            # New password, new sessions: everyone signed in before is signed out.
+            self.farm['web']['secret'] = secrets.token_hex(32)
+            self.farm['web'].pop('revoked', None)
+            self.saveFarm()
 
     def checkPassword(self, password):
         return checkPassword(password, self.farm['web'].get('password'))
 
-    def sessionSecret(self):
-        if not self.farm['web'].get('secret'):
-            self.farm['web']['secret'] = secrets.token_hex(32)
+    # Sessions signed out with 'Выйти': signature -> expiry. The cookie was
+    # only dropped by the browser before, so a copy of it (another tab, a
+    # stolen one) stayed good for 30 days. Kept until the session would have
+    # expired anyway; a new secret makes them all moot.
+    def revokedSessions(self):
+        return self.farm['web'].get('revoked') or {}
+
+    def revokeSession(self, signature, expires):
+        with self.lock:
+            now = time.time()
+            revoked = {name: until for name, until in self.revokedSessions().items()
+                       if until > now}
+            revoked[signature] = int(expires)
+            self.farm['web']['revoked'] = revoked
             self.saveFarm()
-        return self.farm['web']['secret']
+
+    def sessionSecret(self):
+        with self.lock:
+            if not self.farm['web'].get('secret'):
+                self.farm['web']['secret'] = secrets.token_hex(32)
+                self.saveFarm()
+            return self.farm['web']['secret']
 
     # ---- running -----------------------------------------------------------
 
@@ -635,15 +1498,88 @@ class FarmManager:
             if platform.thread is not None:
                 platform.thread.join(max(0.1, deadline - time.time()))
 
+    # ---- messages to Telegram ------------------------------------------------
+
+    # A panel link for a message, preferring the Tailscale address: it opens
+    # from the phone wherever it is. '' when the farm runs without a panel.
+    def panelLink(self, route=''):
+        urls = self.panelURLs or []
+        base = next((url for url in urls if '//100.' in url), urls[0] if urls else '')
+        if not base:
+            return ''
+        return base.rstrip('/') + '/' + (f'#{route}' if route else '')
+
+    # Messages follow the panel's language, from the same dictionaries the
+    # page uses (static/i18n/<lang>.json); Russian is the text as written.
+    def translate(self, text):
+        lang = self.uiSettings().get('lang', 'ru')
+        if lang == 'ru' or not text:
+            return text
+        table = self.translations.get(lang)
+        if table is None:
+            try:
+                words = json.loads((I18N_DIR / f'{lang}.json').read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                words = {}
+            keys = sorted(words, key=len, reverse=True)
+            pattern = re.compile(r'(?<![^\W\d_])(?:' + '|'.join(map(re.escape, keys)) +
+                                 r')(?![^\W\d_])') if keys else None
+            table = self.translations[lang] = (words, pattern)
+        words, pattern = table
+        if pattern is None:
+            return text
+        lines = []
+        for line in text.split('\n'):
+            whole = line.strip()
+            if whole in words:
+                lines.append(line.replace(whole, words[whole]))
+            else:
+                lines.append(pattern.sub(lambda m: words.get(m.group(0), m.group(0)), line))
+        return '\n'.join(lines)
+
+    # Every text of a card in the panel's language.
+    # In the panel's language, and with any secret an error text carried
+    # (a URL with ?key=…) masked, as the log masks it.
+    def translateCard(self, card):
+        def tr(text):
+            return logging_setup.redactSecrets(self.translate(text))
+        return cards.Card(card.icon, tr(card.heading()), card.site, card.key, tr(card.headline),
+                          card.link, [tr(line) for line in card.lines],
+                          [tr(line) for line in card.block], tr(card.note),
+                          [(tr(text), url) for text, url in card.buttons],
+                          [(tr(text), data) for text, data in card.actions])
+
     # Telegram / Discord settings are the ones SteamGiftBot already has.
-    def notify(self, text):
+    # Pass a cards.Card, or a plain text for a one-line note.
+    def notify(self, text=None, card=None):
         try:
             config = sgSettings.load(self.configPath)
         except sgSettings.SettingsError:
             return ['config.ini не читается']
         if not notify.isConfigured(config):
             return ['уведомления не настроены']
-        problems = notify.send(config, "Bot farm " + text)
+        if card is None:
+            card = cards.Card(lines=[text or ''])
+        asking = card.icon == '🎉' and support.due(self.uiSettings()['support'],
+                                                    self.farm.get('supportAsked'))
+        if asking:
+            card = self.withSupportLine(card)
+        card = self.translateCard(card)
+        problems = notify.send(config, card.plain(), card=card)
         for problem in problems:
             log.warning(f"Уведомление не доставлено: {problem}")
+        if asking and not problems:
+            self.farm['supportAsked'] = time.time()
+            self.saveFarm()
         return problems
+
+    # A win with one quiet line under it, at most once a week: the moment the
+    # farm has just been useful is the only one it asks in.
+    def withSupportLine(self, card):
+        note = ("Если ферма приносит вам игры — её развитие можно поддержать. "
+                "Отключается в панели: «Настройки» → «О ферме».")
+        return cards.Card(card.icon, card.title, card.site, card.key, card.headline, card.link,
+                          card.lines + ([card.note] if card.note else []), card.block, note,
+                          card.buttons + [("Поддержать проект",
+                                           support.page(self.uiSettings()['lang']))],
+                          card.actions)

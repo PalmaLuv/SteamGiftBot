@@ -14,7 +14,7 @@ Nothing in here knows which site it is talking to; that is the provider's job
 from random import randint as rand
 from time import sleep
 
-from steamgiftbot import filters, notify
+from steamgiftbot import filters, notify, wins
 from steamgiftbot.console import countdown, log
 from steamgiftbot.errors import SessionExpired, SteamGiftError
 from steamgiftbot.feeds import FreeGameWatcher
@@ -65,7 +65,8 @@ class SteamGift :
         # Watching the won page is on unless it was turned off.
         self.checkWins  = config.check_wins is not False
         self.state      = State(statePath or defaultPath(DEFAULT_CONFIG_PATH)).load()
-        self.watcher    = WinWatcher(self.provider, config, self.state, self.stats)
+        self.watcher    = WinWatcher(self.provider, config, self.state, self.stats,
+                                     tell=self.tellWin)
 
         # Free games elsewhere: announced only, never claimed. Off unless asked for.
         self.freeGames  = (FreeGameWatcher(GamerPowerFeed(config.free_games), config, self.state)
@@ -92,6 +93,16 @@ class SteamGift :
     @property
     def xsrfToken(self):
         return self.provider.xsrfToken
+
+    # The account's name on the site, once refresh() has read it ('' if not).
+    @property
+    def username(self):
+        return getattr(self.provider, 'username', '')
+
+    # The last won page read, for whoever embeds the bot to take keys from.
+    @property
+    def wonPage(self):
+        return getattr(self.provider, 'wonPage', None)
 
     def GetSoupFromPage(self, url):
         return self.provider.getSoup(url)
@@ -138,6 +149,16 @@ class SteamGift :
             self.stats.rejection()
         return False
 
+    # A place for whoever embeds the bot to add rules of its own (the farm
+    # skips games already owned). None means 'enter it'.
+    def extraSkipReason(self, giveaway):
+        return None
+
+    # Called for every giveaway the walk leaves alone. The farm overrides it
+    # to show the reason, by name, in its log.
+    def skipped(self, giveaway, reason):
+        self.stats.skip(reason)
+
     # Walks the giveaway pages. Returns as soon as the balance runs out or the
     # listing is exhausted; start() decides whether to go round again.
     def getGameContent(self, page=1):
@@ -156,47 +177,62 @@ class SteamGift :
                 return
 
             for giveaway in listing:
-                if not self.running:
+                if not self.running or not self.tryGiveaway(giveaway):
                     return
-
-                if self.points == 0 or self.points < self.min_points:
-                    if self.once:
-                        log(f"Out of points: {self.points} left, {self.min_points} required. "
-                            "Finishing because a single run was requested.", "magenta")
-                        self.stop()
-                        return
-                    self.waitForPoints()
-                    return
-
-                if isinstance(giveaway, Unreadable):
-                    self.noteUnreadable(giveaway)
-                    continue
-
-                reason = filters.reasonToSkip(giveaway, self.config, self.points,
-                                              hasCards=self.provider.hasCards)
-                if reason is not None:
-                    self.stats.skip(reason)
-                    if reason in (filters.NOT_ENOUGH, filters.NO_CARDS, filters.CARDS_UNKNOWN):
-                        log(f"Skipping {giveaway.name}: {reason}", "red")
-                    continue
-
-                if self.dryRun:
-                    # Spend the points on paper, so the rest of the walk behaves
-                    # the way a real run would.
-                    log(f"Would enter {giveaway.name} for {giveaway.cost}P", "cyan")
-                    self.points -= giveaway.cost
-                    self.stats.entry(giveaway.cost)
-                    continue
-
-                if self.enter(giveaway):
-                    log(f"One more game {giveaway.name}", "green")
-                    sleep(rand(*ENTRY_DELAY))
             _page  += 1
 
+    # One giveaway of the walk: skipped, entered, or the walk ends because the
+    # points ran out (False). Shared with whoever walks in an order of its own.
+    def tryGiveaway(self, giveaway):
+        if self.points == 0 or self.points < self.min_points:
+            if self.once:
+                log(f"Out of points: {self.points} left, {self.min_points} required. "
+                    "Finishing because a single run was requested.", "magenta")
+                self.stop()
+                return False
+            self.waitForPoints()
+            return False
+
+        if giveaway is None:
+            return True
+        if isinstance(giveaway, Unreadable):
+            self.noteUnreadable(giveaway)
+            return True
+
+        reason = filters.reasonToSkip(giveaway, self.config, self.points,
+                                      hasCards=self.provider.hasCards)
+        if reason is None:
+            reason = self.extraSkipReason(giveaway)
+        if reason is not None:
+            self.skipped(giveaway, reason)
+            if reason in (filters.NOT_ENOUGH, filters.NO_CARDS, filters.CARDS_UNKNOWN):
+                log(f"Skipping {giveaway.name}: {reason}", "red")
+            return True
+
+        if self.dryRun:
+            # Spend the points on paper, so the rest of the walk behaves
+            # the way a real run would.
+            log(f"Would enter {giveaway.name} for {giveaway.cost}P", "cyan")
+            self.points -= giveaway.cost
+            self.stats.entry(giveaway.cost)
+            return True
+
+        if self.enter(giveaway):
+            log(f"One more game {giveaway.name}", "green")
+            sleep(rand(*ENTRY_DELAY))
+        return True
+
     def announceWins(self):
+        self.provider.wonPage = None
         if not self.checkWins:
             return []
         return self.watcher.announce()
+
+    # The win message. The farm overrides it to send its own, in its format.
+    def tellWin(self, win):
+        if notify.isConfigured(self.config):
+            for problem in notify.send(self.config, wins.announcement(win)):
+                log(f"Could not deliver the win notification. {problem}", "yellow")
 
     def announceFreeGames(self):
         if self.freeGames is None:

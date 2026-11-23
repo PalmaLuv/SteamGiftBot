@@ -8,21 +8,35 @@ Galasilver (iS). Read from the same JSON endpoints the site's own page uses:
                                            -> {"status": "ok", "silver_tot": N}
                                               or status = silver | level | ...
 
+Wins are not told: a finished giveaway waits in the library under 'Completed
+to check' until someone presses 'Check if you won'. The farm presses 'Check
+all' and then reads 'Completed won', where the key is:
+
+  POST /library/giveaways/check-if-winner-all
+                                           -> {"won": N, "checked": N}
+  GET  /library/giveaways/giveaways-completed/won[/<page>]
+                                           -> {"status": "ok", "html": "..."}
+
 Every call carries the Django CSRF token from the csrftoken cookie."""
 import json
 import re
+import statistics
 import time
 
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 
 from bs4 import BeautifulSoup
 
 from steamgiftbot.farm import rules
+from steamgiftbot.farm.asf import STEAM_KEY, isSteamKey, steamKeys
 from steamgiftbot.farm.base import (DEFAULT_USER_AGENT, TIMEOUT, AuthError, Platform,
-                                    PlatformError, RetryLater, buildSession, cookieGuide,
-                                    cookieValue, field, grouped, parseCookies, presetFields,
-                                    scheduleFields, userAgentFrom)
+                                    PlatformError, RetryLater, cookieGuide, cookieValue,
+                                    dailyReason, field, grouped, parseCookies, presetFields,
+                                    scheduleFields)
+from steamgiftbot.farm.sessions import KeptSession
+from steamgiftbot.logging_setup import writePrivate
 
 BASE    = 'https://www.indiegala.com'
 DOMAIN  = '.indiegala.com'
@@ -32,6 +46,7 @@ JOIN_CALL = re.compile(r"joinGiveawayOrAuction\(\s*this\s*,\s*event\s*,\s*'([^']
                        r"\s*(\d+)\s*,\s*'([^']*)'\s*\)")
 NUMBER    = re.compile(r'\d[\d,]*')
 STEAM_APP = re.compile(r'/steam/apps/(\d+)/')
+CARD_ID   = re.compile(r'/giveaways/card/[^/]+/(\d+)')
 TIME_LEFT = re.compile(r'(\d+)\s*(second|minute|hour|day|week)', re.IGNORECASE)
 MINUTES   = {'second': 1 / 60, 'minute': 1, 'hour': 60, 'day': 1440, 'week': 10080}
 
@@ -55,6 +70,26 @@ SMART      = 'smart'
 MAX_PAGES = 40
 SORTS      = [SMART] + SITE_SORTS
 
+# A giveaway's own pace counts once it has been watched this long; before
+# that, the typical pace of the others stands in.
+PACE_AFTER  = 20 * 60
+PACE_KEPT   = 3 * 86400
+# Tickets for the same game are counted over this window: one key is enough.
+PER_GAME_DAYS = 7
+
+LIBRARY   = BASE + '/library'
+WON_LIST  = BASE + '/library/giveaways/giveaways-completed/won'
+CHECK_ALL = BASE + '/library/giveaways/check-if-winner-all'
+WON_PAGE  = re.compile(r"switchGivSectionPage\([^)]*'giveaways-completed-won'\s*,\s*'(\d+)'")
+NO_RESULTS = 'profile-private-page-library-no-results'
+
+# Finished giveaways are checked this often; each check is one 'Check all'.
+WIN_CHECK_EVERY = 3 * 3600
+# 'Check all' may take one page of the backlog at a time: pressed again while
+# it still finds something, up to this many times.
+CHECK_ROUNDS = 10
+WON_PAGES    = 10
+
 
 @dataclass
 class Ticket:
@@ -68,11 +103,16 @@ class Ticket:
     appid   : int | None = None
     minutesLeft : float | None = None
     guaranteed  : bool = False
+    # Entrants expected by the end (see forecast()); None when unknown.
+    expected    : float | None = None
 
     # Chance of winning per iS spent: fewer people and a cheaper ticket win.
+    # People still to come count too, when the farm has seen how fast this
+    # giveaway, or a typical one, fills up.
     @property
     def value(self):
-        return 1 / (((self.entries or 0) + 1) * max(1, self.price))
+        people = self.expected if self.expected is not None else (self.entries or 0)
+        return 1 / ((people + 1) * max(1, self.price))
 
 
 def minutesLeft(text):
@@ -126,17 +166,69 @@ def parseListing(html):
     return tickets
 
 
+@dataclass
+class Won:
+    id     : str
+    name   : str
+    url    : str
+    serial : str = ''      # a Steam key, a gift link or another code, as given
+
+
+# Rows of 'Completed won'. The key sits in the row's text box, the same one
+# 'Check if you won' fills in; failing that, a key or a gift link in the row.
+def parseWon(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    found = {}
+    for row in soup.select('li.profile-private-sub-section-body'):
+        link = row.find('a', href=CARD_ID)
+        if link is None:
+            continue
+        ident = CARD_ID.search(link['href']).group(1)
+        url = link['href'] if link['href'].startswith('http') else BASE + link['href']
+        serial = ''
+        for box in row.find_all(['input', 'textarea']):
+            value = (box.get('value') or box.get_text() or '').strip()
+            if value:
+                serial = value
+                break
+        if not serial:
+            serial = ' '.join(dict.fromkeys(
+                m.group(0) for m in STEAM_KEY.finditer(row.get_text(' ', strip=True))
+                if isSteamKey(m.group(0))))
+        if not serial:
+            gifts = [a['href'] for a in row.find_all('a', href=True)
+                     if a is not link and a['href'].startswith('http')
+                     and re.search(r'gift|key|serial', a['href'], re.IGNORECASE)]
+            serial = gifts[0] if gifts else ''
+        found.setdefault(ident, Won(ident, link.get_text(strip=True) or ident, url, serial))
+    return list(found.values())
+
+
+def wonPages(html):
+    return max([int(number) for number in WON_PAGE.findall(html)] or [1])
+
+
+def number(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def lastPage(html):
     pages = [int(number) for number in re.findall(r'/giveaways/ajax/(\d+)/', html)]
     return max(pages) if pages else 1
 
 
-class IndieGalaPlatform(Platform):
+class IndieGalaPlatform(KeptSession, Platform):
     key         = 'indiegala'
     unit        = 'iS'
     title       = 'IndieGala'
     siteURL     = BASE + '/giveaways'
     description = 'Раздачи ключей за Galasilver (iS).'
+    sessionDomain = DOMAIN
+    # IndieGala's own sign-in cookie and Django's session.
+    signInCookie  = re.compile(r'auth|sessionid', re.IGNORECASE)
 
     def schema(self):
         return grouped('Аккаунт', [
@@ -148,6 +240,9 @@ class IndieGalaPlatform(Platform):
                   'из cURL берётся сам; иначе — того же браузера, откуда cookie'),
             field('level', 'Ваш уровень на IndieGala', 'int', 0,
                   'показываются только раздачи этого уровня'),
+            field('check_wins', 'Проверять выигрыши', 'bool', True,
+                  'раз в 3 часа ферма жмёт «Check all» в библиотеке IndieGala и '
+                  'сохраняет ключи выигрышей'),
         ]) + grouped('Баланс и приоритеты', [
             field('reserve', 'Не опускать баланс ниже (iS)', 'int', 0),
             field('priority', 'Приоритетные игры', 'list', [],
@@ -161,6 +256,13 @@ class IndieGalaPlatform(Platform):
                   'пропускать раздачи с большим числом участников'),
             field('max_hours_left', 'Только кончающиеся в ближайшие N часов', 'int', None,
                   'к концу раздачи понятно, сколько будет соперников; пусто — любые'),
+            # Off by default: a ticket rarely wins, so one more for the same game
+            # is worth almost as much as one for another game, and a limit sent
+            # the iS to crowded giveaways instead (16 iS on 2141 entrants).
+            field('max_per_game', 'Билетов на одну игру', 'int', None,
+                  'сколько раздач одной и той же игры брать за 7 дней, если важнее '
+                  'разнообразие. Билет выигрывает редко, так что лимит обычно уводит iS в '
+                  'раздачи похуже. Пусто — без лимита; приоритетных игр не касается'),
             field('extra_odds', 'Брать доп. билеты (extra odds)', 'bool', False,
                   'повторные билеты в ту же раздачу'),
             field('whitelist', 'Белый список', 'list', [], 'если задан — только эти игры'),
@@ -201,13 +303,10 @@ class IndieGalaPlatform(Platform):
 
     # ---- talking to the site ---------------------------------------------
 
+    # The session of the last pass while the paste is the same (see sessions.py).
     def connect(self, conf):
-        cookies = parseCookies(conf['cookie'])
-        if not cookies:
-            raise PlatformError("не задан cookie")
-        self.session = buildSession(userAgentFrom(conf['cookie']) or conf['user_agent'],
-                                    cookies, DOMAIN)
-        self.session.headers.update({'Referer': BASE + '/giveaways', 'Origin': BASE})
+        if self.openSession(conf):
+            self.session.headers.update({'Referer': BASE + '/giveaways', 'Origin': BASE})
 
     def csrfHeaders(self):
         token = cookieValue(self.session.cookies, 'csrftoken') or ''
@@ -276,6 +375,105 @@ class IndieGalaPlatform(Platform):
         data = self.readJSON(response, 'вход в раздачу')
         return data.get('status'), data
 
+    # ---- wins ----------------------------------------------------------------
+
+    def libraryCall(self, method, url, what):
+        headers = self.csrfHeaders()
+        if method == 'POST':
+            headers['Content-Type'] = 'application/json'
+        data = self.readJSON(self.request(method, url, headers=headers), what)
+        if not isinstance(data, dict):
+            raise RetryLater(f"IndieGala ответила непонятно на {what}.")
+        if data.get('status') == 'login':
+            raise AuthError("IndieGala просит войти заново.")
+        if data.get('status') == 'banned':
+            raise PlatformError("аккаунт IndieGala заблокирован для раздач.")
+        return data
+
+    def wonPage(self, page=1):
+        url = WON_LIST if page == 1 else f"{WON_LIST}/{page}"
+        data = self.libraryCall('GET', url, 'список выигрышей')
+        if data.get('status') != 'ok':
+            raise RetryLater("IndieGala не отдала список выигрышей, попробую позже.")
+        return data.get('html') or ''
+
+    def wonList(self):
+        html = self.wonPage()
+        found = {win.id: win for win in parseWon(html)}
+        for page in range(2, min(wonPages(html), WON_PAGES) + 1):
+            if self.stopped:
+                break
+            for win in parseWon(self.wonPage(page)):
+                found.setdefault(win.id, win)
+        if not found and NO_RESULTS not in html:
+            self.keepForDebugging('won', html)
+            self.debug("Список выигрышей IndieGala не разобран: копия сохранена в debug/")
+        return list(found.values())
+
+    def keepForDebugging(self, name, html):
+        try:
+            folder = Path(self.manager.dataDir) / 'debug'
+            folder.mkdir(parents=True, exist_ok=True)
+            # A signed-in page: it may hold won keys.
+            writePrivate(folder / f'{self.key}-{name}.html', html)
+        except OSError:
+            pass
+
+    def winsDue(self):
+        last = self.manager.state.value(self.key, 'wins_checked_at') or 0
+        return time.time() - last >= WIN_CHECK_EVERY
+
+    # 'Check all', then whatever is new on 'Completed won'. The first look
+    # only learns what was won before, so old keys are not announced.
+    def checkWins(self):
+        state = self.manager.state
+        known = set(state.value(self.key, 'won_ids', []) or [])
+        if not state.flag(self.key, 'wins_seeded'):
+            known |= {win.id for win in self.wonList()}
+            state.setFlag(self.key, 'won_ids', sorted(known))
+            state.setFlag(self.key, 'wins_seeded')
+        checked = won = 0
+        for _round in range(CHECK_ROUNDS):
+            data = self.libraryCall('POST', CHECK_ALL, 'проверку выигрышей')
+            if not number(data.get('checked')):
+                break
+            checked += number(data.get('checked'))
+            won += number(data.get('won'))
+            if self.stopped or not self.pause(1, 2):
+                break
+        if checked:
+            self.info(f"Проверено законченных раздач: {checked}, выигрышей: {won}")
+        fresh = [win for win in self.wonList() if win.id not in known]
+        for win in fresh:
+            known.add(win.id)
+            state.setFlag(self.key, 'won_ids', sorted(known))
+            self.tellWin(win)
+        state.setFlag(self.key, 'wins_checked_at', time.time())
+        return fresh
+
+    # The card never shows the key itself: it goes to the panel's 'Выигрыши'.
+    def tellWin(self, win):
+        self.info(f"Выигрыш на IndieGala: {win.name}")
+        moment = self.recordWin(win.name, win.url)
+        if not win.serial:
+            note = "Ключ — в библиотеке IndieGala: Giveaways → Completed won."
+        elif steamKeys(win.serial) and self.manager.farmSettings().get('auto_redeem'):
+            note = "Ключ сохранён в разделе «Выигрыши», ферма отправит его в ASF."
+        else:
+            note = "Ключ сохранён в разделе «Выигрыши» панели."
+        # The key is saved after the card (with auto_redeem that sends it to
+        # ASF, whose answer should come second), so say whether there is one.
+        self.notify('', '🎉', headline=win.name, link=win.url, note=note,
+                    buttons=[("Выигрыши", self.manager.panelLink('/wins')),
+                             ("Библиотека IndieGala", LIBRARY)],
+                    actions=self.manager.winActions(self.key, moment, win.name,
+                                                    steamKey=bool(steamKeys(win.serial or ''))))
+        if win.serial:
+            try:
+                self.manager.setWinKey(self.key, moment, win.name, win.serial)
+            except Exception as error:
+                self.warn(f"Ключ к «{win.name}» не сохранён: {error}")
+
     # ---- one pass ----------------------------------------------------------
 
     def skipReason(self, conf, ticket, seen, owned=None):
@@ -294,7 +492,54 @@ class IndieGalaPlatform(Platform):
         if (conf['max_hours_left'] is not None and ticket.minutesLeft is not None
                 and ticket.minutesLeft > conf['max_hours_left'] * 60):
             return 'кончается не скоро'
+        if (conf.get('max_per_game') and not self.isPriority(conf, ticket)
+                and self.ticketsFor(ticket) >= conf['max_per_game']):
+            return 'хватит билетов на эту игру'
         return self.ruleReason(conf, ticket.name, ticket.appid, owned)
+
+    # ---- tickets per game ----------------------------------------------------
+
+    @staticmethod
+    def gameOf(ticket_or_name):
+        name = getattr(ticket_or_name, 'name', ticket_or_name)
+        return rules.normalizeTitle(name)
+
+    # Tickets bought for each game over PER_GAME_DAYS, from the history.
+    def countTickets(self):
+        since = time.time() - PER_GAME_DAYS * 86400
+        entries = self.manager.state.history(self.key, limit=100000)['entries']
+        self.perGame = Counter(self.gameOf(entry['name']) for entry in entries
+                               if entry['time'] > since)
+
+    def ticketsFor(self, ticket):
+        return getattr(self, 'perGame', Counter())[self.gameOf(ticket)]
+
+    def boughtFor(self, ticket):
+        self.perGame = getattr(self, 'perGame', Counter())
+        self.perGame[self.gameOf(ticket)] += 1
+
+    # ---- forecast ------------------------------------------------------------
+
+    # Entrants a giveaway will have by its end: its own pace (people per
+    # minute since the farm first saw it) or, until that is known, the
+    # median pace of the giveaways that are, times the minutes left.
+    def forecast(self, tickets, now=None):
+        now = now or time.time()
+        sightings = {ident: seen for ident, seen in getattr(self, 'sightings', {}).items()
+                     if now - seen[0] < PACE_KEPT}
+        paces = {}
+        for ticket in tickets:
+            if ticket.entries is None:
+                continue
+            first = sightings.setdefault(ticket.id, (now, ticket.entries))
+            if now - first[0] >= PACE_AFTER:
+                paces[ticket.id] = max(0, ticket.entries - first[1]) / ((now - first[0]) / 60)
+        typical = statistics.median(paces.values()) if paces else None
+        for ticket in tickets:
+            pace = paces.get(ticket.id, typical)
+            if ticket.entries is not None and ticket.minutesLeft is not None and pace is not None:
+                ticket.expected = ticket.entries + pace * ticket.minutesLeft
+        self.sightings = sightings
 
     def isPriority(self, conf, ticket):
         wished = getattr(self, 'wished', None)
@@ -323,6 +568,7 @@ class IndieGalaPlatform(Platform):
             page += 1
         tickets = list(found.values())
         if conf['sort'] == SMART:
+            self.forecast(tickets)
             tickets.sort(key=lambda t: (-t.value, t.minutesLeft if t.minutesLeft is not None
                                         else float('inf')))
         return sorted(tickets, key=lambda t: not self.isPriority(conf, t))
@@ -332,21 +578,23 @@ class IndieGalaPlatform(Platform):
         self.info(f"Аккаунт {self.account or '?'}, баланс {self.balance} iS")
         seen = self.manager.state.seen(self.key)
         owned = self.ownedGames(conf)
+        self.countTickets()
         skipped = Counter()
         entered = 0
         for ticket in self.collect(conf, seen):
             if self.stopped:
                 break
+            facts = {'cost': f"{ticket.price} iS", 'entries': ticket.entries, 'url': ticket.url}
             reason = self.skipReason(conf, ticket, seen, owned)
             if reason:
-                skipped[reason] += 1
+                self.skip(skipped, reason, ticket.name, **facts)
                 continue
             entriesLeft, spendLeft = self.dailyLeft(conf)
             if entriesLeft == 0:
                 self.info("Дневной лимит входов исчерпан.")
                 break
             if spendLeft is not None and ticket.price > spendLeft:
-                skipped['дневной лимит трат'] += 1
+                self.skip(skipped, 'дневной лимит трат', ticket.name, **facts)
                 continue
             if self.closedFor(conf):
                 self.info("Часы работы закончились.")
@@ -357,7 +605,7 @@ class IndieGalaPlatform(Platform):
                 if self.balance <= 0:
                     break
                 if self.balance - ticket.price < reserve:
-                    skipped['не хватает iS'] += 1
+                    self.skip(skipped, 'не хватает iS', ticket.name, **facts)
                     continue
             status, data = self.join(ticket)
             if status == 'ok':
@@ -371,7 +619,11 @@ class IndieGalaPlatform(Platform):
                 self.info(f"Вошёл: {'★ ' if priority else ''}{ticket.name} за {ticket.price} iS "
                           f"(участников {ticket.entries if ticket.entries is not None else '?'}, "
                           f"осталось {self.balance})")
-                self.recordEntry(ticket.name, ticket.price, ticket.url)
+                self.boughtFor(ticket)
+                self.recordEntry(ticket.name, ticket.price, ticket.url, entries=ticket.entries,
+                                 expected=(round(ticket.expected) if ticket.expected is not None
+                                           else None),
+                                 priority='да' if priority else None)
                 if not self.pause():
                     break
             elif status == 'silver':
@@ -401,10 +653,9 @@ class IndieGalaPlatform(Platform):
     # Balance and the daily limits, for a ticket that passed every filter.
     @staticmethod
     def budgetReason(conf, ticket, priority, balance, entriesLeft, spendLeft):
-        if entriesLeft == 0:
-            return 'дневной лимит входов'
-        if spendLeft is not None and ticket.price > spendLeft:
-            return 'дневной лимит трат'
+        reason = dailyReason(ticket.price, entriesLeft, spendLeft)
+        if reason:
+            return reason
         reserve = 0 if priority and conf['priority_reserve'] else (conf['reserve'] or 0)
         if balance is not None and (balance <= 0 or balance - ticket.price < reserve):
             return 'не хватает iS'
@@ -421,13 +672,15 @@ class IndieGalaPlatform(Platform):
         owned = self.ownedGames(conf)
         balance = box.balance
         entriesLeft, spendLeft = self.dailyLeft(conf)
+        box.countTickets()
         items = []
         for ticket in box.collect(conf, seen):
             priority = box.isPriority(conf, ticket)
-            reason = (self.skipReason(conf, ticket, seen, owned)
+            reason = (box.skipReason(conf, ticket, seen, owned)
                       or self.budgetReason(conf, ticket, priority, balance,
                                            entriesLeft, spendLeft))
             if reason is None:
+                box.boughtFor(ticket)
                 if balance is not None:
                     balance -= ticket.price
                 if entriesLeft is not None:
@@ -437,6 +690,8 @@ class IndieGalaPlatform(Platform):
             items.append({'name': ticket.name, 'url': ticket.url, 'cost': ticket.price,
                           'entries': ticket.entries, 'priority': priority,
                           'minutesLeft': ticket.minutesLeft,
+                          'expected': (round(ticket.expected) if ticket.expected is not None
+                                       else None),
                           'enter': reason is None, 'reason': reason or ''})
         return {'balance': box.balance, 'account': box.account, 'items': items,
                 'note': self.previewNote(conf)}
@@ -447,9 +702,16 @@ class IndieGalaPlatform(Platform):
             if conf is None:
                 return
             self.connect(conf)
-            entered = self.cycle(conf)
+            with self.keptPass():
+                entered = self.cycle(conf)
+                if conf['check_wins'] and not self.stopped and self.winsDue():
+                    try:
+                        self.checkWins()
+                    except RetryLater as error:
+                        self.warn(f"Выигрыши не проверены: {error}")
+            self.remindExpiry()
             self.lastCycle = time.time()
-            self.info(f"Проход окончен: вошёл в {entered}, баланс {self.balance} iS")
+            self.finishPass(f"Проход окончен: вошёл в {entered}, баланс {self.balance} iS")
             reason = ''
             if self.balance is not None and self.balance <= (conf['reserve'] or 0):
                 reason = f"Закончился iS ({self.balance}), ждёт пополнения"

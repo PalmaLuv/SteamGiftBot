@@ -27,8 +27,8 @@ curl -b farm.cookie http://192.168.1.10:8092/api/status
 | Путь | Что возвращает |
 | --- | --- |
 | `/api/session` | `{signedIn, hasPassword}`; работает без входа |
-| `/api/status` | `{platforms: [снимок площадки…], wins: [неотмеченные выигрыши], time}` |
-| `/api/summary?days=30` | ряды по дням для графика: `{days: [...], sites: [{key, title, unit, today, spentToday, entered, spent, wins, winsWeek, entries[], spentByDay[], winsByDay[]}]}` |
+| `/api/status` | `{platforms: [снимок площадки…], wins: [неотмеченные выигрыши], profiles: [{id, name, asfBot, main}], time}`; у площадки есть `profile` — id учётки |
+| `/api/summary?days=30` | ряды по дням для графика: `{days: [...], sites: [{key, title, unit, today, spentToday, entered, spent, wins, winsWeek, entries[], spentByDay[], winsByDay[], importedByDay[], luck}]}`; `luck` — `null` у бесплатных площадок и до первого входа, иначе `{entries, known, unknown, forecast, expected, wins, spent, perWin, avgCost, since}` |
 | `/api/history?kind=entries&site=&q=&page=1&per=50` | `{rows, total, page, pages}`; `kind` — `entries` или `wins` |
 | `/api/history.csv?kind=entries&site=&q=` | та же выборка в CSV |
 | `/api/farm/settings` | `{schema, values, info: {zones, panelURLs, startedAt, now, zone}}` |
@@ -65,14 +65,19 @@ curl -b farm.cookie http://192.168.1.10:8092/api/status
 | `/api/notify-test` | — | тестовое сообщение в Telegram |
 | `/api/telegram/chats` | `{token?}` | чаты, где боту писали |
 | `/api/steam/check` | — | проверить библиотеку и список желаемого |
-| `/api/asf/check` | — | проверить ASF |
+| `/api/asf/check` | — | проверить ASF → `{ok, message, bots, online}` |
+| `/api/profiles/create` | `{name, asfBot?}` | создать [учётку](Несколько-учёток.md) → `{ok, id, name}` |
+| `/api/profiles/<id>/update` | `{name?, asfBot?}` | переименовать учётку, сменить её бота ASF |
+| `/api/profiles/<id>/delete` | — | удалить учётку со всеми её площадками; `main` удалить нельзя |
+| `/api/accounts/add` | `{kind, profile, values: {cookie}}` | подключить площадку в учётку: проверяет cookie на сайте и только тогда заводит карточку → `{ok, key, title, account, balance}` |
 
 **Одна площадка** — путь начинается с `/api/platforms/<key>/`, где `<key>` — одно из
-`steamgifts`, `indiegala`, `opiumpulses`, `steamfree`, `gog`, `itch`.
+`steamgifts`, `indiegala`, `opiumpulses`, `steamfree`, `gog`, `itch`, а у
+[добавленных учёток](Несколько-учёток.md) — с номером: `steamgifts-2`, `indiegala-3`.
 
 | Действие | Тело | Что делает |
 | --- | --- | --- |
-| `start`, `stop`, `restart` | — | запуск, остановка, перезапуск |
+| `start`, `stop`, `restart` | — | запуск, остановка, перезапуск. Если площадка ещё останавливается, `start` и `restart` запускают её, как только она остановится, и отвечают `{started: true}` |
 | `run-now` | — | проход сейчас, без учёта паузы и часов работы |
 | `autostart` | `{value: true}` | запускать ли вместе с фермой |
 | `settings` | `{values, autostart?, connect?}` | сохранить настройки; секреты, переданные пустыми, не меняются |
@@ -83,6 +88,9 @@ curl -b farm.cookie http://192.168.1.10:8092/api/status
 | `list` | `{list: "blacklist" \| "priority", value}` | добавить игру в список |
 | `win` | `{time, name, status}` или `{time, name, key}` | статус выигрыша или его ключ |
 | `redeem` | `{time, name}` | активировать ключ выигрыша через ASF |
+| `label` | `{label}` | своё имя карточки вместо имени учётки → `{ok, title}` |
+| `key-bot` | `{bot}` | бот ASF для ключей именно этой площадки; пусто — бот учётки |
+| `remove` | — | убрать площадку из учётки (первую карточку сайта можно только `disconnect`) |
 
 ## Пример: запустить IndieGala по расписанию
 

@@ -2,7 +2,6 @@
 import argparse
 import getpass
 import logging
-import logging.handlers
 import os
 import signal
 import sys
@@ -12,7 +11,8 @@ from pathlib import Path
 
 from steamgiftbot import settings as sgSettings
 from steamgiftbot.console import startLogFile
-from steamgiftbot.farm.manager import FarmManager
+from steamgiftbot.logging_setup import LOG_PATTERNS, RedactFilter, privateLogHandler, tightenFiles
+from steamgiftbot.farm.manager import DataFileError, FarmManager
 from steamgiftbot.farm.web import serve
 
 BIND_RETRY_SECONDS = 15
@@ -22,16 +22,86 @@ def configureLogging(dataDir):
     logDir = dataDir / 'log'
     logDir.mkdir(parents=True, exist_ok=True)
     formatter = logging.Formatter('[%(levelname)s %(asctime)s %(name)s] %(message)s')
-    fileHandler = logging.handlers.RotatingFileHandler(
-        logDir / 'botfarm.log', maxBytes=5 * 1024 * 1024, backupCount=3, encoding='utf-8')
+    # Owner-only and with secrets masked: error texts carry URLs, and the
+    # journal gets the same lines as the file.
+    fileHandler = privateLogHandler(logDir / 'botfarm.log', maxBytes=5 * 1024 * 1024,
+                                    backupCount=3, encoding='utf-8')
     fileHandler.setFormatter(formatter)
     console = logging.StreamHandler(sys.stdout)
     console.setFormatter(logging.Formatter('[%(name)s] %(message)s'))
+    console.addFilter(RedactFilter())
+    # The sites log DEBUG lines for the panel's 'Подробно' view; the file and
+    # the journal stay at INFO.
+    fileHandler.setLevel(logging.INFO)
+    console.setLevel(logging.INFO)
     farmLogger = logging.getLogger('botfarm')
     farmLogger.setLevel(logging.INFO)
     farmLogger.propagate = False
     farmLogger.addHandler(fileHandler)
     farmLogger.addHandler(console)
+
+
+# Logs and the saved logged-in pages written before they were created
+# owner-only: take the other users' access away on every start.
+def protectFiles(dataDir):
+    return (tightenFiles(dataDir / 'log', LOG_PATTERNS)
+            + tightenFiles(dataDir / 'debug', ('*.html',)))
+
+
+# Holds the farm's log lines until configureLogging has given them somewhere
+# to go. FarmManager reads farm.json and the history before that, and its
+# warning about a broken file used to reach only the journal (through
+# logging.lastResort), never log/botfarm.log or the panel.
+class EarlyLog(logging.Handler):
+    def __init__(self):
+        super().__init__(logging.INFO)
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+def holdLog():
+    early = EarlyLog()
+    farmLogger = logging.getLogger('botfarm')
+    farmLogger.setLevel(logging.INFO)
+    farmLogger.addHandler(early)
+    return early
+
+
+# The held lines, in order, to the handlers there are now (stderr when none).
+def releaseLog(early):
+    farmLogger = logging.getLogger('botfarm')
+    farmLogger.removeHandler(early)
+    for record in early.records:
+        if farmLogger.handlers:
+            farmLogger.handle(record)
+        elif record.levelno >= logging.lastResort.level:
+            logging.lastResort.handle(record)
+    early.records = []
+
+
+# The farm with its log in place. restoreLogs runs before this run writes
+# anything, so the panel's log starts with the tail of the previous runs,
+# and only then come the lines held while the files were read.
+def openFarm(dataDir, config):
+    early = holdLog()
+    configured = False
+    try:
+        manager = FarmManager(dataDir=dataDir, configPath=config)
+        manager.restoreLogs()
+        configureLogging(manager.dataDir)
+        configured = True
+    finally:
+        # Whatever broke the start, the lines held so far (a broken file set
+        # aside, say) still reach the log before the error does.
+        if not configured:
+            try:
+                configureLogging(Path(dataDir or sgSettings.BASE_DIR))
+            except OSError:
+                pass
+        releaseLog(early)
+    return manager
 
 
 def main(argv=None):
@@ -55,16 +125,30 @@ def main(argv=None):
     if dataDir is not None:
         dataDir.mkdir(parents=True, exist_ok=True)
     config = args.config or (dataDir / 'config.ini' if dataDir else sgSettings.DEFAULT_CONFIG_PATH)
-    manager = FarmManager(dataDir=dataDir, configPath=config)
+    log = logging.getLogger('botfarm')
 
     if args.set_password:
+        early = holdLog()
+        try:
+            manager = FarmManager(dataDir=dataDir, configPath=config)
+        except DataFileError as error:
+            print(error, file=sys.stderr)
+            return 1
+        finally:
+            releaseLog(early)
         password = os.environ.get('BOTFARM_PASSWORD') or getpass.getpass("Новый пароль панели: ")
         manager.setPassword(password)
         print("Пароль сохранён.")
         return 0
 
-    configureLogging(manager.dataDir)
-    log = logging.getLogger('botfarm')
+    try:
+        manager = openFarm(dataDir, config)
+    except DataFileError as error:
+        # Better not to start than to start empty and save over the data.
+        log.error(str(error))
+        return 1
+    protectFiles(manager.dataDir)
+    manager.pruneCliLogs()
 
     # SteamGiftBot's own file log, as the command line version writes it.
     try:
@@ -73,7 +157,9 @@ def main(argv=None):
         writeLog = False
     startLogFile(bool(writeLog), manager.dataDir / 'log')
     # startLogFile resets the package logger's handlers; put the panel's back.
-    manager.platforms['steamgifts'].attachLogger()
+    for platform in manager.platforms.values():
+        if platform.kind == 'steamgifts':
+            platform.attachLogger()
 
     if not manager.hasPassword():
         log.warning("Пароль панели не задан: python -m steamgiftbot.farm --set-password")
