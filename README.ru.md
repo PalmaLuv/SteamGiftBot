@@ -1,5 +1,8 @@
 <div align="center">
-  <img src="https://user-images.githubusercontent.com/84909252/221827123-c7fd5d1e-7f6b-4d78-a225-4491305b6a87.png" height="250"/>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.png">
+    <img src="docs/images/logo-light.png" height="220" alt="SteamGiftBot: синий щит с подарочной коробкой и название">
+  </picture>
 </div>
 
 <div align="center">
